@@ -1,6 +1,6 @@
 # Vib-Ribbon behaviour spec
 
-Version 1, 2026-11-18. What the original game does, written in our own words as the target for our own implementation. Sources: the revib and open-ribbon decompilations (read for behaviour, nothing copied) and measurements of the SCES-02873 disc.
+Version 2, 2026-11-18. What the original game does, written in our own words as the target for our own implementation. Sources: the revib and open-ribbon decompilations (read for behaviour, nothing copied) and measurements of the SCES-02873 disc.
 
 Status of each section: **read** means taken from the decompiled code this session; **measured** means checked against the disc; **to do** means not yet read. Nothing here has been checked against the running game yet; that is task 1.6.
 
@@ -157,19 +157,52 @@ Auto-play hits every part as it reaches Vibri. The title-screen demo does the sa
 
 Seven cameras in three groups: back (b01, b02), side (s01, s02), front (f01, f02, f03), and six transition clips between groups, each in a same-side and a switch-side version, played backwards when only the opposite direction exists. A camera event names the next camera and how many times its clip loops (clip speed scales so total time is constant). A "break" starts the transition to the next camera, switching sides. Clips can be mirrored left to right. Game-disc courses run camera clips at 1.0 speed, others at 1.3.
 
-Field of view: the original derives its projection from `360 × fov` as 16.16; the exact mapping to an angle is still to derive (the helper is in a file not yet read).
+Field of view: see section 9c.
 
 ## 8. Video timing (read)
 
 PAL: 50 Hz nominal, 49.759 Hz actual, 288 lines, width 512, double buffered. One game update per video frame.
 
-## 9. Not yet read (to do, still part of task 1.7)
+## 9. Game flow (read)
 
-- `Glue`: the flow between title, course select, rounds, results; track start and end handling; fade-out.
-- `Title`, `TitleDraw`, `Forms`, `Font`, `Message`, `Meters`, `ScoreMeter`, `NumberVoice`: menus, text, HUD, spoken numbers.
-- `CdSys`, `AudioSys`, `SoundSequence`: disc handling and which sound numbers play when; sound pitch.
-- `InputSys`, `InputControl`: pad reading details, vibration.
-- Projection and clipping helper (field-of-view mapping).
+States: **title** (menus), **alert** (asking for a disc), **starting** (track requested), **buffering** (course running, music not yet audible), **playing** (music audible).
+
+- A round starts when the analysis sees the track start. Gameplay begins at once in the buffering state, so obstacles are already being placed; the state becomes playing when the heard position reaches the track start, 8 seconds later. Music volume is set to full on entering playing and to zero on returning to the title.
+- The round's time limit shown by the time meter is the track's length in seconds (for all-tracks courses: the disc's length plus one second per track).
+- Track end seen by the analysis: for the game's own courses, or the last track of a CD course, the round's end time is set; otherwise the next CD track starts playing.
+- **Round clear:** score 0 counts as game over. In a two-song course, clearing the first song adds its score and end bonus to a running total and starts the second. After the last, the total (or seconds, for speed courses) is entered in the high scores and the clear screen shows.
+- **Game over** shows the "again" screens. "Again" restarts from the song that was lost in the game's own courses, and from the start otherwise. Start button during play goes to the same screen.
+- High scores: three per course, higher is better except speed courses, where fewer seconds is better. Options stored with them: sound effects on/off, vibration on/off; both default on.
+- Screens: main; game-disc course select; CD course select; speed course select; CD change; track select; two disc alerts; CD check; options; two high-score screens; clear; again; again select.
+- The title demo plays one song of the game's own courses.
+
+Disc handling (lid open, disc check, asking for the game disc back) exists only because of the physical drive and has no equivalent in the port.
+
+## 9a. Sound effects (read, measured)
+
+- A sound is (program, tone) in the PSJ_SE bank; a sound number packs it as program × 16 + tone.
+- Played at note = tone + 1, pitch from the tone's centre note and fine tune by the PlayStation library's note-to-pitch rule (base rate when note equals centre; one octave per 12 notes). Volume = bank volume × program volume × tone volume × requested volume. The exact resulting sample rates still need checking by ear against the original.
+- Up to 24 voices. A sound can be queued to start when another voice finishes; key changes are applied once per video frame.
+- Gameplay sounds: hitting a part: program 1, tone = road number (0–9), voice 3, full volume. Stray press: program 1, tone 11 (not scored), 12 (different road, single), 13 (different road, pair) or 15 (matching), voice 3. Miss: program 1 tone 10, voice 2. Form up: program 1 tone 14, voice 4. Round start: program 0 tone 11, voice 4.
+- Sound-effect volume scales with music loudness, from 10% in silence to 100%.
+- Results screens speak the score in Japanese from syllable clips laid out on a beat grid, and play short music sequences, each sound starting as the previous ends.
+
+## 9b. HUD (read)
+
+- **Score** is not shown as digits during play. It is a row of 7 marks, each one of 15 shapes, never increasing along the row; the score is the index of that row among all such rows, which caps it at 116,279. The marks circle on a looping animation whose speed rises with the current run of hits: 1 + 9 × (run / 18)².
+- **Time meter**: one animation scrubbed from full to empty as the round's seconds run out.
+- **Speed meter** (speed courses): dial, needle at current speed, mark at target speed.
+- **Evolution meter**: shows the run of hits toward the next form; plays through on a form change.
+- "Round 1 / Round 2", "Auto" and "Demo" signs are small animated line models with their own cameras, jitter 3.
+- Text is drawn with a line font, one model object per character, jittered like everything else; `~` selects a character's accented form.
+
+## 9c. Projection (read)
+
+A camera key's `fov` is the **vertical field of view** on a 4:3 picture, 4096 = full turn. The original's projection distance works out to 192 / tan(fov / 2) on a 512-wide frame. Example: the first key of camera b01 has fov 499, about 43.9°.
+
+## 9d. Read only at header level
+
+`TitleDraw` (the drawing of each menu screen: which of its 15 models, 102 animations and 14 cameras play when, and the sounds each screen queues), `Font` and `NumberVoice` internals, `CdSys`, `InputSys`. These matter when we build menus (task 3.5); VR menus will be designed afresh, so they were not transcribed now. `Forms` is a small Lisp-like data reader the shipped game never uses.
 
 ## 10. Corrections to earlier notes
 

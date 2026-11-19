@@ -136,11 +136,11 @@ button.copy{font-family:var(--display);font-size:12px;background:var(--ink);colo
    status values: done | active | todo | blocked | ask (needs the owner's answer) */
 const T = {
   goal: "A version of Vib-Ribbon playable in VR on PCVR and Meta Quest 3, with responsive, consistent timing and visuals that do justice to the original. Steam Frame and levels from your own music are stretch goals.",
-  updated: "2026-11-18, session 2 (behaviour spec v1)",
+  updated: "2026-11-18, session 2 (spec complete)",
   approach: "Native VR port. Game logic from the decompilation, assets read from your own disc, emulator used as the reference to test against.",
   asks: [
-    {id:"Q8", t:"Pull, rebuild and look at Vibri again in vibview. Both eyes should now sit on her face from the front, and each should vanish when seen from behind. M toggles that rule.", why:"The spec work showed the black triangles are facing markers, not fills. I changed the viewer to match but cannot run it."},
-    {id:"Q6", t:"OK for me to draft a courtesy message to revib's author?", why:"You confirmed we write our own code (D9). The message is to stay on good terms and credit their work, not to ask for permission to copy."}
+    {id:"Q9", t:"Post the courtesy note to revib's author (draft given in chat, session 2). A GitHub issue on pawix25/revib is the only contact route I know of.", why:"You approved sending it. I can only write to our own repo, so it has to come from your account."}
+
   ],
   phases: [
     {n:0, name:"Research and architecture", goal:"Know the game, the existing work and the tools well enough to pick an approach.",
@@ -163,9 +163,9 @@ const T = {
       {id:"1.4", s:"done", t:"Format loaders: TMD, ANM, ANC, FSL, VH/VB", note:"Every model, animation, camera path, course script and sound bank on the disc parses. Builds on your PC. TIM dropped: the only images are the Sony and NanaOn-Sha logos (D10)."},
       {id:"1.5", s:"done", t:"Desktop asset viewer (vibview)", note:"Runs on your PC on the RTX 4090: Vibri drawn upright with limbs attached, smooth lines, animations at a sensible speed, no Vulkan errors. Open point moved to 1.6: one eye sits apart from the head from some angles; check against the original."},
       {id:"1.6", s:"todo", t:"Reference capture rig", note:"Emulator with debugger (PCSX-Redux first) plus revib's symbol addresses. Dump obstacle events and scores for the six songs. Also compare Vibri's eye placement and back-face hiding with vibview."},
-      {id:"1.7", s:"active", t:"Read the decompilation and write the behaviour spec", note:"docs/SPEC.md v1 covers the clock, 8-second look-ahead, onset detection, course script, judging (hit window is 20% of a part either side), forms, scoring, courses, jitter, scene layout and camera. Still to read: game flow (Glue), menus and HUD, sound numbers and pitch, pad details, field-of-view mapping."},
+      {id:"1.7", s:"done", t:"Read the decompilation and write the behaviour spec", note:"docs/SPEC.md v2: clock, 8-second look-ahead, onset detection, course script, judging, forms, scoring, courses, jitter, scene, camera, game flow, sound effects, HUD, projection. Menu drawing internals were read at header level only and are deferred to task 3.5."},
       {id:"1.8", s:"todo", t:"Stereo spike: OpenXR and Vulkan test scene on PCVR and Quest 3"},
-      {id:"1.9", s:"todo", t:"Ask revib's author how the decompilation may be used", note:"Depends on Q6. Default until then: write code fresh against the spec."}
+      {id:"1.9", s:"active", t:"Courtesy note to revib's author", note:"Drafted. Waiting for you to post it (Q9). Not a request for permission: we copy nothing either way."}
      ]},
     {n:2, name:"Game core, headless", goal:"The whole game as a deterministic library with no graphics: audio in, obstacle course and judgement out.",
      exit:"Event lists match the reference for all six songs. Unit tests run in CI without any game data in the repo.",
@@ -185,7 +185,7 @@ const T = {
       {id:"3.2", s:"todo", t:"Scene: road, Vibri's four forms and animations, meters, messages, font"},
       {id:"3.3", s:"todo", t:"Audio output slaved to the device clock, with latency compensation. Sound effects."},
       {id:"3.4", s:"todo", t:"Timestamped gamepad and keyboard input"},
-      {id:"3.5", s:"todo", t:"Title and menu flow, language select, high scores"},
+      {id:"3.5", s:"todo", t:"Title and menu flow, language select, high scores", note:"Starts with reading the original's menu drawing code in detail (deferred from 1.7)."},
       {id:"3.6", s:"todo", t:"Side-by-side comparison with the emulator and measured timing"}
      ]},
     {n:4, name:"PCVR", goal:"The full game in a headset over OpenXR.",
@@ -264,7 +264,7 @@ const T = {
      code:'cd F:\\VibRibbonVR\\Vib-Ribbon-VR\n.\\build\\dev\\tools\\vibtool\\vibtool.exe obj "F:\\VibRibbonVR\\research\\Gamefiles\\Vib-Ribbon (Europe) (En,Fr,De,Es,It).cue" GAME/02_FILES.PAK CHARA/PEELOO/MODEL.TMD F:\\VibRibbonVR\\research\\peeloo.obj CHARA/PEELOO/N00_SKIP.ANM 0'},
     {state:"Used in session 2", what:"Open the model viewer on Vibri. Drag with the left mouse button to orbit, wheel to zoom, Left/Right for other animations, Space to pause, comma and period to step frames, Up/Down for line width, R to reset, M to switch the hide-from-behind rule, Esc to quit. Anything printed with [vulkan] is an error report worth sending me.",
      code:'cd F:\\VibRibbonVR\\Vib-Ribbon-VR\n.\\build\\dev\\apps\\viewer\\vibview.exe "F:\\VibRibbonVR\\research\\Gamefiles\\Vib-Ribbon (Europe) (En,Fr,De,Es,It).cue"'},
-    {state:"Upcoming (Q8)", what:"Update, rebuild and reopen the viewer after the facing-marker fix.",
+    {state:"Used in session 2", what:"Update, rebuild and reopen the viewer. Confirmed: eyes hide correctly from behind.",
      code:'& "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\Common7\\Tools\\Launch-VsDevShell.ps1" -Arch amd64 -HostArch amd64\ncd F:\\VibRibbonVR\\Vib-Ribbon-VR\ngit pull\ncmake --build --preset dev\n.\\build\\dev\\apps\\viewer\\vibview.exe "F:\\VibRibbonVR\\research\\Gamefiles\\Vib-Ribbon (Europe) (En,Fr,De,Es,It).cue"'},
     {state:"Common", what:"View a different model: add the PAK and the model path. This one is the road pieces.",
      code:'.\\build\\dev\\apps\\viewer\\vibview.exe "F:\\VibRibbonVR\\research\\Gamefiles\\Vib-Ribbon (Europe) (En,Fr,De,Es,It).cue" GAME/02_FILES.PAK ROAD/ROAD.TMD'},

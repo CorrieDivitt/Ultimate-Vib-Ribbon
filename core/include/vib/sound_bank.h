@@ -13,7 +13,7 @@ namespace vib {
 
 struct VabTone {
   std::uint8_t priority = 0, mode = 0, volume = 0, pan = 0;
-  std::uint8_t centre_note = 0, centre_fine = 0;  // a key equal to the centre plays at the SPU's base rate
+  std::uint8_t centre_note = 0, centre_fine = 0;  // the game plays tone t at note t + 1; equal to the centre means base rate
   std::uint8_t note_min = 0, note_max = 0;
   std::uint16_t adsr1 = 0, adsr2 = 0;  // SPU envelope registers
   std::int16_t program = 0;

@@ -35,7 +35,7 @@ struct CameraKey {
   Vec3s eye;          // viewpoint (vpx, vpy, vpz)
   Vec3s target;       // reference point (vrx, vry, vrz)
   std::int16_t twist; // roll about the view direction, passed to the PlayStation library as is
-  std::int16_t fov;   // the original sets its projection from 360 * fov (16.16 fixed point); mapping to degrees still to derive
+  std::int16_t fov;   // vertical field of view on a 4:3 picture, 4096 = full turn
 };
 
 struct CameraAnimation {

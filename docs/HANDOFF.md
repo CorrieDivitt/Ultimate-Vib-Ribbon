@@ -70,12 +70,12 @@ F:\VibRibbonVR\
 
 ## 0. Read docs/SPEC.md
 
-`docs/SPEC.md` (session 2) is the behaviour spec written from reading the revib sources: clock, 8 s look-ahead, onset detection, course script semantics, judging, forms, scoring, courses, jitter, scene layout, camera. It supersedes the engine notes in section 3 below wherever they differ. Sections of the game not yet read are listed at its end; task 1.7 stays open until they are done.
+`docs/SPEC.md` (session 2) is the behaviour spec written from reading the revib sources: clock, 8 s look-ahead, onset detection, course script semantics, judging, forms, scoring, courses, jitter, scene layout, camera. It supersedes the engine notes in section 3 below wherever they differ. Version 2 added game flow, sound effects, HUD and projection; task 1.7 is done. Menu drawing internals (TitleDraw, 90 KB of source) were read at header level only and are deferred to task 3.5. Sound-effect playback pitch is described but not verified by ear. Courtesy note to revib's author: drafted in chat for the owner to post as a GitHub issue (task 1.9, Q9).
 
 Corrections it forced, already applied in code:
 
 - TMD triangles are **facing markers**, not fills. Nothing in the game is filled. Quads are drawn as one line (first vertex to last). `TmdObject` now has `marker` and `marker_vertices`; `fills` is gone. The earlier note that "every fill is black" was wrong: triangles are (0,0,0) ×124 and (0,0,1) ×63, quads are white ×6.
-- vibview no longer mirrors the model (it used to flip Y, which mirrored depth). It uses PlayStation axes with −Y as up, and hides marker objects with the original's screen-winding rule. Not yet re-run by the owner (Q8). The fill pipeline is still in the renderer, unused.
+- vibview no longer mirrors the model (it used to flip Y, which mirrored depth). It uses PlayStation axes with −Y as up, and hides marker objects with the original's screen-winding rule. Owner confirmed on their PC that the eyes now disappear correctly. The fill pipeline is still in the renderer, unused.
 - FSL field names changed to their real meaning: `period`, `select_period`, slopes; `tempo_length`, `tempo_pattern`, `reverse_length` (dead), `screw_length`, `camera`; header lists are rounds / songs / medleys.
 - Animation rate is frames per second (confirmed). Rotation order confirmed as scale, X, Y, Z, translate.
 
