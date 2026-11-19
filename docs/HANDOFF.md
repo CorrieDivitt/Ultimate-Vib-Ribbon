@@ -11,7 +11,7 @@ Confidence labels used below: **[measured]** = computed this session from the di
 
 ## 1. Where things stand
 
-Phase 0 is signed off. Phase 1 is under way: 1.1 and 1.3 done, 1.2 waits only on the Vulkan SDK install. 1.4 is done: TMD, ANM, ANC, FSL and VH/VB loaders plus posing are in vibcore, and build on the owner's PC. TIM was dropped (D10: the only images are the Sony and NanaOn-Sha logos). Next is 1.5, the desktop viewer, which needs the Vulkan SDK. Gotcha seen in session 2: a new Developer PowerShell starts 32-bit; building from it compiles but fails at the link step. Run Launch-VsDevShell.ps1 -Arch amd64 -HostArch amd64 first. Vulkan SDK 1.4.363.1 is installed at C:\VulkanSDK; the glslc check still needs a fresh shell.
+Phase 0 is signed off. Phase 1 is under way: 1.1 and 1.3 done, 1.2 waits only on the Vulkan SDK install. 1.4 is done: TMD, ANM, ANC, FSL and VH/VB loaders plus posing are in vibcore, and build on the owner's PC. TIM was dropped (D10: the only images are the Sony and NanaOn-Sha logos). Next is 1.5, the desktop viewer, which needs the Vulkan SDK. Gotcha seen in session 2: a new Developer PowerShell starts 32-bit; building from it compiles but fails at the link step. Run Launch-VsDevShell.ps1 -Arch amd64 -HostArch amd64 first. Task 1.2 is done: Vulkan SDK 1.4.363.1 at C:\VulkanSDK confirmed working (VULKAN_SDK set, glslc from shaderc v2026.4).
 
 Owner decisions, 2026-11-18:
 
