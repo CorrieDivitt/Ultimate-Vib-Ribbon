@@ -7,8 +7,9 @@
 // (SDL), which the game already understands:
 //   left trigger = block, right trigger = loop, X or Y = pit, A = wave and confirm,
 //   B = back, menu button = start, left thumbstick = the d-pad in the menus.
-// For testing: the right thumbstick clicked (R3) recentres the view; held up or
-// down it zooms in or out (how close the view stands to Vibri in play).
+// For testing: the right thumbstick clicked (R3) recentres the view; the right grip
+// held zooms in and the left grip out (how close the view stands to Vibri in play),
+// as does the right stick up or down.
 
 #include <memory>
 
