@@ -78,6 +78,9 @@ section{display:flex;flex-direction:column;gap:14px}
 .cmd pre{margin:0;overflow-x:auto;background:var(--paper);border:1px solid var(--rule);padding:10px 12px;font-family:var(--display);font-size:12.5px;line-height:1.55;white-space:pre}
 .cmd .state{font-family:var(--display);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
 button.copy{font-family:var(--display);font-size:12px;background:var(--ink);color:var(--paper);border:0;padding:5px 12px;cursor:pointer}
+#notes{width:100%;background:var(--panel);color:var(--ink);border:1px solid var(--rule);padding:12px 14px;font-family:var(--body);font-size:15px;line-height:1.5;resize:vertical;min-height:120px}
+#notes:focus-visible{outline:2px solid var(--ask);outline-offset:2px}
+.state{font-family:var(--display);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
 .two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
 .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
 @media (max-width:520px){
@@ -97,6 +100,13 @@ button.copy{font-family:var(--display);font-size:12px;background:var(--ink);colo
   <section>
     <div class="strip" id="strip"></div>
     <div class="legend" id="legend"></div>
+  </section>
+
+  <section>
+    <h2>Your notes</h2>
+    <p class="muted" style="max-width:70ch">Type anything you want to keep to hand. Saved with the tracker a moment after you stop typing, and readable by the assistant in later sessions.</p>
+    <textarea id="notes" rows="7" spellcheck="true" placeholder="Loading your notes..." disabled></textarea>
+    <div class="state" id="notes-state">Loading</div>
   </section>
 
   <section>
@@ -136,10 +146,10 @@ button.copy{font-family:var(--display);font-size:12px;background:var(--ink);colo
    status values: done | active | todo | blocked | ask (needs the owner's answer) */
 const T = {
   goal: "A version of Vib-Ribbon playable in VR on PCVR and Meta Quest 3, with responsive, consistent timing and visuals that do justice to the original. Steam Frame and levels from your own music are stretch goals.",
-  updated: "2026-11-18, session 2 (spec complete)",
+  updated: "2026-11-18, session 2 (reference rig started)",
   approach: "Native VR port. Game logic from the decompilation, assets read from your own disc, emulator used as the reference to test against.",
   asks: [
-    {id:"Q9", t:"Post the courtesy note to revib's author (draft given in chat, session 2). A GitHub issue on pawix25/revib is the only contact route I know of.", why:"You approved sending it. I can only write to our own repo, so it has to come from your account."}
+    {id:"Q10", t:"PCSX-Redux freezes at the first loading screen. Tell me which BIOS it is using and paste its log (steps in chat).", why:"Most likely cause: the emulator's built-in open BIOS. Vib-Ribbon switches threads inside an interrupt, which that BIOS may not handle; the recomp project hit the same thing."}
 
   ],
   phases: [
@@ -162,10 +172,9 @@ const T = {
       {id:"1.3", s:"done", t:"Disc ingest library and CLI", note:"C++: CUE, raw BIN sectors, ISO 9660, PAK, SHA-1 disc check. vibtool info / extract / audio. All 8 tests pass on your PC against your disc; output matches the Linux run."},
       {id:"1.4", s:"done", t:"Format loaders: TMD, ANM, ANC, FSL, VH/VB", note:"Every model, animation, camera path, course script and sound bank on the disc parses. Builds on your PC. TIM dropped: the only images are the Sony and NanaOn-Sha logos (D10)."},
       {id:"1.5", s:"done", t:"Desktop asset viewer (vibview)", note:"Runs on your PC on the RTX 4090: Vibri drawn upright with limbs attached, smooth lines, animations at a sensible speed, no Vulkan errors. Open point moved to 1.6: one eye sits apart from the head from some angles; check against the original."},
-      {id:"1.6", s:"todo", t:"Reference capture rig", note:"Emulator with debugger (PCSX-Redux first) plus revib's symbol addresses. Dump obstacle events and scores for the six songs. Also compare Vibri's eye placement and back-face hiding with vibview."},
+      {id:"1.6", s:"active", t:"Reference capture rig", note:"PCSX-Redux installed. Blocked for now: the game freezes at the first loading screen (Q10). Then: dump obstacle events and scores for the six songs using revib's symbol addresses."},
       {id:"1.7", s:"done", t:"Read the decompilation and write the behaviour spec", note:"docs/SPEC.md v2: clock, 8-second look-ahead, onset detection, course script, judging, forms, scoring, courses, jitter, scene, camera, game flow, sound effects, HUD, projection. Menu drawing internals were read at header level only and are deferred to task 3.5."},
-      {id:"1.8", s:"todo", t:"Stereo spike: OpenXR and Vulkan test scene on PCVR and Quest 3"},
-      {id:"1.9", s:"active", t:"Courtesy note to revib's author", note:"Drafted. Waiting for you to post it (Q9). Not a request for permission: we copy nothing either way."}
+      {id:"1.8", s:"todo", t:"Stereo spike: OpenXR and Vulkan test scene on PCVR and Quest 3"}
      ]},
     {n:2, name:"Game core, headless", goal:"The whole game as a deterministic library with no graphics: audio in, obstacle course and judgement out.",
      exit:"Event lists match the reference for all six songs. Unit tests run in CI without any game data in the repo.",
@@ -211,7 +220,8 @@ const T = {
       {id:"6.1", s:"todo", t:"Visual and haptic polish, comfort and accessibility options"},
       {id:"6.2", s:"todo", t:"Packaging: first-run disc import, installers, sideload instructions"},
       {id:"6.3", s:"todo", t:"Credits and licence notices for every project we learned from"},
-      {id:"6.4", s:"todo", t:"Test matrix across runtimes, then release"}
+      {id:"6.4", s:"todo", t:"Test matrix across runtimes, then release"},
+      {id:"6.5", s:"todo", t:"Courtesy note to revib's author", note:"Moved here by the owner: only once the project is past the prototype stage. Draft is in the handoff document."}
      ]},
     {n:7, name:"Stretch goals", goal:"Nice to have. None of these block a release.",
      exit:"Done when they are done.",
@@ -364,6 +374,45 @@ T.commands.forEach((c, i) => {
   right.appendChild(b); top.appendChild(right); box.appendChild(top);
   box.appendChild(el("pre",null,c.code)); $("commands").appendChild(box);
 });
+
+/* ----- Your notes: kept in the tracker's own store (doc tracker/notes, field text),
+   with a copy in this browser as a fallback. Not part of the T block above. ----- */
+(function(){
+  const box = $("notes"), state = $("notes-state");
+  const LOCAL = "vibvr-tracker-notes";
+  let ref = null, saved = "", timer = null, writing = false, again = false;
+  const local = () => { try { return localStorage.getItem(LOCAL) || ""; } catch (e) { return ""; } };
+  const keepLocal = v => { try { localStorage.setItem(LOCAL, v); } catch (e) {} };
+  function ready(text, note){ box.value = text; saved = text; box.disabled = false; box.placeholder = "Type your notes here"; state.textContent = note; }
+  async function save(){
+    if (!ref) { state.textContent = "Saved in this browser only"; return; }
+    if (writing) { again = true; return; }
+    const text = box.value;
+    if (text === saved) { state.textContent = "Saved"; return; }
+    writing = true; state.textContent = "Saving";
+    try { await ref.set({text: text, updated: new Date().toISOString()}); saved = text; state.textContent = "Saved"; }
+    catch (e) { state.textContent = "Could not save to the tracker. Kept in this browser. Copy anything important."; }
+    writing = false;
+    if (again) { again = false; save(); }
+  }
+  box.addEventListener("input", () => { keepLocal(box.value); state.textContent = "Not saved yet"; clearTimeout(timer); timer = setTimeout(save, 1500); });
+  box.addEventListener("blur", () => { clearTimeout(timer); save(); });
+  const giveUp = setTimeout(() => { if (box.disabled) ready(local(), "Tracker storage not reachable. Saved in this browser only"); }, 10000);
+  (async function(){
+    try {
+      const db = window.claude && window.claude.use ? await window.claude.use("db") : null;
+      if (!db) { clearTimeout(giveUp); if (box.disabled) ready(local(), "Saved in this browser only"); return; }
+      const doc = db.doc("tracker/notes");
+      const snap = await doc.get();
+      clearTimeout(giveUp);
+      const data = snap.exists ? snap.data() : null;
+      const stored = data && typeof data.text === "string" ? data.text : "";
+      ref = doc;
+      if (box.disabled) ready(stored || local(), "Saved");
+      else { saved = stored; save(); }   /* the fallback opened first: push what was typed */
+    } catch (e) { clearTimeout(giveUp); if (box.disabled) ready(local(), "Saved in this browser only"); }
+  })();
+})();
 </script>
 </body>
 </html>

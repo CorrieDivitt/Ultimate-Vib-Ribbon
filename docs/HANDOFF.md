@@ -70,7 +70,11 @@ F:\VibRibbonVR\
 
 ## 0. Read docs/SPEC.md
 
-`docs/SPEC.md` (session 2) is the behaviour spec written from reading the revib sources: clock, 8 s look-ahead, onset detection, course script semantics, judging, forms, scoring, courses, jitter, scene layout, camera. It supersedes the engine notes in section 3 below wherever they differ. Version 2 added game flow, sound effects, HUD and projection; task 1.7 is done. Menu drawing internals (TitleDraw, 90 KB of source) were read at header level only and are deferred to task 3.5. Sound-effect playback pitch is described but not verified by ear. Courtesy note to revib's author: drafted in chat for the owner to post as a GitHub issue (task 1.9, Q9).
+`docs/SPEC.md` (session 2) is the behaviour spec written from reading the revib sources: clock, 8 s look-ahead, onset detection, course script semantics, judging, forms, scoring, courses, jitter, scene layout, camera. It supersedes the engine notes in section 3 below wherever they differ. Version 2 added game flow, sound effects, HUD and projection; task 1.7 is done. Menu drawing internals (TitleDraw, 90 KB of source) were read at header level only and are deferred to task 3.5. Sound-effect playback pitch is described but not verified by ear. Courtesy note to revib's author: the owner decided (session 2) not to send it until the project is past the prototype stage; it is now task 6.5. Draft kept at the end of this document.
+
+Tracker notes: the tracker page has a "Your notes" box near the top for the owner. It is stored in the artifact's database (capability `db`, document `tracker/notes`, field `text`), not in the page source. Read it at the start of a session with the artifact db tools (db_get, slug above, path `tracker/notes`). Never overwrite it.
+
+Reference rig (1.6): the owner installed PCSX-Redux; the game freezes at the first loading screen. Leading suspicion: OpenBIOS not handling the game's thread switch inside an interrupt (the recomp needed a runtime patch for exactly that). Waiting for the owner's BIOS setting and log.
 
 Corrections it forced, already applied in code:
 
@@ -202,3 +206,17 @@ GitHub rate-limited several fetches. The repository landing page for revib and p
 - https://github.com/Fancy2209/psyz and https://github.com/OpenDriver2/PsyCross
 - https://github.com/FractalEngineer/Medal-Of-Honor-PSX-Recomp and https://github.com/FractalEngineer/Medal-Of-Honor-Underground-PSX-Recomp
 - https://partner.steamgames.com/doc/steamhardware/steamframe
+
+## 10. Draft: courtesy note to revib's author (not sent; task 6.5)
+
+To be posted by the owner as an issue at github.com/pawix25/revib once the project is past the prototype stage.
+
+> **Thank you, and a heads-up about a VR port project**
+>
+> Hi, I'm working on a free, non-commercial fan project: a native VR version of Vib-Ribbon for PCVR and Meta Quest 3. Repo: https://github.com/CorrieDivitt/Vib-Ribbon-VR
+>
+> I wanted to say thank you and tell you how your work is being used. We read revib (and open-ribbon's documentation) to understand how the game behaves, and write our own implementation from that understanding. No code from revib is copied into our repo, the repo contains no game data, and both projects are credited.
+>
+> If you'd prefer to be credited differently, or anything about this use bothers you, please say. If we find mistakes or confirm open details, we're glad to report them back. Two from the disc: times in SYSTEM3.FSL are samples at 22,050 Hz, and fixed patterns store each road as a 32-bit value.
+>
+> No reply needed if this is all fine with you. Thanks again for the careful work.
