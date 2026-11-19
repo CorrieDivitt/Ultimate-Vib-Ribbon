@@ -564,6 +564,9 @@ int run(int argc, char** argv) {
           finished = true;
         }
       }
+      // Whatever happened, the song stops here: leaving a course early must not leave
+      // its music playing under the menus.
+      s.audio.play_music({});
       last_rank = 0;
       last_score = points;
       // High scores belong to whole courses, as in the original (one song is practice).
@@ -677,7 +680,10 @@ int run(int argc, char** argv) {
             case R::PsjModes: title.go_to(S::PsjModeSelect); break;
             case R::UnknownModes: std::printf("Courses from your own music come later.\n"); break;
             case R::Options: title.go_to(S::Option); break;
-            case R::Leave: running = false; break;
+            // The original's "leave" goes back to its title screen, which leads to this
+            // menu again. Until the title is built, the menu simply comes back; close
+            // the window to quit.
+            case R::Leave: title.go_to(S::Main); break;
             case R::Bronze: case R::Silver: case R::Gold:
               chosen = r == R::Bronze ? Course::Bronze : r == R::Silver ? Course::Silver : Course::Gold;
               course_chosen = true;
@@ -754,6 +760,7 @@ int main(int argc, char** argv) {
     return run(argc, argv);
   } catch (const std::exception& e) {
     std::fprintf(stderr, "vibplay: %s\n", e.what());
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "vibplay", e.what(), nullptr);  // so a failure is never just a closed window
     return 1;
   }
 }
