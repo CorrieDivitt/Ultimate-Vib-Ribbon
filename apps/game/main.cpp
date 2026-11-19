@@ -3,7 +3,11 @@
 // the music as in the original, rules from vibcore, presses judged at the moment
 // they happened on the audio clock.
 //
-//   vibplay <disc.cue> [bronze|silver|gold | --song 1-6] [--fixed] [--smooth] [--seed N]
+//   vibplay <disc.cue> [bronze|silver|gold | --song 1-6] [--fixed] [--smooth] [--seed N] [--last S]
+//
+// --last S (for testing the end of a course): every song starts S seconds before its
+// end, a perfect player having played the rest, so the score and form are what a
+// perfect run would have by then.
 //
 // With no course or song named it opens on the original's menus: game-disc
 // courses, options and high scores (menus: arrows or d-pad to move, Enter, Space
@@ -186,6 +190,7 @@ struct Args {
   int song = 0;  // 1-6 for a single song; 0 = the course's two
   bool fixed = false;
   bool smooth = false;
+  double last_seconds = 0;  // > 0: start each song this long before its end (testing)
   std::uint32_t seed = 0;
   bool seed_given = false;
   bool course_given = false;  // a course or song on the command line: play it straight away
@@ -232,6 +237,19 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   }
   if (timing.lead < 0) out.insert(out.begin() + std::ptrdiff_t(kDelay) * 4, std::size_t(-timing.lead) * 2, 0);
 
+  // Testing: start the song this far in (--last), the music from there and no 8 s wait.
+  std::int32_t skip = 0;
+  if (s.opt.last_seconds > 0) {
+    const auto last = static_cast<std::int32_t>(s.opt.last_seconds * kSampleRate);
+    skip = std::max<std::int32_t>(0, total - last) / kBlockSize * kBlockSize;
+  }
+  // Where the music buffer starts, in heard samples from the song's start.
+  const std::int32_t buffer_start = skip > 0 ? skip : -kDelay;
+  if (skip > 0) {
+    const std::size_t cut = std::min(out.size(), std::size_t(kDelay + skip) * 4);  // 2 frames of stereo per heard sample
+    out.erase(out.begin(), out.begin() + std::ptrdiff_t(cut));
+  }
+
   CourseGenerator gen(s.script);
   gen.set_timing(timing);
   gen.start_round(song, 0);
@@ -247,12 +265,40 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
 
   std::printf("\nSong %d: %d s, %s course (lead %d, frame phase %.0f)\n", song, total / kSampleRate,
               s.fixed ? "fixed" : "original-style", timing.lead, double(timing.frame_phase_q16) / 65536.0);
-  s.audio.play_music(std::move(out));
-  s.fx.play(0, 11, 63, 4);  // the round's opening sound (the original plays it whatever the option)
 
   std::size_t next_block = 0, fed = 0;
   bool was_selecting = gen.selecting(), ended = false;
-  std::int32_t last_position = -kDelay;
+  // The course is analysed eight seconds ahead of what is heard.
+  auto analyse_up_to = [&](std::int32_t heard) {
+    while (next_block < blocks.size() && std::int32_t(next_block * kBlockSize) <= heard + kDelay) {
+      const auto t = static_cast<std::int32_t>(next_block * kBlockSize);
+      gen.process(t, blocks[next_block++]);
+      for (; fed < gen.events().size(); ++fed) game.add_event(gen.events()[fed]);
+      if (was_selecting && !gen.selecting()) game.quiet(t);
+      was_selecting = gen.selecting();
+    }
+    if (!ended && next_block >= blocks.size()) {
+      game.end_at(total);
+      ended = true;
+    }
+  };
+  if (skip > 0) {
+    // A perfect player plays up to the starting point: each part pressed as it arrives.
+    for (std::int32_t at = -kDelay; at < skip; at = std::min(at + kBlockSize, skip)) {
+      analyse_up_to(at);
+      const Part* first = nullptr;
+      for (const Part& p : game.parts())
+        if (!p.done && (!first || p.time < first->time)) first = &p;
+      game.update(at, first && first->time <= at ? road_presses(first->road) : 0, true);
+    }
+    analyse_up_to(skip);
+    game.update(skip, 0, true);
+    std::printf("Starting %d s from the end, score %d so far (--last).\n", (total - skip) / kSampleRate, game.score());
+  }
+  s.audio.play_music(std::move(out));
+  s.fx.play(0, 11, 63, 4);  // the round's opening sound (the original plays it whatever the option)
+
+  std::int32_t last_position = skip > 0 ? skip : -kDelay;
   std::uint64_t last_ns = SDL_GetTicksNS();
   const std::uint64_t start_ns = last_ns;
   double title_timer = 0;
@@ -361,22 +407,11 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     last_ns = now_ns;
     // Heard position, 22.05 kHz samples from the song's start (negative during the 8 s ahead).
     auto heard_at = [&](std::uint64_t ns) {
-      return static_cast<std::int32_t>(std::floor(s.audio.heard_frame_at(now_ns, ns) / 2.0)) - kDelay;
+      return static_cast<std::int32_t>(std::floor(s.audio.heard_frame_at(now_ns, ns) / 2.0)) + buffer_start;
     };
     const std::int32_t heard = std::max(heard_at(now_ns), last_position);
 
-    // The analysis runs eight seconds ahead of what is heard.
-    while (next_block < blocks.size() && std::int32_t(next_block * kBlockSize) <= heard + kDelay) {
-      const auto t = static_cast<std::int32_t>(next_block * kBlockSize);
-      gen.process(t, blocks[next_block++]);
-      for (; fed < gen.events().size(); ++fed) game.add_event(gen.events()[fed]);
-      if (was_selecting && !gen.selecting()) game.quiet(t);
-      was_selecting = gen.selecting();
-    }
-    if (!ended && next_block >= blocks.size()) {
-      game.end_at(total);
-      ended = true;
-    }
+    analyse_up_to(heard);
 
     // Presses first, each judged where the music was when it happened.
     Outcome outcome = Outcome::Playing;
@@ -479,6 +514,7 @@ int run(int argc, char** argv) {
     else if (a == "--song") opt.song = std::clamp(std::atoi(value()), 1, 6);
     else if (a == "--fixed") opt.fixed = true;
     else if (a == "--smooth") opt.smooth = true;
+    else if (a == "--last") opt.last_seconds = std::max(1.0, std::atof(value()));
     else if (a == "--seed") opt.seed = std::uint32_t(std::strtoul(value(), nullptr, 10)), opt.seed_given = true;
     else if (a == "--offset") opt.offset_ms = std::atof(value());
     else if (a == "--sfx") opt.sfx = float(std::atof(value()));
@@ -489,7 +525,7 @@ int run(int argc, char** argv) {
   }
   if (opt.cue.empty()) {
     std::fputs("usage: vibplay <disc.cue> [bronze|silver|gold | --song 1-6] [--fixed] [--smooth] [--seed N]\n"
-               "               [--offset ms] [--sfx 0-1] [--music 0-1] [--width x]\n",
+               "               [--last seconds] [--offset ms] [--sfx 0-1] [--music 0-1] [--width x]\n",
                stderr);
     return 2;
   }
