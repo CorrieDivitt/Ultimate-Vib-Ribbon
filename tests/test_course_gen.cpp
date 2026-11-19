@@ -100,3 +100,30 @@ TEST(silence_gives_no_parts) {
   const auto events = run(tiny_script(), std::vector<std::int16_t>(44100 * 2 * 5, 0), 1);
   for (const auto& e : events) CHECK(e.type != CourseEvent::Type::Part);
 }
+
+TEST(lead_moves_the_music_against_the_round_start) {
+  std::vector<std::int16_t> pcm(256 * 2 * 3, 0);
+  pcm[0] = pcm[1] = 100;  // the first 44.1 kHz sample
+  pcm[6] = pcm[7] = 300;  // the fourth
+  CHECK(make_blocks(pcm, 0)[0][0] == 100);
+  CHECK(make_blocks(pcm, 3)[0][0] == 300);   // three samples skipped, the other decimation phase
+  const auto late = make_blocks(pcm, -2);    // one analysis sample of silence first
+  CHECK(late[0][0] == 0 && late[0][1] == 100);
+  CHECK(make_blocks(pcm, -2).size() == 3 && make_blocks(pcm, 3).size() == 2);
+}
+
+TEST(original_style_timing_is_seeded_and_in_range) {
+  const CourseTiming a = CourseTiming::like_original(7), b = CourseTiming::like_original(7);
+  CHECK(a.lead == b.lead && a.frame_phase_q16 == b.frame_phase_q16);
+  bool differs = false;
+  for (std::uint32_t seed = 0; seed < 200; ++seed) {
+    const CourseTiming t = CourseTiming::like_original(seed);
+    CHECK(t.lead >= -240 && t.lead <= 500);
+    CHECK(t.frame_period_q16 == CourseGenerator::kOriginalFramePeriodQ16);
+    CHECK(t.frame_phase_q16 >= 0 && t.frame_phase_q16 < t.frame_period_q16);
+    differs = differs || t.lead != a.lead;
+  }
+  CHECK(differs);
+  const CourseTiming c = CourseTiming::consistent();
+  CHECK(c.lead == 0 && c.frame_period_q16 == 0);
+}

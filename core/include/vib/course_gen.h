@@ -23,8 +23,26 @@ using Block = std::array<std::int16_t, kBlockSize>;
 
 // 44.1 kHz stereo (interleaved L, R) to 22.05 kHz mono blocks: every second
 // stereo sample, left and right averaged with truncation toward zero.
-// A final partial block is dropped.
-std::vector<Block> make_blocks(std::span<const std::int16_t> stereo_44100);
+// A final partial block is dropped. `lead` moves the music against the round's
+// start, in 44.1 kHz samples: positive skips that many, negative puts silence first.
+std::vector<Block> make_blocks(std::span<const std::int16_t> stereo_44100, int lead = 0);
+
+// The original does not produce exactly the same course twice: where the music
+// starts against the round's start, and how audio blocks fall into video frames,
+// differ a little on every play (docs/HANDOFF.md section 2d). A CourseTiming holds
+// those two accidents.
+struct CourseTiming {
+  int lead = 0;                        // for make_blocks
+  std::int64_t frame_period_q16 = 0;   // 0: consult the script every block
+  std::int64_t frame_phase_q16 = 0;
+
+  // One fixed course per song, the same on every play.
+  static CourseTiming consistent() { return {}; }
+  // As the original behaves: a start offset and frame phase drawn, from `seed`,
+  // out of the ranges measured on the original. A different seed on each play
+  // gives the original's play-to-play variation.
+  static CourseTiming like_original(std::uint32_t seed);
+};
 
 struct CourseEvent {
   enum class Type { Part, Camera, Effect };
@@ -54,7 +72,9 @@ class CourseGenerator {
     frame_period_ = period_q16;
     frame_phase_ = phase_q16;
   }
-  static constexpr std::int64_t kOriginalFramePeriodQ16 = 29041657;  // 443.14 samples
+  // One PAL frame (314 lines of 3406 video clock ticks at 53.203425 MHz) in samples, times 65536.
+  static constexpr std::int64_t kOriginalFramePeriodQ16 = 29048467;  // 443.244 samples
+  void set_timing(const CourseTiming& t) { set_frame_timing(t.frame_period_q16, t.frame_phase_q16); }
 
   // Begins a round on the game's own disc: `round` counts from 1 and selects the
   // script track; `start_time` is the stream position of the track's first sample.

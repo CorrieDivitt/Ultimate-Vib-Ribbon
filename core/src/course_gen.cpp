@@ -6,17 +6,31 @@
 
 namespace vib {
 
-std::vector<Block> make_blocks(std::span<const std::int16_t> stereo) {
-  const std::size_t frames = stereo.size() / 2;       // stereo sample pairs at 44.1 kHz
-  const std::size_t count = frames / (kBlockSize * 2);  // 256 pairs make one block
-  std::vector<Block> blocks(count);
-  for (std::size_t b = 0; b < count; ++b)
+std::vector<Block> make_blocks(std::span<const std::int16_t> stereo, int lead) {
+  const std::int64_t frames = static_cast<std::int64_t>(stereo.size() / 2);  // stereo sample pairs at 44.1 kHz
+  const std::int64_t count = std::max<std::int64_t>(0, (frames - lead) / (kBlockSize * 2));  // 256 pairs make one block
+  std::vector<Block> blocks(static_cast<std::size_t>(count));
+  for (std::int64_t b = 0; b < count; ++b)
     for (int i = 0; i < kBlockSize; ++i) {
-      const std::size_t pair = b * kBlockSize * 2 + std::size_t(i) * 2;
-      const int sum = int(stereo[pair * 2]) + int(stereo[pair * 2 + 1]);
-      blocks[b][std::size_t(i)] = static_cast<std::int16_t>(sum / 2);  // C++ division truncates toward zero
+      const std::int64_t pair = b * kBlockSize * 2 + std::int64_t(i) * 2 + lead;
+      if (pair < 0 || pair >= frames) continue;  // silence before the music
+      const int sum = int(stereo[std::size_t(pair) * 2]) + int(stereo[std::size_t(pair) * 2 + 1]);
+      blocks[std::size_t(b)][std::size_t(i)] = static_cast<std::int16_t>(sum / 2);  // C++ division truncates toward zero
     }
   return blocks;
+}
+
+CourseTiming CourseTiming::like_original(std::uint32_t seed) {
+  // Seven recorded rounds of the original began between 204 samples late and 462
+  // early (44.1 kHz), with either decimation phase. Drawn evenly from a slightly wider range.
+  constexpr int kEarliest = -240, kLatest = 500;
+  CourseTiming t;
+  std::uint32_t state = next_random(seed ^ 0x5EED1E55u);
+  t.lead = kEarliest + static_cast<int>((std::uint64_t(state) * std::uint64_t(kLatest - kEarliest + 1)) >> 32);
+  state = next_random(state);
+  t.frame_period_q16 = CourseGenerator::kOriginalFramePeriodQ16;
+  t.frame_phase_q16 = static_cast<std::int64_t>((std::uint64_t(state) * std::uint64_t(t.frame_period_q16)) >> 32);
+  return t;
 }
 
 namespace {
