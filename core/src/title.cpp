@@ -74,6 +74,7 @@ int TitleScreens::load_camera(const Pak& pak, const char* name, bool loop) {
 }
 
 TitleScreens::TitleScreens(const Pak& pak, const char* language) {
+  font_ = parse_tmd(pak.view("FONT/FE_FONT.TMD"));
   m_vibri_ = load_model(pak, language, "VIBRI/VIBRI.TMD");
   m_main_ = load_model(pak, language, "MA/MA.TMD");
   m_psj_ = load_model(pak, language, "MODE/MDV.TMD");
@@ -300,6 +301,50 @@ void TitleScreens::say(std::vector<int> sounds, int volume, Vibri speaking) {
 }
 
 void TitleScreens::play_music() { sounds_.push_back({Channel::Music, {32}, 90, false}); }
+
+const std::string& TitleScreens::words(GameText::List list, int index) const {
+  static const std::string none;
+  return text_ ? text_->get(list, index) : none;
+}
+
+void TitleScreens::draw_text(const std::string& text, int jitter) {
+  if (!text_ || text.empty()) return;
+  // The original's DrawText: the camera at the origin looking along +z (LookAlongZ
+  // 0, 0, 0 to 295.625, fov 3.75), the text from (-1800, 1050) at depth 2690, each
+  // character 90 wide and each line 230 down, at scale 1.
+  constexpr int kX = -1800, kY = 1050, kDepth = 2690, kWidth = 90, kLineHeight = 230;
+  Hud::Layer layer;
+  layer.view.eye = {0, 0, 0};
+  layer.view.target = {0, 0, 4730};
+  layer.view.fov_y = float(682 * kTau / 4096.0);
+  lines_.set_view(layer.view);
+  // Each character jitters by the screen's jitter plus 4 of the font's own.
+  const int range = jitter / kGteOne + 4;
+  int column = 0, row = 0;
+  bool second = false;
+  for (const char ch : text) {
+    const auto c = static_cast<unsigned char>(ch);
+    const bool this_second = second;
+    second = false;
+    if (c == '~') {
+      second = true;
+    } else if (c == ' ') {
+      ++column;
+    } else if (c == '\n') {
+      ++row;
+      column = 0;
+    } else {
+      const int object = text_->object_for(c, this_second);
+      if (object >= 0 && object < int(font_.objects.size())) {
+        LineBuilder::Xform xf;
+        xf.t = {float(kX + kWidth * column), float(kY + kLineHeight * row), float(kDepth)};
+        lines_.object(font_.objects[std::size_t(object)], xf, range, 0, nullptr, layer.lines);
+      }
+      ++column;
+    }
+  }
+  layers_.push_back(std::move(layer));
+}
 
 void TitleScreens::draw_vibri(int jitter, std::vector<SceneLine>& out) {
   if (vibri_ == Vibri::Hidden) return;
@@ -691,7 +736,7 @@ TitleScreens::Result TitleScreens::psj_hiscore(const Input& in, int frame) {
 TitleScreens::Result TitleScreens::again(const Input& in) {
   // Vibri's four reactions to losing: what she says (sounds of the gameplay bank),
   // and how likely each is (4, 3, 2 and 1 in 10).
-  static const std::vector<int> words[4] = {
+  static const std::vector<int> reaction_words[4] = {
       {12, 176, 177, 179, 180, 181, 180, 181},
       {12, 176, 177, 184},
       {12, 176, 177, 185, 186, 187, 188, 189, 190, 190, 190, 190, 191},
@@ -715,7 +760,7 @@ TitleScreens::Result TitleScreens::again(const Input& in) {
     result_frame_ = 0;
     rewind_movies();
     sounds_.push_back({Channel::Music, {}, 0, true});
-    say(words[comment_], 64, Vibri::Hidden);
+    say(reaction_words[comment_], 64, Vibri::Hidden);
   }
   const int leave_jitter = leave_frame_ * 300 * kGteOne;
   int jitter = kMenuJitter * kGteOne + leave_jitter;
@@ -759,8 +804,12 @@ TitleScreens::Result TitleScreens::again(const Input& in) {
   } else {
     draw_movie(gov_[comment_ == 2 ? 6 : 3], 1, layer.lines);
   }
-  // (The original writes Vibri's words under her from frame 200; text is not drawn yet.)
   layers_.push_back(std::move(layer));
+  // Her words, from frame 200; the third reaction says a second thing from 360.
+  if (f > frames(200)) {
+    const int which = comment_ == 2 && f >= frames(360) ? 4 : comment_;
+    draw_text(words(GameText::List::FailComments, which), leave_jitter + (fade_ == kOut ? fade_jitter() : 0));
+  }
   ++result_frame_;
   if (result_frame_ == frames(480)) {
     if (results_rank != 0) {
@@ -1005,6 +1054,8 @@ TitleScreens::Result TitleScreens::clear(const Input& in) {
   layer.view.fov_y = float(454 * kTau / 4096.0);
   const int f = result_frame_;
   Result result = Result::None;
+  std::string text;  // what is written this frame
+  const int text_jitter = leave_jitter + (fade_ == kOut ? fade_jitter() : 0);
   auto wait = [&](int sixtieths) {
     if (++wait_frame_ == frames(sixtieths)) {
       wait_frame_ = 0;
@@ -1019,7 +1070,9 @@ TitleScreens::Result TitleScreens::clear(const Input& in) {
   if (f < frames(112)) draw_movie(clear_title_, 1, out);
   else if (!medal_shown_) draw_movie(clear_sign_, 1, out);
   if (f < frames(360)) {
-    draw_movie(clear_bonus_vibri_, 1, out);  // the bonus (its words are text, not drawn yet)
+    draw_movie(clear_bonus_vibri_, 1, out);  // the bonus, and its words
+    if (f >= frames(320)) text = words(GameText::List::Bonus, 1);
+    else if (f >= frames(190)) text = words(GameText::List::Bonus, 0);
   } else if (!leaving_ && !medal_shown_) {
     // The score counted, then whether it wins a medal.
     if (!entering_ && frames(362) < f && !in.voices_playing && !music_playing_) {
@@ -1041,10 +1094,12 @@ TitleScreens::Result TitleScreens::clear(const Input& in) {
     } else {
       draw_movie(clr_[0], 1, out);
     }
+    text = fill_in(words(GameText::List::Bonus, 2), total);
   } else if (leaving_) {
     // No medal: Vibri's comment.
     const int movie = clr_[std::size_t(2 + comment_)];
     draw_movie(movie, 1, out);
+    text = words(GameText::List::Comments, comment_);
     if (movies_[std::size_t(movie)].clip.finished() && wait(30)) {
       if (results_rank != 0) leave_frame_ = 1;
       else result = Result::ResultsDone;
@@ -1065,6 +1120,11 @@ TitleScreens::Result TitleScreens::clear(const Input& in) {
     draw_movie(movie, 1, out);
     if (step_sign[step] == 0) draw_movie(song_medal_, 1, out);
     if (step_sign[step] == 1) draw_movie(song_ten_, 1, out);
+    // Each step's words: step 4 names the course, steps 5 and 6 give the score.
+    const std::string& step_words = words(GameText::List::MedalSteps, step);
+    if (step == 4) text = fill_in(step_words, 0, words(GameText::List::CourseNames, course));
+    else if (step == 5 || step == 6) text = fill_in(step_words, total);
+    else text = step_words;
     if (movies_[std::size_t(movie)].clip.finished()) {
       if (step == 4) {  // "the course score is": now the number, over its beat
         say(spoken_.timeline, 64, Vibri::Hidden);
@@ -1097,6 +1157,7 @@ TitleScreens::Result TitleScreens::clear(const Input& in) {
     }
   }
   layers_.push_back(std::move(layer));
+  draw_text(text, text_jitter);
   if (result != Result::None) return result;
   ++result_frame_;
   return Result::None;

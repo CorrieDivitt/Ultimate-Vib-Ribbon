@@ -11,6 +11,7 @@
 #include "vib/known_discs.h"
 #include "vib/pak.h"
 #include "vib/course_gen.h"
+#include "vib/game_text.h"
 #include "vib/scene.h"
 #include "vib/title.h"
 #include "vib/course_script.h"
@@ -255,4 +256,54 @@ TEST(disc_sces02873_menus_flow) {
   run(10, down);
   run(5, confirm);
   CHECK(run(40, {}) == R::AgainBack);
+}
+
+TEST(disc_sces02873_screen_words_read_from_the_program) {
+  const std::string cue = test_cue();
+  if (cue.empty()) SKIP("set VIB_TEST_CUE to your SCES-02873 .cue to run");
+  DiscImage disc = DiscImage::open(path_from_utf8(cue));
+  Iso9660 iso(disc);
+  // Only the shape is checked here: the words themselves stay on the player's disc.
+  const GameText words = GameText::from_exe(iso.read("MAIN_G.EXE"));
+  using L = GameText::List;
+  const std::pair<L, int> lists[] = {{L::CourseNames, 5}, {L::Bonus, 3}, {L::Comments, 4},
+                                     {L::MedalSteps, 10}, {L::FailComments, 5}, {L::EndWords, 2}};
+  for (const auto& [list, count] : lists)
+    for (int i = 0; i < count; ++i) CHECK(!words.get(list, i).empty());
+  CHECK(words.get(L::Bonus, 2).find("%d") != std::string::npos);
+  CHECK(words.get(L::MedalSteps, 4).find("%s") != std::string::npos);
+  CHECK(words.get(L::MedalSteps, 5).find("%d") != std::string::npos);
+  CHECK(words.get(L::MedalSteps, 6).find("%d") != std::string::npos);
+  for (char c = '0'; c <= '9'; ++c) CHECK(words.object_for(static_cast<unsigned char>(c), false) == c - '0');
+  // Anything that is not the program is refused.
+  const Bytes not_it(4096, 0);
+  bool refused = false;
+  try {
+    (void)GameText::from_exe(not_it);
+  } catch (const FormatError&) {
+    refused = true;
+  }
+  CHECK(refused);
+
+  // The clear screen writes its words as a layer of their own.
+  const Pak game(iso.read("GAME/02_FILES.PAK"));
+  TitleScreens t(game);
+  t.set_text(&words);
+  t.results_course = 0;
+  t.results_score = 900;
+  t.results_bonus = 100;
+  t.results_rank = 0;
+  t.go_to(TitleScreens::Screen::Clear);
+  bool written = false;
+  for (int i = 0; i < 400 && !written; ++i) {
+    t.tick({});
+    written = t.layers().size() >= 2 && !t.layers().back().lines.empty();
+  }
+  CHECK(written);
+}
+
+TEST(fill_in_takes_a_number_and_a_name) {
+  CHECK(fill_in("a %d b", 42) == "a 42 b");
+  CHECK(fill_in("%s: %d", 7, "x") == "x: 7");
+  CHECK(fill_in("100%% %d %d", 1) == "100% 1 %d");
 }

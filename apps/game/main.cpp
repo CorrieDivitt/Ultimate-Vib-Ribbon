@@ -45,6 +45,7 @@
 #include "vib/course_gen.h"
 #include "vib/course_script.h"
 #include "vib/disc_image.h"
+#include "vib/game_text.h"
 #include "vib/gameplay.h"
 #include "vib/iso9660.h"
 #include "vib/known_discs.h"
@@ -606,6 +607,14 @@ int run(int argc, char** argv) {
     } else {
       // The menus, run at the original's 50 frames a second whatever the display does.
       TitleScreens title(pak);
+      // The screens' words come from the game's own program on the disc.
+      std::optional<GameText> words;
+      try {
+        words = GameText::from_exe(iso.read("MAIN_G.EXE"));
+        title.set_text(&*words);
+      } catch (const std::exception& e) {
+        std::printf("The results screens' words could not be read (%s); they are left out.\n", e.what());
+      }
       using S = TitleScreens::Screen;
       using R = TitleScreens::Result;
       title.sound_effects = save.options.sound_effects;

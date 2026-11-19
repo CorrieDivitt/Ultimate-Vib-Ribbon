@@ -16,6 +16,7 @@
 #include <utility>
 #include <vector>
 
+#include "vib/game_text.h"
 #include "vib/pak.h"
 #include "vib/scene.h"
 
@@ -65,6 +66,10 @@ class TitleScreens {
     int tempo = 0;  // 0, 1 or 2: the line lasts 6, 14 or 22 beats
   };
   static SpokenNumber say_number(int number, int form);
+
+  // The game's words, read from the player's own MAIN_G.EXE. Without them the
+  // screens are drawn without their text.
+  void set_text(const GameText* text) { text_ = text; }
 
   // Fades to `screen`; Screen::None switches at once with no fade.
   void go_to(Screen screen);
@@ -133,6 +138,10 @@ class TitleScreens {
   void draw_menu_movie(int movie, std::vector<SceneLine>& out);
   void draw_vibri(int jitter, std::vector<SceneLine>& out);
   void say(std::vector<int> sounds, int volume, Vibri speaking);
+  // Writes `text` with the line font where the original's results screens do, as a
+  // layer of its own. `jitter` in the geometry unit's fixed point, as the screens pass it.
+  void draw_text(const std::string& text, int jitter);
+  const std::string& words(GameText::List list, int index) const;
   void play_music();
   void show_number(Model& m, const std::array<int, 6>& slots, int first_digit_object, int value);
 
@@ -146,6 +155,8 @@ class TitleScreens {
   Result again_select(const Input& in);
 
   LineBuilder lines_;
+  const GameText* text_ = nullptr;
+  TmdModel font_;
   std::vector<Model> models_;
   std::vector<Movie> movies_;
   std::vector<Camera> cameras_;
