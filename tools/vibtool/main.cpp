@@ -5,6 +5,8 @@
 //   vibtool audio   <disc.cue> <out_dir>    write each audio track as a WAV file
 //   vibtool formats <disc.cue>              parse every model, animation, camera and course script
 //   vibtool sounds  <disc.cue> <out_dir>    decode the three sound banks to WAV files (44.1 kHz assumed)
+//   vibtool course  <disc.cue> <round 1-6> [<cue interval in blocks>]
+//                                           generate a song's obstacle course with our own code, as JSON lines
 //   vibtool obj     <disc.cue> <pak> <model.tmd> <out.obj> [<anim.anm> <frame>]
 //                                           export a model's lines as a Wavefront OBJ (Y up)
 //
@@ -20,6 +22,7 @@
 
 #include "vib/disc_image.h"
 #include "vib/iso9660.h"
+#include "vib/course_gen.h"
 #include "vib/course_script.h"
 #include "vib/known_discs.h"
 #include "vib/motion.h"
@@ -41,6 +44,7 @@ int usage() {
       "  vibtool audio   <disc.cue> <out_dir>\n"
       "  vibtool formats <disc.cue>\n"
       "  vibtool sounds  <disc.cue> <out_dir>\n"
+      "  vibtool course  <disc.cue> <round 1-6> [<cue interval in blocks>]\n"
       "  vibtool obj     <disc.cue> <pak> <model.tmd> <out.obj> [<anim.anm> <frame>]\n"
       "                  e.g. vibtool obj disc.cue GAME/02_FILES.PAK CHARA/PEELOO/MODEL.TMD peeloo.obj\n",
       stderr);
@@ -258,6 +262,24 @@ int cmd_sounds(const fs::path& cue, const fs::path& out) {
   std::printf("Pitch assumption: each sample is written at 44,100 Hz, its rate when keyed at its centre note.\n");
   return 0;
 }
+
+int cmd_course(const fs::path& cue, int round, int interval) {
+  DiscImage disc = DiscImage::open(cue);
+  Iso9660 iso(disc);
+  const Pak pak(iso.read("GAME/02_FILES.PAK"));
+  const CourseScript script = parse_course_script(pak.view("SCRIPT/SYSTEM3.FSL"));
+  // Round n plays the disc's n-th audio track, which is CD track n + 1.
+  const std::vector<std::int16_t> pcm = disc.read_audio_track(round + 1);
+  const std::vector<Block> blocks = make_blocks(pcm);
+  CourseGenerator gen(script, interval);
+  gen.start_round(round, 0);
+  for (std::size_t b = 0; b < blocks.size(); ++b) gen.process(static_cast<std::int32_t>(b * kBlockSize), blocks[b]);
+  static const char* types[] = {"part", "camera", "effect"};
+  for (const CourseEvent& e : gen.events())
+    std::printf("{\"type\": \"%s\", \"time\": %d, \"value\": %d, \"length\": %d, \"scale\": %d}\n", types[int(e.type)], e.time, e.value,
+                e.length, e.scale);
+  return 0;
+}
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -269,6 +291,7 @@ int main(int argc, char** argv) {
     if (cmd == "extract" && argc == 4) return cmd_extract(cue, path_from_utf8(argv[3]));
     if (cmd == "audio" && argc == 4) return cmd_audio(cue, path_from_utf8(argv[3]));
     if (cmd == "formats" && argc == 3) return cmd_formats(cue);
+    if (cmd == "course" && (argc == 4 || argc == 5)) return cmd_course(cue, std::atoi(argv[3]), argc == 5 ? std::atoi(argv[4]) : 1);
     if (cmd == "sounds" && argc == 4) return cmd_sounds(cue, path_from_utf8(argv[3]));
     if (cmd == "obj" && (argc == 6 || argc == 8))
       return cmd_obj(cue, argv[3], argv[4], path_from_utf8(argv[5]), argc == 8 ? argv[6] : nullptr, argc == 8 ? std::atoi(argv[7]) : 0);

@@ -11,6 +11,7 @@ add_library(vibcore STATIC
   src/course_script.cpp
   src/pose.cpp
   src/sound_bank.cpp
+  src/course_gen.cpp
 )
 target_include_directories(vibcore PUBLIC include)
 target_link_libraries(vibcore PRIVATE vib_warnings)

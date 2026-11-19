@@ -1,0 +1,111 @@
+#pragma once
+// Turning music into an obstacle course: the audio front end, onset detection,
+// peak picking and the course script, as described in docs/SPEC.md sections 1-3.
+// Our own implementation of the original's behaviour; all arithmetic is integer
+// so results are identical on every platform.
+
+#include <array>
+#include <cstdint>
+#include <memory>
+#include <optional>
+#include <span>
+#include <vector>
+
+#include "vib/course_script.h"
+
+namespace vib {
+
+constexpr int kSampleRate = 22050;  // of the mono analysis stream; all course times use it
+constexpr int kBlockSize = 128;
+constexpr int kLookAheadBlocks = 1379;  // 8,000 ms rounded up to whole blocks
+
+using Block = std::array<std::int16_t, kBlockSize>;
+
+// 44.1 kHz stereo (interleaved L, R) to 22.05 kHz mono blocks: every second
+// stereo sample, left and right averaged with truncation toward zero.
+// A final partial block is dropped.
+std::vector<Block> make_blocks(std::span<const std::int16_t> stereo_44100);
+
+struct CourseEvent {
+  enum class Type { Part, Camera, Effect };
+  enum class Effect { Screw, Reverse, Tempo };
+  Type type = Type::Part;
+  std::int32_t time = 0;    // samples from the start of the stream
+  std::int32_t value = 0;   // Part: road 0-9. Camera: loops * 10 + id. Effect: an Effect.
+  std::int32_t length = 0;  // Part: the cue's period. Effect: its duration.
+  std::int32_t scale = 0;   // Part: tempo scale, 16.16
+};
+
+// The 32-bit generator used everywhere in the game.
+inline std::uint32_t next_random(std::uint32_t seed) { return seed * 1664525u + 1013904223u; }
+
+class CourseGenerator {
+ public:
+  // `cue_interval_blocks`: how often the script is consulted. 1 = every block
+  // (fully deterministic). The original consults it once per video frame.
+  explicit CourseGenerator(const CourseScript& script, int cue_interval_blocks = 1);
+  ~CourseGenerator();
+
+  // Begins a round on the game's own disc: `round` counts from 1 and selects the
+  // script track; `start_time` is the stream position of the track's first sample.
+  void start_round(int round, std::int32_t start_time, std::uint32_t script_seed = 0);
+
+  // Feeds the next block, whose first sample is at stream position `time`.
+  void process(std::int32_t time, const Block& block);
+
+  // Events generated so far, in the order the original would emit them.
+  std::vector<CourseEvent>& events() { return events_; }
+
+ private:
+  struct Selector;
+  struct Tempo;
+  struct Cue {
+    std::int32_t period = kSampleRate;
+    std::int32_t select_period = kSampleRate / 10;
+    std::shared_ptr<Selector> selector;
+    std::shared_ptr<Tempo> tempo;
+  };
+  struct Pick {
+    Cue cue;
+    std::int32_t time = 0;
+    std::int32_t level = 0, background = 0;
+  };
+
+  Cue next_cue(std::int32_t time);
+  void send_effects();
+  void send_effect(const EventSegment& e, bool tempo, bool reverse, bool screw, bool camera);
+  void end_window(std::int32_t time);
+  void take_candidate();
+  void place();
+
+  const CourseScript& script_;
+  int cue_interval_;
+  int blocks_since_cue_ = 0;
+  Cue current_cue_;
+
+  // script position
+  bool playing_ = false;
+  const CourseTrack* track_ = nullptr;
+  int round_ = 1;
+  std::uint32_t script_seed_ = 0;
+  std::int32_t start_time_ = 0, offset_ = 0, end_ = 0, now_ = 0;
+  std::size_t effect_index_ = 0;
+  std::vector<std::shared_ptr<Selector>> fixed_selectors_, distribution_selectors_;
+  std::shared_ptr<Tempo> tempo_;
+
+  // onset detection
+  static constexpr int kHistory = 32, kRecent = 4;
+  std::array<Block, kHistory> history_{};
+  int history_index_ = 0;
+  std::int32_t short_level_ = 0, long_level_ = 0;
+  std::int32_t window_start_ = 0;
+  std::uint32_t window_ = 0;
+
+  // peak picking
+  std::optional<Pick> pending_, candidate_;
+  std::int32_t pending_scale_ = 65536, pending_length_ = 0;
+
+  std::vector<CourseEvent> events_;
+};
+
+}  // namespace vib

@@ -9,6 +9,7 @@
 #include "vib/iso9660.h"
 #include "vib/known_discs.h"
 #include "vib/pak.h"
+#include "vib/course_gen.h"
 #include "vib/course_script.h"
 #include "vib/motion.h"
 #include "vib/sound_bank.h"
@@ -90,5 +91,29 @@ TEST(disc_sces02873_sound_banks) {
     std::size_t decoded = 0;
     for (const auto& s : samples) decoded += decode_spu_adpcm(s).pcm.size() > 0;
     CHECK(decoded == e.samples);
+  }
+}
+
+TEST(disc_sces02873_first_song_course) {
+  // Checked against a recording of the original in DuckStation (2026-11-19): all 75
+  // obstacles of the first song match in time and type, with a constant 168-sample shift.
+  const std::string cue = test_cue();
+  if (cue.empty()) SKIP("set VIB_TEST_CUE to your SCES-02873 .cue to run");
+  DiscImage disc = DiscImage::open(path_from_utf8(cue));
+  Iso9660 iso(disc);
+  const Pak game(iso.read("GAME/02_FILES.PAK"));
+  const CourseScript script = parse_course_script(game.view("SCRIPT/SYSTEM3.FSL"));
+  const std::vector<Block> blocks = make_blocks(disc.read_audio_track(2));
+  CourseGenerator gen(script);
+  gen.start_round(1, 0);
+  for (std::size_t b = 0; b < blocks.size(); ++b) gen.process(static_cast<std::int32_t>(b * kBlockSize), blocks[b]);
+  std::vector<CourseEvent> parts;
+  for (const auto& e : gen.events())
+    if (e.type == CourseEvent::Type::Part) parts.push_back(e);
+  CHECK(parts.size() == 75);
+  if (parts.size() == 75) {
+    CHECK(parts[0].time == 11522 && parts[0].value == 2 && parts[0].length == 13229);
+    CHECK(parts[4].time == 218934 && parts[4].value == 3);
+    CHECK(parts[74].time == 3409832 && parts[74].value == 2);
   }
 }
