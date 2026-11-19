@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vib Ribbon VR Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: one scanning column. Summary strip, then phases as ruled ledgers, then reference sections.
+   Ink-on-paper monochrome (the game is pure line art); colour is reserved for task state. */
+:root{
+  --paper:#f6f6f3; --panel:#ffffff; --ink:#15171a; --muted:#5d636b; --rule:#d5d7d3;
+  --done:#1f7a4d; --active:#b06a00; --blocked:#b3261e; --ask:#3a4fc4; --todo:#8a9098;
+  --display:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+  --body:"IBM Plex Sans",system-ui,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0e0f11; --panel:#16181b; --ink:#f1f1ec; --muted:#a0a6ad; --rule:#2c3035;
+    --done:#5fd197; --active:#f0b040; --blocked:#ff8078; --ask:#93a4ff; --todo:#7c838b;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0e0f11; --panel:#16181b; --ink:#f1f1ec; --muted:#a0a6ad; --rule:#2c3035;
+  --done:#5fd197; --active:#f0b040; --blocked:#ff8078; --ask:#93a4ff; --todo:#7c838b;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--paper);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5}
+.wrap{max-width:1040px;margin:0 auto;padding:28px 20px 64px;display:flex;flex-direction:column;gap:28px}
+h1,h2,h3{font-family:var(--display);font-weight:600;margin:0;text-wrap:balance}
+h1{font-size:26px;letter-spacing:-.01em}
+h2{font-size:15px;text-transform:uppercase;letter-spacing:.08em;padding-bottom:8px;border-bottom:2px solid var(--ink)}
+h3{font-size:15px}
+p{margin:0}
+.muted{color:var(--muted)}
+.mono{font-family:var(--display)}
+header .goal{max-width:68ch;margin-top:8px;color:var(--muted)}
+header .stamp{font-family:var(--display);font-size:12px;color:var(--muted);margin-top:10px}
+section{display:flex;flex-direction:column;gap:14px}
+.strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
+.tile{background:var(--panel);border:1px solid var(--rule);padding:14px 16px;display:flex;flex-direction:column;gap:6px}
+.tile .k{font-family:var(--display);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.tile .v{font-family:var(--display);font-size:22px;font-weight:600;font-variant-numeric:tabular-nums}
+.tile .s{font-size:13px;color:var(--muted)}
+.bar{height:8px;background:var(--rule);display:flex;overflow:hidden}
+.bar i{display:block;height:100%}
+.bar .d{background:var(--done)} .bar .a{background:var(--active)} .bar .q{background:var(--ask)} .bar .b{background:var(--blocked)}
+.phase{background:var(--panel);border:1px solid var(--rule)}
+.phase>summary{list-style:none;cursor:pointer;padding:14px 16px;display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center}
+.phase>summary::-webkit-details-marker{display:none}
+.phase>summary:focus-visible,button:focus-visible{outline:2px solid var(--ask);outline-offset:2px}
+.phase .num{font-family:var(--display);font-weight:600;font-size:13px;border:1.5px solid var(--ink);padding:2px 8px}
+.phase .count{font-family:var(--display);font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.phase .meta{padding:0 16px 12px;display:flex;flex-direction:column;gap:8px;font-size:14px}
+.phase .meta b{font-family:var(--display);font-weight:500;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-right:6px}
+.tasks{border-top:1px solid var(--rule)}
+.task{display:grid;grid-template-columns:52px 96px 1fr;gap:10px;padding:9px 16px;border-bottom:1px solid var(--rule);align-items:start;font-size:14px}
+.task:last-child{border-bottom:0}
+.task .id{font-family:var(--display);font-size:12px;color:var(--muted);padding-top:2px}
+.task .note{display:block;color:var(--muted);font-size:13px;margin-top:2px}
+.pill{font-family:var(--display);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;padding:2px 0 2px 10px;border-left:4px solid var(--todo);color:var(--todo);white-space:nowrap}
+.pill.done{border-color:var(--done);color:var(--done)}
+.pill.active{border-color:var(--active);color:var(--active)}
+.pill.blocked{border-color:var(--blocked);color:var(--blocked)}
+.pill.ask{border-color:var(--ask);color:var(--ask)}
+.rows{background:var(--panel);border:1px solid var(--rule)}
+.row{padding:12px 16px;border-bottom:1px solid var(--rule);display:grid;grid-template-columns:64px 1fr;gap:12px;font-size:14px}
+.row:last-child{border-bottom:0}
+.row .tag{font-family:var(--display);font-size:12px;color:var(--muted);padding-top:2px}
+.row .why{color:var(--muted);font-size:13px;margin-top:3px}
+.cmd{background:var(--panel);border:1px solid var(--rule);padding:12px 16px;display:flex;flex-direction:column;gap:8px}
+.cmd .top{display:flex;gap:10px;align-items:baseline;justify-content:space-between;flex-wrap:wrap}
+.cmd .what{font-size:14px}
+.cmd pre{margin:0;overflow-x:auto;background:var(--paper);border:1px solid var(--rule);padding:10px 12px;font-family:var(--display);font-size:12.5px;line-height:1.55;white-space:pre}
+.cmd .state{font-family:var(--display);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+button.copy{font-family:var(--display);font-size:12px;background:var(--ink);color:var(--paper);border:0;padding:5px 12px;cursor:pointer}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+@media (max-width:520px){
+  .task{grid-template-columns:44px 1fr} .task .pill{grid-column:2} .task .txt{grid-column:1 / -1}
+  .row{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Vib Ribbon VR Tracker</h1>
+    <p class="goal" id="goal"></p>
+    <p class="stamp" id="stamp"></p>
+  </header>
+
+  <section>
+    <div class="strip" id="strip"></div>
+    <div class="legend" id="legend"></div>
+  </section>
+
+  <section>
+    <h2>Waiting on you</h2>
+    <div class="rows" id="asks"></div>
+  </section>
+
+  <section>
+    <h2>Phases and tasks</h2>
+    <div id="phases" style="display:flex;flex-direction:column;gap:12px"></div>
+  </section>
+
+  <section>
+    <h2>Decisions</h2>
+    <div class="rows" id="decisions"></div>
+  </section>
+
+  <section>
+    <h2>Risks and open questions</h2>
+    <div class="rows" id="risks"></div>
+  </section>
+
+  <section>
+    <h2>Notes: command prompts and what they do</h2>
+    <p class="muted" style="max-width:70ch">PowerShell on the Windows PC unless marked. Commands move from Upcoming to Used once they have been run in a session.</p>
+    <div id="commands" style="display:flex;flex-direction:column;gap:10px"></div>
+  </section>
+
+  <section>
+    <h2>Session log</h2>
+    <div class="rows" id="log"></div>
+  </section>
+</div>
+
+<script>
+/* ===== TRACKER DATA: edit this block to update the tracker =====
+   status values: done | active | todo | blocked | ask (needs the owner's answer) */
+const T = {
+  goal: "A version of Vib-Ribbon playable in VR on PCVR and Meta Quest 3, with responsive, consistent timing and visuals that do justice to the original. Steam Frame and levels from your own music are stretch goals.",
+  updated: "2026-11-18, session 2",
+  approach: "Native VR port. Game logic from the decompilation, assets read from your own disc, emulator used as the reference to test against.",
+  asks: [
+    {id:"Q4", t:"Pick a licence for the project's own code. I suggest MIT.", why:"Needed before the first public release, and before anyone else contributes. It covers only code we write: the game's data always comes from the player's disc."},
+    {id:"Q5", t:"Run the toolchain checks and the first Windows build (commands in the Notes section).", why:"Your tool output covered git, CMake, Ninja, Python, adb and the Vulkan runtime. Still unconfirmed: the C++ compiler, the Vulkan SDK and the Android NDK."},
+    {id:"Q6", t:"OK for me to draft a message to revib's author asking how they want the decompilation used?", why:"The repo has no licence. Until we hear back, code is written fresh from the behaviour it documents, never copied."}
+  ],
+  phases: [
+    {n:0, name:"Research and architecture", goal:"Know the game, the existing work and the tools well enough to pick an approach.",
+     exit:"Approach chosen and signed off. Plan, tracker and handoff written.",
+     tasks:[
+      {id:"0.1", s:"done", t:"Collect public technical information on Vib-Ribbon", note:"open-ribbon docs (PAK, TMD, ANM, ANC, FSL), TCRF, revib and open-ribbon decompilations."},
+      {id:"0.2", s:"done", t:"Analyze the disc in research\\Gamefiles", note:"SCES-02873 confirmed by SHA-1. 4 executables, 13 PAKs, 3 sound banks, 7 audio tracks."},
+      {id:"0.3", s:"done", t:"Analyze Adoregabriel2005's recomp (GitHub and local copy)", note:"PSXRecomp-based, Windows x64, v0.1.0, no licence file, fidelity self-declared unverified."},
+      {id:"0.4", s:"done", t:"Survey PS1 recomp tools, VR conversion options and similar projects"},
+      {id:"0.5", s:"done", t:"Choose the architecture", note:"Native port, not a fork of the recomp. See D1 to D4."},
+      {id:"0.6", s:"done", t:"Write plan, tracker and handoff document"},
+      {id:"0.7", s:"done", t:"Owner sign-off", note:"Approved 2026-11-18. Quest 3 only for now; Steam Frame and custom music are stretch goals; free public release."}
+     ]},
+    {n:1, name:"Foundations", goal:"Repo, toolchain, asset pipeline, a trustworthy reference, and proof that one codebase draws lines in stereo on PC and Quest 3.",
+     exit:"Any model and animation from the disc plays in a desktop viewer. A stereo test scene runs on PCVR and Quest 3. Reference event lists exist for all six songs.",
+     tasks:[
+      {id:"1.1", s:"done", t:"Repository skeleton in CorrieDivitt/Vib-Ribbon-VR", note:"CMake + presets, core/, tools/, tests/, docs/, CI for Windows and Linux. Game data is ignored by git."},
+      {id:"1.2", s:"active", t:"Install and verify the Windows toolchain", note:"Confirmed: git 2.56, CMake 4.4.4, Ninja 1.12.1, Python 3.15.2, adb, Vulkan 1.4 runtime on the RTX 4090. To check: MSVC, Vulkan SDK (glslc), Android NDK."},
+      {id:"1.3", s:"active", t:"Disc ingest library and CLI", note:"Done in C++: CUE, raw BIN sectors, ISO 9660, PAK, SHA-1 disc check. vibtool info / extract / audio. Tested on your disc on Linux; Windows build not run yet."},
+      {id:"1.4", s:"todo", t:"Format loaders: TMD, ANM, ANC, FSL, VH/VB, TIM", note:"Python prototypes for TMD exist in tools\\research."},
+      {id:"1.5", s:"todo", t:"Desktop asset viewer", note:"First pixels: any TMD with any ANM, drawn as lines."},
+      {id:"1.6", s:"todo", t:"Reference capture rig", note:"Emulator with debugger (PCSX-Redux first) plus revib's symbol addresses. Dump obstacle events and scores for the six songs."},
+      {id:"1.7", s:"todo", t:"Read the decompilation end to end and write the behaviour spec", note:"Exact constants: analysis windows, look-ahead delay, hit windows, scoring, form changes, effects, camera."},
+      {id:"1.8", s:"todo", t:"Stereo spike: OpenXR and Vulkan test scene on PCVR and Quest 3"},
+      {id:"1.9", s:"todo", t:"Ask revib's author how the decompilation may be used", note:"Depends on Q6. Default until then: write code fresh against the spec."}
+     ]},
+    {n:2, name:"Game core, headless", goal:"The whole game as a deterministic library with no graphics: audio in, obstacle course and judgement out.",
+     exit:"Event lists match the reference for all six songs. Unit tests run in CI without any game data in the repo.",
+     tasks:[
+      {id:"2.1", s:"todo", t:"Audio front end matching the original's 22.05 kHz mono block stream"},
+      {id:"2.2", s:"todo", t:"Onset detection and peak picking, bit-exact fixed point", note:"Core, not stretch: as far as the sources read so far show, the six official courses are also generated by this analysis."},
+      {id:"2.3", s:"todo", t:"FSL course script interpreter and the original random number generator"},
+      {id:"2.4", s:"todo", t:"Gameplay rules: parts, hit and miss, scoring, chains, Vibri's forms, speed courses, effects"},
+      {id:"2.5", s:"todo", t:"Golden tests against the reference captures"},
+      {id:"2.6", s:"todo", t:"Demo (auto-play) mode"},
+      {id:"2.7", s:"todo", t:"High scores and options storage"}
+     ]},
+    {n:3, name:"Flat desktop build", goal:"Prove the game is right on a monitor before putting it in a headset.",
+     exit:"All six songs playable start to finish on desktop, matching the original side by side.",
+     tasks:[
+      {id:"3.1", s:"todo", t:"Vulkan line renderer: thick anti-aliased lines, the original wobble"},
+      {id:"3.2", s:"todo", t:"Scene: road, Vibri's four forms and animations, meters, messages, font"},
+      {id:"3.3", s:"todo", t:"Audio output slaved to the device clock, with latency compensation. Sound effects."},
+      {id:"3.4", s:"todo", t:"Timestamped gamepad and keyboard input"},
+      {id:"3.5", s:"todo", t:"Title and menu flow, language select, high scores"},
+      {id:"3.6", s:"todo", t:"Side-by-side comparison with the emulator and measured timing"}
+     ]},
+    {n:4, name:"PCVR", goal:"The full game in a headset over OpenXR.",
+     exit:"Complete game playable through Quest Link, SteamVR and Virtual Desktop at headset refresh rate.",
+     tasks:[
+      {id:"4.1", s:"todo", t:"OpenXR session, stereo rendering, controllers and haptics"},
+      {id:"4.2", s:"todo", t:"VR staging: diorama scale and placement, original camera moves, comfort options, classic-screen mode"},
+      {id:"4.3", s:"todo", t:"Line quality in the headset: sub-pixel anti-aliasing, glow, 90 and 120 Hz"},
+      {id:"4.4", s:"todo", t:"In-world menus in the original style"},
+      {id:"4.5", s:"todo", t:"VR timing: predicted display time mapped to the audio clock. Calibration tool."}
+     ]},
+    {n:5, name:"Standalone Quest 3", goal:"The same game running on the Quest 3 itself.",
+     exit:"Standalone build holds 90 Hz or better with timing equal to PCVR.",
+     tasks:[
+      {id:"5.1", s:"todo", t:"Android ARM64 build with NDK, OpenXR loader and Vulkan"},
+      {id:"5.2", s:"todo", t:"Getting the disc image onto the headset and importing it"},
+      {id:"5.3", s:"todo", t:"Low-latency Android audio and on-device calibration"},
+      {id:"5.4", s:"todo", t:"Performance at 90 and 120 Hz. Passthrough mode."}
+     ]},
+    {n:6, name:"Polish and release", goal:"Something other people can install and enjoy, free.",
+     exit:"Tagged release with a build-from-your-own-disc flow and documentation.",
+     tasks:[
+      {id:"6.1", s:"todo", t:"Visual and haptic polish, comfort and accessibility options"},
+      {id:"6.2", s:"todo", t:"Packaging: first-run disc import, installers, sideload instructions"},
+      {id:"6.3", s:"todo", t:"Credits and licence notices for every project we learned from"},
+      {id:"6.4", s:"todo", t:"Test matrix across runtimes, then release"}
+     ]},
+    {n:7, name:"Stretch goals", goal:"Nice to have. None of these block a release.",
+     exit:"Done when they are done.",
+     tasks:[
+      {id:"S.1", s:"todo", t:"Levels from your own music: file picker, MP3/FLAC/OGG/WAV decoding, the original analysis run on any track", note:"Cheap once 2.1 to 2.4 work, since the official songs use the same analysis. Not a blocker if it falls short."},
+      {id:"S.2", s:"todo", t:"Music import on the Quest 3"},
+      {id:"S.3", s:"todo", t:"Steam Frame: run the Quest APK, evaluate a native Linux ARM64 build, controller profile", note:"No hardware yet. Architecture kept compatible (D6)."}
+     ]}
+  ],
+  decisions: [
+    {id:"D1", t:"Build a native VR port. Do not fork vib-ribbon-recomp as the base.", why:"Approved 2026-11-18. The recomp runs the PS1 program at 50 Hz with no route to Quest standalone; the game's own clock is the audio sample position, which a native port can follow at any refresh rate."},
+    {id:"D2", t:"Use the decompilation as the reference for game logic and an emulator as the judge.", why:"Every ported system is tested against captures from the original running in an emulator."},
+    {id:"D3", t:"Stack: C++20 core, OpenXR, Vulkan, one codebase for Windows and Android ARM64.", why:"Small custom renderer for full control of line quality and audio latency. Godot is the fallback if the stereo spike (1.8) goes badly."},
+    {id:"D4", t:"Ship no game data. Assets are read from the player's own disc image.", why:"The repo ignores every game file type; tests that need the disc are skipped unless VIB_TEST_CUE is set."},
+    {id:"D5", t:"Keep vib-ribbon-recomp as a reference only.", why:"Its notes on thread switching and menu state are useful."},
+    {id:"D6", t:"Quest 3 is the only target hardware for now. Steam Frame is a stretch goal the architecture must not rule out.", why:"Rules: vibcore stays platform-free; input goes through OpenXR interaction profiles, not vendor SDKs; Android build uses the Khronos OpenXR loader; no x86-only dependencies."},
+    {id:"D7", t:"Levels from your own music are a stretch goal, not a core feature.", why:"The analysis algorithm stays core because the official songs depend on it. The custom-music features around it (picker, decoders, import) are stretch."},
+    {id:"D8", t:"Free public release from github.com/CorrieDivitt/Vib-Ribbon-VR.", why:"Repo is the master copy of code, plan, handoff and tracker source."},
+    {id:"D9", t:"No code is copied from revib or open-ribbon until their authors say how it may be used.", why:"Neither shows a licence. We read them to learn behaviour and write our own implementation."}
+  ],
+  risks: [
+    {id:"R1", t:"Licence of the decompilation sources is unsettled.", why:"Handled by D9 and Q6. Writing our own code from the behaviour spec keeps the plan the same either way."},
+    {id:"R2", t:"Our audio path may not match what the PS1 analyzed bit for bit.", why:"The original analyzes CD audio captured through the sound chip. Golden tests in 2.5 will show it."},
+    {id:"R3", t:"Look-ahead delay and hit-window constants are not confirmed yet.", why:"Task 1.7."},
+    {id:"R4", t:"Original camera choreography may be uncomfortable in VR.", why:"Phase 4.2 decides staging, with a comfort option."},
+    {id:"R5", t:"Hybrid graphics on the dev PC (RTX 4090 plus a Radeon iGPU).", why:"PCVR runtimes must run on the 4090. If the headset view is slow or black, set the app to High performance in Windows graphics settings."},
+    {id:"R6", t:"Menu and title code is the largest part of the original.", why:"Budgeted as its own task (3.5)."},
+    {id:"R7", t:"PAL disc. Video ran at 50 Hz on the original.", why:"Low risk because gameplay follows the audio clock."}
+  ],
+  commands: [
+    {state:"Upcoming (Q5)", what:"Check the three tools not yet confirmed: the MSVC compiler, the Vulkan SDK's shader compiler, and the Android NDK. Run in a Developer PowerShell for VS.",
+     code:'where.exe cl\n$env:VULKAN_SDK\nglslc --version\nGet-ChildItem "$env:LOCALAPPDATA\\Android\\Sdk\\ndk"'},
+    {state:"Upcoming (Q5)", what:"Download the repo next to the research folder, then build it and run the tests. Run in a Developer PowerShell for VS.",
+     code:"cd F:\\VibRibbonVR\ngit clone https://github.com/CorrieDivitt/Vib-Ribbon-VR\ncd Vib-Ribbon-VR\ncmake --preset dev\ncmake --build --preset dev\nctest --preset dev"},
+    {state:"Upcoming (Q5)", what:"Run the tests against your disc, then show what is on it. The info output should say SCES-02873, supported.",
+     code:'cd F:\\VibRibbonVR\\Vib-Ribbon-VR\n$env:VIB_TEST_CUE = "F:\\VibRibbonVR\\research\\Gamefiles\\Vib-Ribbon (Europe) (En,Fr,De,Es,It).cue"\n.\\build\\dev\\tests\\vibcore_tests.exe\n.\\build\\dev\\tools\\vibtool\\vibtool.exe info $env:VIB_TEST_CUE'},
+    {state:"Common", what:"Rebuild after pulling new changes, and rerun the tests.",
+     code:"cd F:\\VibRibbonVR\\Vib-Ribbon-VR\ngit pull\ncmake --build --preset dev\nctest --preset dev"},
+    {state:"Common", what:"Extract every file from your disc and unpack the PAK archives into research\\extracted (outside the repo).",
+     code:'cd F:\\VibRibbonVR\\Vib-Ribbon-VR\n.\\build\\dev\\tools\\vibtool\\vibtool.exe extract "F:\\VibRibbonVR\\research\\Gamefiles\\Vib-Ribbon (Europe) (En,Fr,De,Es,It).cue" F:\\VibRibbonVR\\research\\extracted'},
+    {state:"Common", what:"Write each of the disc's audio tracks as a WAV file, for listening and for analysis work.",
+     code:'cd F:\\VibRibbonVR\\Vib-Ribbon-VR\n.\\build\\dev\\tools\\vibtool\\vibtool.exe audio "F:\\VibRibbonVR\\research\\Gamefiles\\Vib-Ribbon (Europe) (En,Fr,De,Es,It).cue" F:\\VibRibbonVR\\research\\audio'},
+    {state:"Used in session 2", what:"Toolchain check. All of these worked.",
+     code:"git --version\ncmake --version\nninja --version\npython --version\nadb version\nvulkaninfo --summary"},
+    {state:"Research", what:"List every model in an unpacked PAK with its object, vertex and line counts (Python prototype).",
+     code:"python F:\\VibRibbonVR\\Vib-Ribbon-VR\\tools\\research\\tmd.py F:\\VibRibbonVR\\research\\extracted\\pak\\GAME_02_FILES_PAK"},
+    {state:"Upcoming (Phase 5)", what:"Check the Quest 3 is connected in developer mode, install a build, and watch its log.",
+     code:"adb devices\nadb install -r VibRibbonVR.apk\nadb logcat -s VibRibbonVR"}
+  ],
+  log: [
+    {id:"S2", t:"2026-11-18. Owner approval; repo created; C++ disc ingest and vibtool written and tested on the disc.", why:"Decisions D6 to D9 recorded. Custom music and Steam Frame moved to a stretch phase. 1.1 done, 1.2 and 1.3 in progress."},
+    {id:"S1", t:"2026-11-18. Research, disc and repo analysis, architecture decision, plan, tracker and handoff.", why:"Phase 0 complete."}
+  ]
+};
+/* ===== end of data ===== */
+
+const $ = id => document.getElementById(id);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const LABEL = {done:"Done", active:"In progress", todo:"To do", blocked:"Blocked", ask:"Needs you"};
+
+$("goal").textContent = T.goal;
+$("stamp").textContent = "Last updated " + T.updated;
+
+const all = T.phases.flatMap(p => p.tasks);
+const count = (list, s) => list.filter(t => t.s === s).length;
+const current = T.phases.find(p => p.tasks.some(t => t.s !== "done")) || T.phases[T.phases.length - 1];
+const next = all.find(t => t.s === "active") || all.find(t => t.s === "ask") || all.find(t => t.s === "todo");
+
+function bar(list){
+  const b = el("div","bar"); const n = list.length || 1;
+  [["done","d"],["active","a"],["ask","q"],["blocked","b"]].forEach(([s,c]) => {
+    const k = count(list,s); if (k){ const i = el("i",c); i.style.width = (100*k/n)+"%"; b.appendChild(i); }
+  });
+  return b;
+}
+function tile(k, v, s, extra){
+  const t = el("div","tile"); t.appendChild(el("div","k",k)); t.appendChild(el("div","v",v));
+  if (extra) t.appendChild(extra); if (s) t.appendChild(el("div","s",s)); return t;
+}
+$("strip").appendChild(tile("Overall", count(all,"done") + " of " + all.length + " tasks", "Across " + T.phases.length + " phases", bar(all)));
+$("strip").appendChild(tile("Current phase", current.n + ". " + current.name, count(current.tasks,"done") + " of " + current.tasks.length + " tasks done", bar(current.tasks)));
+$("strip").appendChild(tile("Next up", next ? next.id : "None", next ? next.t : ""));
+$("strip").appendChild(tile("Approach", "Native port", T.approach));
+
+Object.keys(LABEL).forEach(s => { const p = el("span","pill "+s, LABEL[s]); $("legend").appendChild(p); });
+
+function rows(target, list){
+  list.forEach(r => {
+    const row = el("div","row"); row.appendChild(el("div","tag",r.id));
+    const body = el("div"); body.appendChild(el("div",null,r.t)); if (r.why) body.appendChild(el("div","why",r.why));
+    row.appendChild(body); target.appendChild(row);
+  });
+}
+rows($("asks"), T.asks); rows($("decisions"), T.decisions); rows($("risks"), T.risks); rows($("log"), T.log);
+
+T.phases.forEach(p => {
+  const d = el("details","phase"); d.id = "phase-" + p.n;
+  if (p === current || p.n === current.n + 1) d.open = true;
+  const s = el("summary");
+  s.appendChild(el("span","num","P" + p.n));
+  const mid = el("div"); mid.appendChild(el("h3",null,p.name)); mid.appendChild(bar(p.tasks)); mid.style.display="flex"; mid.style.flexDirection="column"; mid.style.gap="8px";
+  s.appendChild(mid);
+  s.appendChild(el("span","count", count(p.tasks,"done") + " / " + p.tasks.length));
+  d.appendChild(s);
+  const meta = el("div","meta");
+  const g = el("div"); g.appendChild(el("b",null,"Goal")); g.appendChild(document.createTextNode(p.goal)); meta.appendChild(g);
+  const x = el("div"); x.appendChild(el("b",null,"Done when")); x.appendChild(document.createTextNode(p.exit)); meta.appendChild(x);
+  d.appendChild(meta);
+  const tl = el("div","tasks");
+  p.tasks.forEach(t => {
+    const r = el("div","task");
+    r.appendChild(el("span","id",t.id));
+    r.appendChild(el("span","pill "+t.s, LABEL[t.s]));
+    const tx = el("div","txt"); tx.appendChild(document.createTextNode(t.t)); if (t.note) tx.appendChild(el("span","note",t.note));
+    r.appendChild(tx); tl.appendChild(r);
+  });
+  d.appendChild(tl); $("phases").appendChild(d);
+});
+
+T.commands.forEach((c, i) => {
+  const box = el("div","cmd");
+  const top = el("div","top"); top.appendChild(el("div","what",c.what));
+  const right = el("div"); right.style.display="flex"; right.style.gap="12px"; right.style.alignItems="center";
+  right.appendChild(el("span","state",c.state));
+  const b = el("button","copy","Copy"); b.type = "button"; b.id = "copy-" + i;
+  b.addEventListener("click", () => {
+    navigator.clipboard.writeText(c.code).then(() => { b.textContent = "Copied"; setTimeout(() => b.textContent = "Copy", 1400); })
+      .catch(() => { b.textContent = "Select and copy manually"; });
+  });
+  right.appendChild(b); top.appendChild(right); box.appendChild(top);
+  box.appendChild(el("pre",null,c.code)); $("commands").appendChild(box);
+});
+</script>
+</body>
+</html>

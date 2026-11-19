@@ -1,0 +1,32 @@
+# Build output
+/build/
+/out/
+.vs/
+.vscode/
+*.user
+CMakeUserPresets.json
+compile_commands.json
+
+# Game data and anything derived from it. Never commit these.
+/research/
+/extracted/
+*.bin
+*.cue
+*.iso
+*.chd
+*.img
+*.wav
+*.EXE
+*.PAK
+*.TMD
+*.ANM
+*.ANC
+*.FSL
+*.VH
+*.VB
+*.TIM
+SCES_*
+
+# Python
+__pycache__/
+*.pyc
