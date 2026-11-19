@@ -3,10 +3,15 @@
 //   vibtool info    <disc.cue>              identify the disc, list tracks and files
 //   vibtool extract <disc.cue> <out_dir>    copy every file off the data track and unpack PAKs
 //   vibtool audio   <disc.cue> <out_dir>    write each audio track as a WAV file
+//   vibtool formats <disc.cue>              parse every model, animation, camera and course script
+//   vibtool obj     <disc.cue> <pak> <model.tmd> <out.obj> [<anim.anm> <frame>]
+//                                           export a model's lines as a Wavefront OBJ (Y up)
 //
 // Output stays on your machine. Never commit it.
 
+#include <cctype>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <exception>
 #include <filesystem>
@@ -14,8 +19,12 @@
 
 #include "vib/disc_image.h"
 #include "vib/iso9660.h"
+#include "vib/course_script.h"
 #include "vib/known_discs.h"
+#include "vib/motion.h"
 #include "vib/pak.h"
+#include "vib/pose.h"
+#include "vib/tmd.h"
 
 namespace fs = std::filesystem;
 using namespace vib;
@@ -27,7 +36,10 @@ int usage() {
       "usage:\n"
       "  vibtool info    <disc.cue>\n"
       "  vibtool extract <disc.cue> <out_dir>\n"
-      "  vibtool audio   <disc.cue> <out_dir>\n",
+      "  vibtool audio   <disc.cue> <out_dir>\n"
+      "  vibtool formats <disc.cue>\n"
+      "  vibtool obj     <disc.cue> <pak> <model.tmd> <out.obj> [<anim.anm> <frame>]\n"
+      "                  e.g. vibtool obj disc.cue GAME/02_FILES.PAK CHARA/PEELOO/MODEL.TMD peeloo.obj\n",
       stderr);
   return 2;
 }
@@ -127,6 +139,94 @@ int cmd_audio(const fs::path& cue, const fs::path& out) {
   return 0;
 }
 
+
+bool ends_with(const std::string& s, const char* suffix) {
+  const std::size_t n = std::strlen(suffix);
+  return s.size() >= n && s.compare(s.size() - n, n, suffix) == 0;
+}
+
+int cmd_formats(const fs::path& cue) {
+  DiscImage disc = DiscImage::open(cue);
+  Iso9660 iso(disc);
+  std::size_t models = 0, lines = 0, fills = 0, unsupported = 0, anims = 0, frames = 0, cams = 0, cam_keys = 0, scripts = 0, failures = 0;
+  for (const auto& e : iso.entries()) {
+    if (e.directory || !is_pak(e.path)) continue;
+    const Pak pak(iso.read(e));
+    for (const auto& p : pak.entries()) {
+      std::string n = p.name;
+      for (char& c : n) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+      try {
+        if (ends_with(n, ".TMD")) {
+          const TmdModel m = parse_tmd(pak.view(p));
+          ++models;
+          for (const auto& o : m.objects) { lines += o.lines.size(); fills += o.fills.size(); }
+          unsupported += m.unsupported_primitives;
+          if (m.unsupported_primitives) std::printf("  %s/%s: %zu unsupported primitives\n", e.path.c_str(), p.name.c_str(), m.unsupported_primitives);
+        } else if (ends_with(n, ".ANM")) {
+          frames += parse_anm(pak.view(p)).frames.size();
+          ++anims;
+        } else if (ends_with(n, ".ANC")) {
+          cam_keys += parse_anc(pak.view(p)).keys.size();
+          ++cams;
+        } else if (ends_with(n, ".FSL")) {
+          const CourseScript s = parse_course_script(pak.view(p));
+          ++scripts;
+          if (scripts == 1) {
+            std::printf("Course script %s/%s: %zu tracks, %zu fixed patterns, %zu distributions\n", e.path.c_str(), p.name.c_str(),
+                        s.tracks.size(), s.fixed.size(), s.distributions.size());
+            for (std::size_t t = 0; t < s.tracks.size(); ++t)
+              std::printf("  track %zu: %zu control, %zu pattern, %zu event segments\n", t, s.tracks[t].control.size(),
+                          s.tracks[t].patterns.size(), s.tracks[t].events.size());
+          }
+        }
+      } catch (const std::exception& ex) {
+        ++failures;
+        std::printf("  FAILED %s/%s: %s\n", e.path.c_str(), p.name.c_str(), ex.what());
+      }
+    }
+  }
+  std::printf("Models: %zu (%zu lines, %zu fills, %zu unsupported primitives)\n", models, lines, fills, unsupported);
+  std::printf("Animations: %zu (%zu frames)   Cameras: %zu (%zu keys)   Course scripts: %zu\n", anims, frames, cams, cam_keys, scripts);
+  std::printf("%s\n", failures || unsupported ? "PROBLEMS FOUND" : "All files parsed.");
+  return failures || unsupported ? 1 : 0;
+}
+
+int cmd_obj(const fs::path& cue, const std::string& pak_path, const std::string& model_name, const fs::path& out,
+            const char* anim_name, int frame) {
+  DiscImage disc = DiscImage::open(cue);
+  Iso9660 iso(disc);
+  const Pak pak(iso.read(pak_path));
+  const TmdModel model = parse_tmd(pak.view(model_name));
+  std::vector<PosedObject> posed;
+  if (anim_name) {
+    const ModelAnimation anim = parse_anm(pak.view(anim_name));
+    if (frame < 0 || std::size_t(frame) >= anim.frames.size())
+      throw std::runtime_error("frame out of range; animation has " + std::to_string(anim.frames.size()) + " frames");
+    posed = pose(model, anim.frames[std::size_t(frame)]);
+  } else {
+    posed = rest_pose(model);
+  }
+  std::string obj = "# Exported by vibtool from your own disc. Do not share or commit.\n";
+  std::size_t base = 1, line_count = 0;
+  for (const auto& p : posed) {
+    obj += "o object_" + std::to_string(p.object) + "\n";
+    for (const auto& v : p.vertices)  // flip Y so the model stands upright in Y-up tools such as Blender
+      obj += "v " + std::to_string(v.x) + " " + std::to_string(-v.y) + " " + std::to_string(v.z) + "\n";
+    for (const auto& l : model.objects[std::size_t(p.object)].lines) {
+      obj += "l " + std::to_string(base + l.a) + " " + std::to_string(base + l.b) + "\n";
+      ++line_count;
+    }
+    for (const auto& f : model.objects[std::size_t(p.object)].fills) {
+      obj += "f " + std::to_string(base + f.v[0]) + " " + std::to_string(base + f.v[1]) + " " + std::to_string(base + f.v[2]) + "\n";
+      if (f.count == 4)
+        obj += "f " + std::to_string(base + f.v[1]) + " " + std::to_string(base + f.v[3]) + " " + std::to_string(base + f.v[2]) + "\n";
+    }
+    base += p.vertices.size();
+  }
+  write_file(out, ByteView(reinterpret_cast<const std::uint8_t*>(obj.data()), obj.size()));
+  std::printf("Wrote %s: %zu objects, %zu lines\n", out.string().c_str(), posed.size(), line_count);
+  return 0;
+}
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -137,6 +237,9 @@ int main(int argc, char** argv) {
     if (cmd == "info" && argc == 3) return cmd_info(cue);
     if (cmd == "extract" && argc == 4) return cmd_extract(cue, path_from_utf8(argv[3]));
     if (cmd == "audio" && argc == 4) return cmd_audio(cue, path_from_utf8(argv[3]));
+    if (cmd == "formats" && argc == 3) return cmd_formats(cue);
+    if (cmd == "obj" && (argc == 6 || argc == 8))
+      return cmd_obj(cue, argv[3], argv[4], path_from_utf8(argv[5]), argc == 8 ? argv[6] : nullptr, argc == 8 ? std::atoi(argv[7]) : 0);
     return usage();
   } catch (const std::exception& e) {
     std::fprintf(stderr, "vibtool: %s\n", e.what());

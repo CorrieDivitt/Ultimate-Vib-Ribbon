@@ -6,6 +6,10 @@ add_library(vibcore STATIC
   src/iso9660.cpp
   src/pak.cpp
   src/known_discs.cpp
+  src/tmd.cpp
+  src/motion.cpp
+  src/course_script.cpp
+  src/pose.cpp
 )
 target_include_directories(vibcore PUBLIC include)
 target_link_libraries(vibcore PRIVATE vib_warnings)

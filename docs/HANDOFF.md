@@ -11,7 +11,7 @@ Confidence labels used below: **[measured]** = computed this session from the di
 
 ## 1. Where things stand
 
-Phase 0 is signed off. Phase 1 is under way: 1.1 and 1.3 done, 1.2 waits only on the Vulkan SDK install. Next: 1.4 format loaders (TMD, ANM, ANC, FSL), which need no new tools.
+Phase 0 is signed off. Phase 1 is under way: 1.1 and 1.3 done, 1.2 waits only on the Vulkan SDK install. 1.4 is mostly done: TMD, ANM, ANC and FSL loaders plus posing are in vibcore; VH/VB sound banks and TIM images remain. Vulkan SDK 1.4.363.1 is installed at C:\VulkanSDK; the glslc check still needs a fresh shell.
 
 Owner decisions, 2026-11-18:
 
@@ -67,6 +67,18 @@ F:\VibRibbonVR\
 - Course script `SYSTEM3.FSL` is 26,920 bytes. Header counts: 7 control tracks, 7 pattern tracks, 7 event tracks, 7 track-index entries, 11 fixed patterns, 63 distribution patterns. This matches the open-ribbon format page.
 - **Time unit [inferred, strong]:** the custom-CD control track has 774 segments and its last start time is 97,902,000. Divided by 22,050 that is exactly 4,440 seconds, 74:00, the length of a standard audio CD. Speed values such as 11,025 and 4,409 are then 0.5 s and 0.2 s. So course-script time is audio samples at 22,050 Hz.
 - Source file names recovered from assert strings in MAIN_G: AnalysisScript, AudioStream, AudioSys, CdSys, FastAllocator, FbStream, FileSys, FontHack, Forms, GameCamera, Gameplay, Glue, InputControl, InputSys, MemorySys, Message, PackedFiles, RoadSelect, SceneDraw, SignalModule, StaticQueue.h, Thread, TitleDraw, TmdLineObj, VideoSys. Build path `C:/psj/dev/locale/game/`.
+
+## 2a. Format findings from the loaders (session 2) [measured]
+
+Across all 13 PAKs on the disc (every language):
+
+- 252 TMD models: 63,905 line primitives (mode 0x40, flag 1, two vertex indices), 187 unlit flat triangles (mode 0x21) and 6 unlit flat quads (mode 0x29). No other primitive types. Every fill seen so far is coloured black: they are occluders that hide lines behind a character, so the renderer must write them to depth. All TMD flags are 0 (offsets relative to the object table).
+- Unlit flat polygon layout: colour word (R, G, B, mode), then 3 or 4 u16 vertex indices padded to 3 words.
+- 1,162 ANM files with 87,495 frames, all parsing with zero leftover bytes. Keyframe flag bits beyond 0..2 never occur.
+- 266 ANC files with 67,166 camera keys, all exactly 6 + 16 × count bytes.
+- FSL: fixed-pattern obstacles are u32 each (the next table starts exactly at the documented 0xEC). Header track list is 0..6. The last distribution pattern's count field is 0xFFF00001. Segment counts per course (control/pattern/event): Polaroid 12/5/4, Sunny Day 35/5/4, Laugh & Peace 28/8/4, Universal Dance 5/5/4, Overflowing Emotions 36/8/4, Roll Along 44/5/4, custom CD 774/90/82.
+- **Posing [observed, not yet confirmed in code]:** vertices are scaled, rotated about X then Y then Z, then translated (v' = Rz·Ry·Rx·S·v + p), 4096 = one turn. With the other common order Vibri's feet detach from her legs. Limb objects often have scale Z = 0 (flat). PlayStation Y points down; the OBJ export flips it.
+- Assumed: a key without a rotation, scale or position group uses the identity value for it.
 
 ## 3. How the game works
 
