@@ -48,6 +48,7 @@ std::string SaveData::to_text() const {
   out << "sound_effects " << (options.sound_effects ? 1 : 0) << '\n';
   out << "vibration " << (options.vibration ? 1 : 0) << '\n';
   out << "fixed_courses " << (options.fixed_courses ? 1 : 0) << '\n';
+  out << "smooth_animation " << (options.smooth_animation ? 1 : 0) << '\n';
   std::snprintf(buf, sizeof buf, "%.3f", options.line_width);
   out << "line_width " << buf << '\n';
   std::snprintf(buf, sizeof buf, "%.1f", options.audio_offset_ms);
@@ -84,6 +85,7 @@ SaveData SaveData::from_text(const std::string& text) {
     if (key == "sound_effects") d.options.sound_effects = parse_bool(value);
     else if (key == "vibration") d.options.vibration = parse_bool(value);
     else if (key == "fixed_courses") d.options.fixed_courses = parse_bool(value);
+    else if (key == "smooth_animation") d.options.smooth_animation = parse_bool(value);
     else if (key == "line_width" && number > 0) d.options.line_width = number;
     else if (key == "audio_offset_ms") d.options.audio_offset_ms = number;
     else if (key == "music_volume" && number >= 0) d.options.music_volume = float(number);

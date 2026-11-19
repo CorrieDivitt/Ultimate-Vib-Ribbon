@@ -48,6 +48,18 @@ class Clip {
   void advance(double seconds);
 
   int frame() const;
+  // Where the clip is between two of its poses: pose `a`, moving towards `b` by `t`.
+  // Like the original, without smooth animation it is always one whole pose (t = 0).
+  struct Pose {
+    Pose(int frame = 0) : a(frame), b(frame) {}  // one whole pose
+    int a, b;
+    float t = 0;
+  };
+  Pose pose() const;
+  // Smooth animation blends each pose into the next. An option, off by default:
+  // the original steps through its poses (15 to 30 a second for most clips).
+  static void set_smooth(bool on) { smooth_ = on; }
+  static bool smooth() { return smooth_; }
   int frames() const { return frames_; }
   double position() const { return position_; }
   double speed() const { return speed_; }
@@ -57,7 +69,12 @@ class Clip {
   int frames_ = 0;
   double rate_ = 60, speed_ = 1, position_ = 0.5;
   bool loop_ = false, finished_ = false;
+  static inline bool smooth_ = false;
 };
+
+// A camera clip's view at `pose`, blended between its keys when the pose is
+// between two. `flip` mirrors it left to right.
+SceneView camera_at(const CameraAnimation& anim, Clip::Pose pose, bool flip = false);
 
 // Turns posed line models into world-space lines with the original's jitter.
 // One shared generator, reseeded by the caller (the original's runs on forever;
@@ -79,9 +96,10 @@ class LineBuilder {
   // objects this way, drawing them nearly black).
   void object(const TmdObject& obj, const Xform& xf, int range, std::int32_t z_offset, Vec3f* join, std::vector<SceneLine>& out,
               const Rgb* colour = nullptr);
-  // Every object keyed in `frame` of `anim`, placed at `origin`. `swap_first`: draw
+  // Every object keyed in `frame` of `anim` (blended towards the next pose when the
+  // clip is between two), placed at `origin`. `swap_first`: draw
   // this object wherever the clip asks for object 0 (the score marks); -1 for none.
-  void animated(const TmdModel& model, const ModelAnimation& anim, int frame, Vec3f origin, int range, std::vector<SceneLine>& out,
+  void animated(const TmdModel& model, const ModelAnimation& anim, Clip::Pose frame, Vec3f origin, int range, std::vector<SceneLine>& out,
                 int swap_first = -1);
 
   // Per-object overrides for a model, as the menus use them. Empty vectors mean none.
@@ -90,7 +108,7 @@ class LineBuilder {
     std::vector<int> jitter;                  // per-object range, replacing the model's
     std::vector<std::optional<Rgb>> colour;   // per-object colour override
   };
-  void animated(const TmdModel& model, const ModelAnimation& anim, int frame, Vec3f origin, int range, std::vector<SceneLine>& out,
+  void animated(const TmdModel& model, const ModelAnimation& anim, Clip::Pose frame, Vec3f origin, int range, std::vector<SceneLine>& out,
                 const Look& look);
 
  private:

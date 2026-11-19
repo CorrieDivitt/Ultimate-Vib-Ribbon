@@ -1,4 +1,5 @@
 // The rules of play on hand-made courses. No game data needed.
+#include <cmath>
 
 #include "test.h"
 #include "vib/gameplay.h"
@@ -241,4 +242,27 @@ TEST(score_said_in_japanese) {
   const auto line = TitleScreens::say_number(1234, 0);
   // 11 beats of words in a 14-beat line: three rests, then the six clips.
   CHECK(line.tempo == 1 && line.timeline.size() == 9 && line.timeline.front() == 91 && line.timeline[3] == 86);
+}
+
+TEST(smooth_animation_blends_between_poses) {
+  // Stepped, like the original: always one whole pose.
+  Clip c(4, 20, false);
+  c.rewind();
+  c.advance(0.025);  // half a pose on
+  CHECK(c.pose().a == 1 && c.pose().b == 1 && c.pose().t == 0.0f);
+  Clip::set_smooth(true);
+  // Smooth: half way from pose 0 to pose 1, and exactly pose 0 just after a rewind.
+  Clip::Pose p = c.pose();
+  CHECK(p.a == 0 && p.b == 1 && std::abs(p.t - 0.5f) < 1e-4f);
+  c.rewind();
+  CHECK(c.pose().a == 0 && c.pose().t == 0.0f);
+  // A clip that does not loop holds its last pose; one that loops blends back to the first.
+  c.advance(10);
+  CHECK(c.pose().a == 3 && c.pose().t == 0.0f);
+  Clip l(4, 20, true);
+  l.rewind();
+  l.advance(0.175);  // 3.5 poses on
+  p = l.pose();
+  CHECK(p.a == 3 && p.b == 0 && std::abs(p.t - 0.5f) < 1e-4f);
+  Clip::set_smooth(false);
 }

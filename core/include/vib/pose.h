@@ -26,6 +26,8 @@ struct Mat3 {
 
 // 4096 units = one full turn.
 Mat3 rotation_xyz(const Vec3s& rotation);
+// The same with angles between whole units (used when blending poses).
+Mat3 rotation_xyz(const Vec3f& rotation);
 
 struct PosedObject {
   int object = 0;

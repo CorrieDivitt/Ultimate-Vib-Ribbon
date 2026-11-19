@@ -264,14 +264,8 @@ void TitleScreens::set_camera(int cue) {
 }
 
 SceneView TitleScreens::camera_view(int camera) {
-  SceneView v;
   const Camera& c = cameras_[std::size_t(camera)];
-  if (c.anim.keys.empty()) return v;
-  const CameraKey& k = c.anim.keys[std::size_t(c.clip.frame())];
-  v.eye = {float(k.eye.x), float(k.eye.y), float(k.eye.z)};
-  v.target = {float(k.target.x), float(k.target.y), float(k.target.z)};
-  v.fov_y = float(k.fov * kTau / 4096.0);
-  return v;
+  return camera_at(c.anim, c.clip.pose());
 }
 
 void TitleScreens::update_camera(int cue) {
@@ -286,7 +280,7 @@ void TitleScreens::draw_movie(int movie, double speed, std::vector<SceneLine>& o
   Movie& m = movies_[std::size_t(movie)];
   m.clip.set_speed(speed);
   Model& model = models_[std::size_t(m.model)];
-  lines_.animated(model.tmd, m.anim, m.clip.frame(), {}, 0, out, model.look);
+  lines_.animated(model.tmd, m.anim, m.clip.pose(), {}, 0, out, model.look);
   m.clip.advance(kTick);
 }
 
@@ -333,7 +327,7 @@ void TitleScreens::draw_vibri(int jitter, std::vector<SceneLine>& out) {
   }
   const int movie = vibri_ == Vibri::Paused ? vibri_movie_ : movie_of[int(vibri_)];
   Movie& mv = movies_[std::size_t(vibri_movies_[std::size_t(movie)])];
-  lines_.animated(m.tmd, mv.anim, mv.clip.frame(), {}, 0, out, m.look);
+  lines_.animated(m.tmd, mv.anim, mv.clip.pose(), {}, 0, out, m.look);
   mv.clip.advance(kTick);
   vibri_movie_ = movie;
 }

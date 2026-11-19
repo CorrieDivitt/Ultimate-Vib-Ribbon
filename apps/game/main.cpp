@@ -3,7 +3,7 @@
 // the music as in the original, rules from vibcore, presses judged at the moment
 // they happened on the audio clock.
 //
-//   vibplay <disc.cue> [bronze|silver|gold | --song 1-6] [--fixed] [--seed N]
+//   vibplay <disc.cue> [bronze|silver|gold | --song 1-6] [--fixed] [--smooth] [--seed N]
 //
 // With no course or song named it opens on the original's menus: game-disc
 // courses, options and high scores (menus: arrows or d-pad to move, Enter, Space
@@ -184,6 +184,7 @@ struct Args {
   Course course = Course::Bronze;
   int song = 0;  // 1-6 for a single song; 0 = the course's two
   bool fixed = false;
+  bool smooth = false;
   std::uint32_t seed = 0;
   bool seed_given = false;
   bool course_given = false;  // a course or song on the command line: play it straight away
@@ -476,6 +477,7 @@ int run(int argc, char** argv) {
     else if (a == "gold") opt.course = Course::Gold, opt.course_given = true;
     else if (a == "--song") opt.song = std::clamp(std::atoi(value()), 1, 6);
     else if (a == "--fixed") opt.fixed = true;
+    else if (a == "--smooth") opt.smooth = true;
     else if (a == "--seed") opt.seed = std::uint32_t(std::strtoul(value(), nullptr, 10)), opt.seed_given = true;
     else if (a == "--offset") opt.offset_ms = std::atof(value());
     else if (a == "--sfx") opt.sfx = float(std::atof(value()));
@@ -485,7 +487,7 @@ int run(int argc, char** argv) {
     else throw std::runtime_error("unknown argument: " + a);
   }
   if (opt.cue.empty()) {
-    std::fputs("usage: vibplay <disc.cue> [bronze|silver|gold | --song 1-6] [--fixed] [--seed N]\n"
+    std::fputs("usage: vibplay <disc.cue> [bronze|silver|gold | --song 1-6] [--fixed] [--smooth] [--seed N]\n"
                "               [--offset ms] [--sfx 0-1] [--music 0-1] [--width x]\n",
                stderr);
     return 2;
@@ -532,6 +534,8 @@ int run(int argc, char** argv) {
     Effects fx(iso, audio);
     const bool fixed = opt.fixed || save.options.fixed_courses;
     std::printf("GPU: %s\nCourses: %s\n", renderer.gpu_name(), fixed ? "fixed (the same every play)" : "vary from play to play, like the original");
+    Clip::set_smooth(opt.smooth || save.options.smooth_animation);
+    std::printf("Animation: %s\n", Clip::smooth() ? "smooth (poses blended)" : "stepped, like the original");
     Session s{opt, save, fixed, disc, script, scene, hud, audio, fx, window, renderer,
               opt.line_width.value_or(save.options.line_width), {}, {}};
     std::uint32_t seed = opt.seed;

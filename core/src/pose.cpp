@@ -36,6 +36,11 @@ Mat3 rotation_xyz(const Vec3s& r) {
   return mul(axis(2, angle(r.z)), mul(axis(1, angle(r.y)), axis(0, angle(r.x))));
 }
 
+Mat3 rotation_xyz(const Vec3f& r) {
+  const float k = kTau / 4096.0f;
+  return mul(axis(2, r.z * k), mul(axis(1, r.y * k), axis(0, r.x * k)));
+}
+
 std::vector<PosedObject> pose(const TmdModel& model, const std::vector<ModelKey>& frame) {
   std::vector<PosedObject> out;
   for (const ModelKey& k : frame) {

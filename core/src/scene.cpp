@@ -86,6 +86,42 @@ int Clip::frame() const {
   return std::clamp(static_cast<int>(std::floor(position_)), 0, frames_ - 1);
 }
 
+Clip::Pose Clip::pose() const {
+  Pose p;
+  p.a = p.b = frame();
+  if (!smooth_ || frames_ <= 1) return p;
+  // Pose n is shown exactly at position n + 0.5 (where rewind() puts it), and the
+  // clip moves towards the next one in between.
+  double at = position_ - 0.5;
+  if (loop_) {
+    at = std::fmod(at, double(frames_));
+    if (at < 0) at += frames_;
+    p.a = std::clamp(static_cast<int>(std::floor(at)), 0, frames_ - 1);
+    p.b = (p.a + 1) % frames_;
+  } else {
+    at = std::clamp(at, 0.0, double(frames_ - 1));
+    p.a = std::clamp(static_cast<int>(std::floor(at)), 0, frames_ - 1);
+    p.b = std::min(p.a + 1, frames_ - 1);
+  }
+  p.t = static_cast<float>(at - p.a);
+  if (p.a == p.b) p.t = 0;
+  return p;
+}
+
+SceneView camera_at(const CameraAnimation& anim, Clip::Pose pose, bool flip) {
+  SceneView v;
+  if (anim.keys.empty()) return v;
+  const int last = int(anim.keys.size()) - 1;
+  const CameraKey& a = anim.keys[std::size_t(std::clamp(pose.a, 0, last))];
+  const CameraKey& b = anim.keys[std::size_t(std::clamp(pose.b, 0, last))];
+  const float t = pose.t, m = flip ? -1.0f : 1.0f;
+  auto mix = [t](int x, int y) { return float(x) + t * float(y - x); };
+  v.eye = {m * mix(a.eye.x, b.eye.x), mix(a.eye.y, b.eye.y), mix(a.eye.z, b.eye.z)};
+  v.target = {m * mix(a.target.x, b.target.x), mix(a.target.y, b.target.y), mix(a.target.z, b.target.z)};
+  v.fov_y = float(mix(a.fov, b.fov) * kTau / 4096.0);
+  return v;
+}
+
 // ---------------------------------------------------------------- GameCamera
 
 namespace {
@@ -206,11 +242,9 @@ void GameCamera::cut() {
 SceneView GameCamera::update(double seconds, Vec3f origin) {
   SceneView v;
   if (anim_ && !anim_->keys.empty()) {
-    const CameraKey& k = anim_->keys[std::size_t(clip_->frame())];
-    const float m = flip_ ? -1.0f : 1.0f;
-    v.eye = add(origin, {m * k.eye.x, float(k.eye.y), float(k.eye.z)});
-    v.target = add(origin, {m * k.target.x, float(k.target.y), float(k.target.z)});
-    v.fov_y = float(k.fov * kTau / 4096.0);
+    v = camera_at(*anim_, clip_->pose(), flip_);
+    v.eye = add(origin, v.eye);
+    v.target = add(origin, v.target);
   }
   clip_->advance(seconds);
   if (clip_->finished()) {
@@ -350,7 +384,7 @@ void LineBuilder::object(const TmdObject& obj, const Xform& xf, int range, std::
   }
 }
 
-void LineBuilder::animated(const TmdModel& model, const ModelAnimation& anim, int frame, Vec3f origin, int range,
+void LineBuilder::animated(const TmdModel& model, const ModelAnimation& anim, Clip::Pose frame, Vec3f origin, int range,
                            std::vector<SceneLine>& out, int swap_first) {
   Look look;
   if (swap_first >= 0) {
@@ -361,22 +395,55 @@ void LineBuilder::animated(const TmdModel& model, const ModelAnimation& anim, in
   animated(model, anim, frame, origin, range, out, look);
 }
 
-void LineBuilder::animated(const TmdModel& model, const ModelAnimation& anim, int frame, Vec3f origin, int range,
+void LineBuilder::animated(const TmdModel& model, const ModelAnimation& anim, Clip::Pose frame, Vec3f origin, int range,
                            std::vector<SceneLine>& out, const Look& look) {
   if (anim.frames.empty()) return;
-  for (const ModelKey& k : anim.frames[std::size_t(std::clamp(frame, 0, int(anim.frames.size()) - 1))]) {
+  const int last = int(anim.frames.size()) - 1;
+  const std::vector<ModelKey>& next = anim.frames[std::size_t(std::clamp(frame.b, 0, last))];
+  for (const ModelKey& k : anim.frames[std::size_t(std::clamp(frame.a, 0, last))]) {
     const std::size_t slot = k.object;
     const std::size_t index = slot < look.swap.size() ? std::size_t(look.swap[slot]) : slot;
     if (index >= model.objects.size()) continue;
+    // Between two poses: the same object's key in the next one, if it has one.
+    const ModelKey* to = nullptr;
+    if (frame.t > 0)
+      for (const ModelKey& n : next)
+        if (n.object == k.object) {
+          to = &n;
+          break;
+        }
     Xform xf;
-    const Mat3 rot = k.has_rotation ? rotation_xyz(k.rotation) : Mat3{};
-    const Vec3f scale = k.has_scale ? Vec3f{k.scale.x / 4096.0f, k.scale.y / 4096.0f, k.scale.z / 4096.0f} : Vec3f{1, 1, 1};
+    Mat3 rot;
+    Vec3f scale{1, 1, 1}, position{};
+    if (!to) {
+      if (k.has_rotation) rot = rotation_xyz(k.rotation);
+      if (k.has_scale) scale = {k.scale.x / 4096.0f, k.scale.y / 4096.0f, k.scale.z / 4096.0f};
+      if (k.has_position) position = {float(k.position.x), float(k.position.y), float(k.position.z)};
+    } else {
+      const float t = frame.t;
+      // Each angle turns the short way round (4096 units = a full turn).
+      auto turn = [t](int a, int b) {
+        int d = (b - a) % 4096;
+        if (d > 2048) d -= 4096;
+        if (d < -2048) d += 4096;
+        return float(a) + t * float(d);
+      };
+      auto mix = [t](float a, float b) { return a + t * (b - a); };
+      const Vec3s r0 = k.has_rotation ? k.rotation : Vec3s{}, r1 = to->has_rotation ? to->rotation : Vec3s{};
+      if (k.has_rotation || to->has_rotation)
+        rot = rotation_xyz(Vec3f{turn(r0.x, r1.x), turn(r0.y, r1.y), turn(r0.z, r1.z)});
+      const Vec3s one{4096, 4096, 4096};
+      const Vec3s s0 = k.has_scale ? k.scale : one, s1 = to->has_scale ? to->scale : one;
+      scale = {mix(s0.x, s1.x) / 4096.0f, mix(s0.y, s1.y) / 4096.0f, mix(s0.z, s1.z) / 4096.0f};
+      const Vec3s p0 = k.has_position ? k.position : Vec3s{}, p1 = to->has_position ? to->position : Vec3s{};
+      position = {mix(p0.x, p1.x), mix(p0.y, p1.y), mix(p0.z, p1.z)};
+    }
     for (std::size_t r = 0; r < 3; ++r) {
       xf.m.m[r][0] = rot.m[r][0] * scale.x;
       xf.m.m[r][1] = rot.m[r][1] * scale.y;
       xf.m.m[r][2] = rot.m[r][2] * scale.z;
     }
-    xf.t = add(origin, k.has_position ? Vec3f{float(k.position.x), float(k.position.y), float(k.position.z)} : Vec3f{});
+    xf.t = add(origin, position);
     // The look follows the object drawn: it keeps its jitter and colour wherever it is shown.
     const int r = index < look.jitter.size() ? look.jitter[index] : range;
     const Rgb* c = index < look.colour.size() && look.colour[index] ? &*look.colour[index] : nullptr;
@@ -434,7 +501,7 @@ void Scene::draw(const Frame& f, std::vector<SceneLine>& out, SceneView& view) {
   const Fixed vibri_jitter = Fixed() < f.shake ? jitter + f.shake * jitter.times(8) : jitter;
   Move& mv = current();
   mv.clip.set_speed((f.speed * Fixed::from(0.5)).to_double());
-  lines_.animated(forms_[std::size_t(form_)], mv.anim, mv.clip.frame(), {0, 0, vibri_z}, vibri_jitter.integer(), out);
+  lines_.animated(forms_[std::size_t(form_)], mv.anim, mv.clip.pose(), {0, 0, vibri_z}, vibri_jitter.integer(), out);
   mv.clip.advance(f.seconds);
   if (mv.clip.finished()) {  // on to running
     alternate_ = false;
@@ -443,7 +510,7 @@ void Scene::draw(const Frame& f, std::vector<SceneLine>& out, SceneView& view) {
   }
 
   // The evolution meter rides with her.
-  lines_.animated(evo_model_, evo_anim_, evo_.frame(), {0, 0, vibri_z}, evo_jitter_, out);
+  lines_.animated(evo_model_, evo_anim_, evo_.pose(), {0, 0, vibri_z}, evo_jitter_, out);
   evo_.advance(f.seconds);
   if (evo_.speed() > 0 && kEvoEnds[form_] < evo_.position()) {
     evo_.set_speed(0);
@@ -549,7 +616,7 @@ void Hud::draw(const Frame& f, std::vector<Layer>& layers) {
     Layer l;
     l.view = fixed_view(sign_camera_);
     lines_.set_view(l.view);
-    lines_.animated(sign_model_, sign_anims_[sign_index_], sign_.frame(), {}, 3, l.lines);
+    lines_.animated(sign_model_, sign_anims_[sign_index_], sign_.pose(), {}, 3, l.lines);
     sign_.advance(f.seconds);
     layers.push_back(std::move(l));
   }
