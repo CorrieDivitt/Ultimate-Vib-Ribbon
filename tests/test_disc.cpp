@@ -224,4 +224,22 @@ TEST(disc_sces02873_menus_flow) {
   t.results_rank = 2;
   t.go_to(S::Results);
   CHECK(run(200, {}) == R::ResultsDone);
+  // Game over: no high score, so after Vibri's reaction it is over by itself.
+  t.results_rank = 0;
+  t.results_score = 1234;
+  t.go_to(S::Again);
+  CHECK(run(450, {}) == R::ResultsDone);
+  // With a high score a button goes on to the table, which ends by itself.
+  t.results_rank = 3;
+  t.go_to(S::Again);
+  run(40, {});
+  CHECK(run(200, confirm) == R::ResultsDone);
+  t.go_to(S::AgainSelect);
+  run(40, {});
+  CHECK(run(5, confirm) == R::PlayAgain);
+  t.go_to(S::AgainSelect);
+  run(40, {});
+  run(10, down);
+  run(5, confirm);
+  CHECK(run(40, {}) == R::AgainBack);
 }

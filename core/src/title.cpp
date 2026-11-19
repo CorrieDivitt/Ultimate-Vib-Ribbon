@@ -79,6 +79,8 @@ TitleScreens::TitleScreens(const Pak& pak, const char* language) {
   m_psj_ = load_model(pak, language, "MODE/MDV.TMD");
   m_option_ = load_model(pak, language, "OPTION/OP.TMD");
   m_hiscore_ = load_model(pak, language, "HISCORE/HI.TMD");
+  m_end_ = load_model(pak, language, "END/CL_OV.TMD");
+  m_again_ = load_model(pak, language, "AGAIN/AG.TMD");
 
   // Vibri lying, sitting and standing, each still and speaking; all loop.
   const char* vibri[6] = {"VIBRI/MN_V01A.ANM", "VIBRI/MN_V01B.ANM", "VIBRI/MN_V02A.ANM",
@@ -100,6 +102,15 @@ TitleScreens::TitleScreens(const Pak& pak, const char* language) {
   hi_left_ = load_movie(pak, m_hiscore_, "HISCORE/HI2_L.ANM");
   hi_right_ = load_movie(pak, m_hiscore_, "HISCORE/HI2_R.ANM");
   hi_exit_ = load_movie(pak, m_hiscore_, "HISCORE/HI2_EX.ANM");
+  const char* over[4] = {"END/G_OV_01.ANM", "END/G_OV_02.ANM", "END/G_OV_03.ANM", "END/G_OV_04.ANM"};
+  for (std::size_t i = 0; i < 4; ++i) over_[i] = load_movie(pak, m_end_, over[i]);
+  gov_fall_ = load_movie(pak, m_vibri_, "V_OV/GOV_V01.ANM");
+  const char* gov[7] = {"V_OV/GOV_V03A.ANM", "V_OV/GOV_V03B.ANM", "V_OV/GOV_V03C.ANM", "V_OV/GOV_V05.ANM",
+                        "V_OV/GOV_V06A.ANM", "V_OV/GOV_V06B.ANM", "V_OV/GOV_V07.ANM"};
+  for (std::size_t i = 0; i < 7; ++i) gov_[i] = load_movie(pak, m_vibri_, gov[i], i == 1 || i == 5);  // 03b and 06b loop
+  again_steps_[0] = load_movie(pak, m_again_, "AGAIN/AG_12.ANM");
+  again_steps_[1] = load_movie(pak, m_again_, "AGAIN/AG_21.ANM");
+  again_close_ = load_movie(pak, m_again_, "AGAIN/CLOSE.ANM");
 
   cam_left_ = load_camera(pak, "C_L.ANC");
   cam_right_ = load_camera(pak, "R_C.ANC");
@@ -161,6 +172,8 @@ TitleScreens::Result TitleScreens::tick(const Input& in) {
     case Screen::Option: r = options(in); break;
     case Screen::PsjHiscore: r = psj_hiscore(in, 0); break;
     case Screen::Results: r = psj_hiscore(in, ++results_frame_); break;
+    case Screen::Again: r = again(in); break;
+    case Screen::AgainSelect: r = again_select(in); break;
     default: break;
   }
   if (fade_ == kOut) r = Result::None;
@@ -278,7 +291,7 @@ void TitleScreens::draw_vibri(int jitter, std::vector<SceneLine>& out) {
   if (vibri_ == Vibri::Hidden) return;
   Model& m = models_[std::size_t(m_vibri_)];
   m.jitter_all((jitter + 4 * kGteOne) / kGteOne);
-  const bool results = screen_ == Screen::PsjHiscore || screen_ == Screen::Results;
+  const bool results = screen_ == Screen::PsjHiscore || screen_ == Screen::Results || screen_ == Screen::Again;
   m.hide(19, results);
   m.hide(20, results);
   const int movie_of[6] = {0, 1, 2, 3, 4, 5};
@@ -573,7 +586,8 @@ TitleScreens::Result TitleScreens::psj_hiscore(const Input& in, int frame) {
   const bool still = fade_frame_ == 0;
   const bool results = frame != 0;
 
-  if (arrived_) {
+  // After a course it is set up on its second frame, as the original's results do.
+  if (arrived_ || frame == 2) {
     back_cursor_.index = 0;
     menu_movie_ = hi_left_;
     speed_ = 0;
@@ -656,6 +670,160 @@ TitleScreens::Result TitleScreens::psj_hiscore(const Input& in, int frame) {
     say({1}, 90, Vibri::Hidden);
     movies_[std::size_t(hi_open_)].clip.rewind(true);
     return Result::HiscoreBack;
+  }
+  return Result::None;
+}
+
+TitleScreens::Result TitleScreens::again(const Input& in) {
+  // Vibri's four reactions to losing: what she says (sounds of the gameplay bank),
+  // and how likely each is (4, 3, 2 and 1 in 10).
+  static const std::vector<int> words[4] = {
+      {12, 176, 177, 179, 180, 181, 180, 181},
+      {12, 176, 177, 184},
+      {12, 176, 177, 185, 186, 187, 188, 189, 190, 190, 190, 190, 191},
+      {12, 176, 177, 183},
+  };
+  Model& end = models_[std::size_t(m_end_)];
+  Model& vibri = models_[std::size_t(m_vibri_)];
+  if (arrived_) {
+    // The score as digits (slots 31-36, digit d is object 52 + d) and as the row of
+    // marks the game showed (slots 27 down to 21, shape n is object 37 + n).
+    for (int o = 0; o < int(end.tmd.objects.size()); ++o) end.swap(o, o);
+    static const std::array<int, 6> digits = {31, 32, 33, 34, 35, 36};
+    show_number(end, digits, 52, results_score);
+    const auto marks = Hud::marks(results_score);
+    for (int i = 0; i < 7; ++i) end.swap(27 - i, 37 + marks[std::size_t(i)]);
+    random_ = next_random(random_);
+    const int n = static_cast<int>((std::uint64_t(random_) * 10) >> 32);
+    comment_ = n < 4 ? 0 : n < 7 ? 1 : n < 9 ? 2 : 3;
+    hiscore_frame_ = 0;
+    leave_frame_ = 0;
+    result_frame_ = 0;
+    rewind_movies();
+    sounds_.push_back({Channel::Music, {}, 0, true});
+    say(words[comment_], 64, Vibri::Hidden);
+  }
+  const int leave_jitter = leave_frame_ * 300 * kGteOne;
+  int jitter = kMenuJitter * kGteOne + leave_jitter;
+  if (fade_ == kOut) jitter += fade_jitter();
+  end.jitter_all(jitter / kGteOne);
+  vibri.jitter_all(jitter / kGteOne);
+  vibri.hide(19, true);
+  vibri.hide(20, true);
+  // Any button: on to the high scores if the score made them, else away.
+  if ((in.confirm || in.cancel) && fade_ == kNone && !hiscore_frame_ && !leave_frame_) {
+    say({1}, 90, Vibri::Hidden);
+    if (results_rank == 0) return Result::ResultsDone;
+    leave_frame_ = 1;
+  }
+  if (leave_frame_ && ++leave_frame_ == frames(20)) {
+    hiscore_frame_ = 1;
+    leave_frame_ = 0;
+  }
+  if (hiscore_frame_) {
+    sounds_.push_back({Channel::Music, {}, 0, true});
+    return psj_hiscore(in, hiscore_frame_++);
+  }
+
+  Hud::Layer layer;
+  layer.view.eye = {0, 0, -3000};
+  layer.view.target = {0, 0, 0};
+  layer.view.fov_y = float(454 * kTau / 4096.0);
+  lines_.set_view(layer.view);
+  const int f = result_frame_;
+  // The GAME OVER sign: it falls in, lands, settles; the score comes up later.
+  draw_movie(over_[f < frames(100) ? 0 : f < frames(112) ? 1 : 2], 1, layer.lines);
+  if (f >= frames(140)) draw_movie(over_[3], 1, layer.lines);
+  // Vibri falls, then reacts.
+  if (f < frames(144)) {
+    draw_movie(gov_fall_, 1, layer.lines);
+  } else if (comment_ == 0) {
+    draw_movie(gov_[f < frames(212) ? 0 : 1], 1, layer.lines);
+    if (f >= frames(188)) draw_movie(gov_[2], 1, layer.lines);
+  } else if (comment_ == 1) {
+    draw_movie(gov_[f < frames(200) ? 4 : 5], 1, layer.lines);
+  } else {
+    draw_movie(gov_[comment_ == 2 ? 6 : 3], 1, layer.lines);
+  }
+  // (The original writes Vibri's words under her from frame 200; text is not drawn yet.)
+  layers_.push_back(std::move(layer));
+  ++result_frame_;
+  if (result_frame_ == frames(480)) {
+    if (results_rank != 0) {
+      leave_frame_ = 1;
+      return Result::None;
+    }
+    return Result::ResultsDone;
+  }
+  return Result::None;
+}
+
+TitleScreens::Result TitleScreens::again_select(const Input& in) {
+  static const int voices[2] = {99, 100};  // "again?" and "no"
+  const bool still = fade_frame_ == 0;
+  Model& model = models_[std::size_t(m_again_)];
+  if (arrived_) {
+    // The sign names the course played: object 3 as itself, or 6 or 7 in its place.
+    static const int course_sign[3] = {3, 6, 7};
+    model.swap(3, course_sign[std::clamp(results_course, 0, 2)]);
+    model.swap(15, 15);
+    menu_movie_ = again_steps_[0];
+    again_cursor_.index = 0;
+    speed_ = 0;
+    rewind_movies();
+    vibri_ = Vibri::Sitting;
+    leaving_ = false;
+    camera_cue_ = 1;
+    set_camera(1);
+  }
+  const MenuRead r = read(again_cursor_, in, true, still);
+  int jitter = kMenuJitter * kGteOne;
+  const int i = again_cursor_.index;
+  if (r.up) {
+    menu_movie_ = again_steps_[std::size_t(i)];
+    movies_[std::size_t(menu_movie_)].clip.rewind(true);
+    speed_ = -1;
+  } else if (r.down) {
+    menu_movie_ = again_steps_[std::size_t((i + 1) % 2)];
+    movies_[std::size_t(menu_movie_)].clip.rewind();
+    speed_ = 1;
+  }
+  if (r.up || r.down) say({voices[i]}, 90, Vibri::SittingSpeaking);
+  if (r.back) {
+    menu_movie_ = again_steps_[1];
+    movies_[std::size_t(menu_movie_)].clip.rewind();
+    say({voices[i]}, 90, Vibri::SittingSpeaking);
+    speed_ = 0;
+  }
+  if (next_ == Screen::Done) jitter += fade_jitter();
+  model.jitter_all(jitter / kGteOne);
+  Hud::Layer vibri, menu;
+  vibri.view = vibri_view();
+  lines_.set_view(vibri.view);
+  draw_vibri(jitter, vibri.lines);
+  if (!still && next_ != Screen::Done) {
+    update_camera(camera_cue_);
+  } else {
+    view_ = camera_view(cam_menu_);
+    cameras_[std::size_t(cam_menu_)].clip.advance(kTick);
+  }
+  menu.view = view_;
+  lines_.set_view(menu.view);
+  draw_movie(menu_movie_, speed_, menu.lines);
+  layers_.push_back(std::move(vibri));
+  layers_.push_back(std::move(menu));
+  if (leaving_ && movies_[std::size_t(again_close_)].clip.finished()) {
+    leaving_ = false;
+    camera_cue_ = 3;
+    set_camera(3);
+    return Result::AgainBack;
+  }
+  if (r.confirm) {
+    say({1}, 90, Vibri::Hidden);
+    if (i != 1) return Result::PlayAgain;
+    menu_movie_ = again_close_;
+    leaving_ = true;
+    speed_ = 1;
   }
   return Result::None;
 }

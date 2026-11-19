@@ -23,14 +23,15 @@ namespace vib {
 
 class TitleScreens {
  public:
-  enum class Screen { None, Main, PsjModeSelect, Option, PsjHiscore, Results, Done };
+  enum class Screen { None, Main, PsjModeSelect, Option, PsjHiscore, Results, Again, AgainSelect, Done };
   enum class Result {
     None,
     PsjModes, UnknownModes, Options, Leave,          // main
     Bronze, Silver, Gold, PsjHiscores, PsjBack,      // game-disc course select
     OptionBack,                                      // options
     HiscoreBack,                                     // high scores
-    ResultsDone,                                     // high scores shown after a course
+    ResultsDone,                                     // high scores shown after a course; AGAIN is over
+    PlayAgain, AgainBack,                            // AGAIN SELECT: try the song again, or leave
   };
 
   // Buttons for one tick: which went down, and which are held (for key repeat).
@@ -72,8 +73,10 @@ class TitleScreens {
   // What the screens show and change.
   bool sound_effects = true, vibration = true;
   std::array<std::array<int, 3>, 3> psj_high_scores{};  // bronze, silver, gold
-  // For Screen::Results: the course just played (0-2) and its place (1-3).
-  int results_course = 0, results_rank = 1;
+  // For the results screens: the course just played (0-2), its place in the high
+  // scores (1-3, 0 for none) and the score. Screen::Again is game over: Vibri's
+  // reaction, the score, then the high scores if it made them.
+  int results_course = 0, results_rank = 1, results_score = 0;
 
  private:
   enum class Vibri { Lying, LyingSpeaking, Sitting, SittingSpeaking, Standing, StandingSpeaking, Paused, Hidden };
@@ -125,6 +128,8 @@ class TitleScreens {
   Result psj_mode_select(const Input& in);
   Result options(const Input& in);
   Result psj_hiscore(const Input& in, int frame);
+  Result again(const Input& in);
+  Result again_select(const Input& in);
 
   LineBuilder lines_;
   std::vector<Model> models_;
@@ -135,7 +140,7 @@ class TitleScreens {
   SceneView view_;  // the camera most recently shown, as the original's one view
 
   // models
-  int m_vibri_ = 0, m_main_ = 0, m_psj_ = 0, m_option_ = 0, m_hiscore_ = 0;
+  int m_vibri_ = 0, m_main_ = 0, m_psj_ = 0, m_option_ = 0, m_hiscore_ = 0, m_end_ = 0, m_again_ = 0;
   // movies
   std::array<int, 6> vibri_movies_{};
   std::array<int, 4> main_steps_{};
@@ -144,6 +149,11 @@ class TitleScreens {
   std::array<int, 3> option_steps_{};
   int option_open_ = 0, option_close_ = 0;
   int hi_open_ = 0, hi_loop_ = 0, hi_left_ = 0, hi_right_ = 0, hi_exit_ = 0;
+  std::array<int, 4> over_ = {};          // the GAME OVER sign's clips
+  int gov_fall_ = 0;                      // Vibri falls
+  std::array<int, 7> gov_ = {};           // her reactions: 03a 03b 03c 05 06a 06b 07
+  std::array<int, 2> again_steps_ = {};
+  int again_close_ = 0;
   // cameras
   int cam_left_ = 0, cam_right_ = 0, cam_zoom_ = 0, cam_menu_ = 0;
 
@@ -156,6 +166,9 @@ class TitleScreens {
   // screen state
   Cursor main_cursor_{0, 4, 3}, psj_cursor_{0, 5, 4}, option_cursor_{0, 3, 2}, back_cursor_{0, 2, 1};
   int menu_movie_ = 0, camera_cue_ = -1, wait_frame_ = 0, hiscore_course_ = 0, results_frame_ = 0;
+  int result_frame_ = 0, leave_frame_ = 0, hiscore_frame_ = 0, comment_ = 0;
+  std::uint32_t random_ = 12345;
+  Cursor again_cursor_{0, 2, 1};
   double speed_ = 1.0;
   bool entering_ = false, leaving_ = false;
   Vibri vibri_ = Vibri::Hidden;

@@ -531,19 +531,22 @@ int run(int argc, char** argv) {
     Session s{opt, save, fixed, disc, script, scene, hud, audio, fx, window, renderer,
               opt.line_width.value_or(save.options.line_width), {}, {}};
     std::uint32_t seed = opt.seed;
-    int last_rank = 0;
+    int last_rank = 0, last_score = 0, lost_song = 0, points_before_lost = 0;
+    bool last_lost = false;
 
-    // One course from start to end (or one song as practice). Returns false if the
-    // window was closed.
-    auto play_course = [&](Course course, int song) -> bool {
+    // A course from song `first` (0 or 1) to its end, or one song as practice.
+    // Returns false if the window was closed.
+    auto play_course = [&](Course course, int song, int first = 0, int carried = 0) -> bool {
       s.course = course;
       s.song = song;
       std::vector<int> songs;
       if (song) songs = {song};
       else songs = {int(course) * 2 + 1, int(course) * 2 + 2};
-      int points = 0;
+      int points = carried;
       bool finished = false;  // the course ended, cleared or lost, rather than being left
-      for (std::size_t i = 0; i < songs.size(); ++i) {
+      last_lost = false;
+      for (std::size_t i = std::size_t(first); i < songs.size(); ++i) {
+        const int before = points;
         const Result r = play_song(s, songs[i], int(i), points, seed);
         seed = next_random(seed);
         if (r == Result::Quit) return false;
@@ -551,6 +554,9 @@ int run(int argc, char** argv) {
         if (r == Result::GameOver) {
           std::printf("Game over.\n");
           finished = true;
+          last_lost = true;
+          lost_song = int(i);
+          points_before_lost = before;
           break;
         }
         if (i + 1 == songs.size()) {
@@ -559,6 +565,7 @@ int run(int argc, char** argv) {
         }
       }
       last_rank = 0;
+      last_score = points;
       // High scores belong to whole courses, as in the original (one song is practice).
       if (finished && !song) {
         static const char* places[] = {"", "1st", "2nd", "3rd"};
@@ -599,7 +606,7 @@ int run(int argc, char** argv) {
       std::vector<std::vector<vibr::LineInstance>> menu_lines;
       std::uint64_t last_ns = SDL_GetTicksNS();
       double behind = 0;
-      bool course_chosen = false, running = true;
+      bool course_chosen = false, running = true, replay = false;
       Course chosen = Course::Bronze;
       while (running) {
         SDL_Event e;
@@ -680,7 +687,13 @@ int run(int argc, char** argv) {
             case R::PsjBack: title.go_to(S::Main); break;
             case R::OptionBack: title.go_to(S::Main); break;
             case R::HiscoreBack: title.go_to(S::PsjModeSelect); break;
-            case R::ResultsDone: title.go_to(S::PsjModeSelect); break;
+            case R::ResultsDone: title.go_to(title.screen() == S::Again ? S::AgainSelect : S::PsjModeSelect); break;
+            case R::PlayAgain:  // the original's own courses start again from the song that was lost
+              replay = true;
+              course_chosen = true;
+              title.go_to(S::Done);
+              break;
+            case R::AgainBack: title.go_to(S::PsjModeSelect); break;
             default: break;
           }
           if (title.sound_effects != save.options.sound_effects || title.vibration != save.options.vibration) {
@@ -698,15 +711,16 @@ int run(int argc, char** argv) {
           music.stop();
           voices.stop();
           course_chosen = false;
-          if (!play_course(chosen, 0)) break;
+          const bool ok = replay ? play_course(chosen, 0, lost_song, points_before_lost) : play_course(chosen, 0);
+          replay = false;
+          if (!ok) break;
           show_scores();
-          if (last_rank) {
-            title.results_course = int(chosen);
-            title.results_rank = last_rank;
-            title.go_to(S::Results);
-          } else {
-            title.go_to(S::PsjModeSelect);
-          }
+          title.results_course = int(chosen);
+          title.results_rank = last_rank;
+          title.results_score = std::min(last_score, Hud::kMaxScore);
+          if (last_lost) title.go_to(S::Again);                // Vibri's reaction, then "again?"
+          else if (last_rank) title.go_to(S::Results);         // the high scores, the new place blinking
+          else title.go_to(S::PsjModeSelect);
           last_ns = SDL_GetTicksNS();
           behind = 0;
           continue;
