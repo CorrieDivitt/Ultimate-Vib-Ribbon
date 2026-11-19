@@ -30,3 +30,6 @@ SCES_*
 # Python
 __pycache__/
 *.pyc
+
+# Reference recordings made from the game
+*.jsonl
