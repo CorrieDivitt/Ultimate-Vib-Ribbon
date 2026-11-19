@@ -155,7 +155,7 @@ Auto-play hits every part as it reaches Vibri. The title-screen demo does the sa
 
 ## 7. Game camera (read)
 
-Seven cameras in three groups: back (b01, b02), side (s01, s02), front (f01, f02, f03), and six transition clips between groups, each in a same-side and a switch-side version, played backwards when only the opposite direction exists. A camera event names the next camera and how many times its clip loops (clip speed scales so total time is constant). A "break" starts the transition to the next camera, switching sides. Clips can be mirrored left to right. Game-disc courses run camera clips at 1.0 speed, others at 1.3.
+Seven cameras in three groups: back (b01, b02), side (s01, s02), front (f01, f02, f03), and six transition clips between groups, each in a same-side and a switch-side version, played backwards when only the opposite direction exists. A camera event names the next camera and how many times its clip loops (clip speed scales so total time is constant). A "break" starts the transition to the next camera, switching sides. Clips can be mirrored left to right. Game-disc courses run camera clips at 1.3 speed, others at 1.0 (corrected 2026-11-19: the camera's "fast" flag is set for the game's own courses); in that mode a break always returns to side 0.
 
 Field of view: see section 9c.
 
@@ -181,7 +181,7 @@ Disc handling (lid open, disc check, asking for the game disc back) exists only 
 ## 9a. Sound effects (read, measured)
 
 - A sound is (program, tone) in the PSJ_SE bank; a sound number packs it as program × 16 + tone.
-- Played at note = tone + 1, pitch from the tone's centre note and fine tune by the PlayStation library's note-to-pitch rule (base rate when note equals centre; one octave per 12 notes). Volume = bank volume × program volume × tone volume × requested volume. The exact resulting sample rates still need checking by ear against the original.
+- Played at note = tone + 1, pitch from the tone's centre note and fine tune by the PlayStation library's note-to-pitch rule (44.1 kHz when note equals centre; one octave per 12 notes; fine tune in 128ths of a semitone, subtracted). Centre notes are 25 to 42, so effects play two or more octaves down: program 1's at 11,025 Hz. Volume = bank volume × program volume × tone volume × requested volume. Still to confirm by ear.
 - Up to 24 voices. A sound can be queued to start when another voice finishes; key changes are applied once per video frame.
 - Gameplay sounds: hitting a part: program 1, tone = road number (0–9), voice 3, full volume. Stray press: program 1, tone 11 (not scored), 12 (different road, single), 13 (different road, pair) or 15 (matching), voice 3. Miss: program 1 tone 10, voice 2. Form up: program 1 tone 14, voice 4. Round start: program 0 tone 11, voice 4.
 - Sound-effect volume scales with music loudness, from 10% in silence to 100%.
