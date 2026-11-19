@@ -59,8 +59,10 @@ Mat3 rotation_z(int units) {
 // ---------------------------------------------------------------- Clip
 
 void Clip::advance(double seconds) {
+  // As the original: a clip that does not loop is finished once it cannot move,
+  // which includes running at speed 0.
+  if (frames_ <= 0 || seconds <= 0) return;
   const double step = rate_ * speed_ * seconds;
-  if (step == 0 || frames_ <= 0) return;
   if (loop_) {
     position_ += step;
     position_ = std::fmod(position_, double(frames_));
@@ -322,7 +324,7 @@ std::int32_t LineBuilder::offset(int range) {
 }
 
 void LineBuilder::object(const TmdObject& obj, const Xform& xf, int range, std::int32_t z_offset, Vec3f* join,
-                         std::vector<SceneLine>& out) {
+                         std::vector<SceneLine>& out, const Rgb* colour_override) {
   auto world = [&](Vec3f v) { return add(xf.m.apply(v), xf.t); };
   if (obj.marker == FaceMarker::DrawOnlyWhenFacing) {
     auto vtx = [&](int i) {
@@ -337,7 +339,8 @@ void LineBuilder::object(const TmdObject& obj, const Xform& xf, int range, std::
     const Vec3s& v = obj.vertices[i];
     work[i] = {float(v.x + dx), float(v.y + dy), float(v.z + z_offset + dz)};
   }
-  for (const TmdLine& l : obj.lines) out.push_back({world(work[l.a]), world(work[l.b]), l.colour_a});
+  for (const TmdLine& l : obj.lines)
+    out.push_back({world(work[l.a]), world(work[l.b]), colour_override ? *colour_override : l.colour_a});
   if (join && !work.empty()) {
     // A line from the previous object's last vertex (kept in its own local
     // coordinates, as the original does) to this object's first.
@@ -349,9 +352,21 @@ void LineBuilder::object(const TmdObject& obj, const Xform& xf, int range, std::
 
 void LineBuilder::animated(const TmdModel& model, const ModelAnimation& anim, int frame, Vec3f origin, int range,
                            std::vector<SceneLine>& out, int swap_first) {
+  Look look;
+  if (swap_first >= 0) {
+    look.swap.resize(model.objects.size());
+    for (std::size_t i = 0; i < look.swap.size(); ++i) look.swap[i] = int(i);
+    look.swap[0] = swap_first;
+  }
+  animated(model, anim, frame, origin, range, out, look);
+}
+
+void LineBuilder::animated(const TmdModel& model, const ModelAnimation& anim, int frame, Vec3f origin, int range,
+                           std::vector<SceneLine>& out, const Look& look) {
   if (anim.frames.empty()) return;
   for (const ModelKey& k : anim.frames[std::size_t(std::clamp(frame, 0, int(anim.frames.size()) - 1))]) {
-    const std::size_t index = (k.object == 0 && swap_first >= 0) ? std::size_t(swap_first) : std::size_t(k.object);
+    const std::size_t slot = k.object;
+    const std::size_t index = slot < look.swap.size() ? std::size_t(look.swap[slot]) : slot;
     if (index >= model.objects.size()) continue;
     Xform xf;
     const Mat3 rot = k.has_rotation ? rotation_xyz(k.rotation) : Mat3{};
@@ -362,7 +377,10 @@ void LineBuilder::animated(const TmdModel& model, const ModelAnimation& anim, in
       xf.m.m[r][2] = rot.m[r][2] * scale.z;
     }
     xf.t = add(origin, k.has_position ? Vec3f{float(k.position.x), float(k.position.y), float(k.position.z)} : Vec3f{});
-    object(model.objects[index], xf, range, 0, nullptr, out);
+    // The look follows the object drawn: it keeps its jitter and colour wherever it is shown.
+    const int r = index < look.jitter.size() ? look.jitter[index] : range;
+    const Rgb* c = index < look.colour.size() && look.colour[index] ? &*look.colour[index] : nullptr;
+    object(model.objects[index], xf, r, 0, nullptr, out, c);
   }
 }
 
@@ -505,7 +523,7 @@ void Hud::draw(const Frame& f, std::vector<Layer>& layers) {
     Layer l;
     l.view.eye = {0, 0, -2906};
     l.view.target = {0, 0, 0};
-    l.view.fov_y = float(296 * kTau / 4096.0);
+    l.view.fov_y = float(294 * kTau / 4096.0);  // LookAlongZ with fov 1.625: half-angle 147
     lines_.set_view(l.view);
     const auto m = marks(f.score);
     const double run = f.combo / 18.0;

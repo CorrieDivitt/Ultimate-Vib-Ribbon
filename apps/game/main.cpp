@@ -4,6 +4,11 @@
 // they happened on the audio clock.
 //
 //   vibplay <disc.cue> [bronze|silver|gold | --song 1-6] [--fixed] [--seed N]
+//
+// With no course or song named it opens on the original's menus: game-disc
+// courses, options and high scores (menus: arrows or d-pad to move, Enter, Space
+// or Cross to choose, Esc, Backspace or Circle to go back). Esc during a course
+// goes back to the menus.
 //           [--offset ms] [--sfx 0-1] [--music 0-1] [--width x]
 //
 //   Block  (L1/L2)             Left arrow, A          gamepad: left shoulder or trigger
@@ -47,6 +52,7 @@
 #include "vib/pak.h"
 #include "vib/scene.h"
 #include "vib/sound_bank.h"
+#include "vib/title.h"
 
 namespace {
 
@@ -127,11 +133,12 @@ struct Args {
   bool fixed = false;
   std::uint32_t seed = 0;
   bool seed_given = false;
+  bool course_given = false;  // a course or song on the command line: play it straight away
   std::optional<double> offset_ms, line_width;
   std::optional<float> sfx, music;
 };
 
-enum class Result { Clear, GameOver, Quit };
+enum class Result { Clear, GameOver, Abort, Quit };  // Abort: back to the menus; Quit: the window closed
 
 struct Session {
   const Args& opt;
@@ -148,6 +155,8 @@ struct Session {
   double line_width;
   std::map<SDL_JoystickID, SDL_Gamepad*> pads;
   std::map<SDL_JoystickID, std::uint8_t> triggers;  // which triggers are held, per pad
+  Course course = Course::Bronze;  // being played
+  int song = 0;                    // 1-6 when practising one song
 };
 
 Result play_song(Session& s, int song, int track_index, int& points, std::uint32_t seed) {
@@ -172,13 +181,13 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   gen.start_round(song, 0);
   Gameplay game;
   RoundSetup setup;
-  setup.course = s.opt.song ? Course::Bronze : s.opt.course;
+  setup.course = s.song ? Course::Bronze : s.course;
   setup.course_seconds = total / kSampleRate;
   setup.points = points;
   setup.track_index = track_index;
   game.start(setup);
   s.scene.reset(true, false);
-  s.hud.start_round(track_index, !s.opt.song);  // the "Round 1/2" sign belongs to the two-song courses
+  s.hud.start_round(track_index, !s.song);  // the "Round 1/2" sign belongs to the two-song courses
 
   std::printf("\nSong %d: %d s, %s course (lead %d, frame phase %.0f)\n", song, total / kSampleRate,
               s.fixed ? "fixed" : "original-style", timing.lead, double(timing.frame_phase_q16) / 65536.0);
@@ -243,7 +252,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
         case SDL_EVENT_WINDOW_RESIZED: s.renderer.request_resize(); break;
         case SDL_EVENT_KEY_DOWN:
           if (e.key.repeat) break;
-          if (e.key.key == SDLK_ESCAPE) return Result::Quit;
+          if (e.key.key == SDLK_ESCAPE) return Result::Abort;
           if (e.key.key == SDLK_LEFTBRACKET || e.key.key == SDLK_RIGHTBRACKET) {
             s.audio.adjust_offset(e.key.key == SDLK_LEFTBRACKET ? -5 : 5);
             s.save.options.audio_offset_ms = s.audio.offset_ms();
@@ -269,7 +278,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
           }
           break;
         case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
-          if (e.gbutton.button == SDL_GAMEPAD_BUTTON_BACK) return Result::Quit;
+          if (e.gbutton.button == SDL_GAMEPAD_BUTTON_BACK || e.gbutton.button == SDL_GAMEPAD_BUTTON_START) return Result::Abort;
           if (const std::uint8_t b = pad_bits(e.gbutton.button)) presses.push_back({b, e.gbutton.timestamp});
           break;
         case SDL_EVENT_GAMEPAD_AXIS_MOTION:
@@ -402,9 +411,9 @@ int run(int argc, char** argv) {
       if (i + 1 >= argc) throw std::runtime_error(a + " needs a value");
       return argv[++i];
     };
-    if (a == "bronze") opt.course = Course::Bronze;
-    else if (a == "silver") opt.course = Course::Silver;
-    else if (a == "gold") opt.course = Course::Gold;
+    if (a == "bronze") opt.course = Course::Bronze, opt.course_given = true;
+    else if (a == "silver") opt.course = Course::Silver, opt.course_given = true;
+    else if (a == "gold") opt.course = Course::Gold, opt.course_given = true;
     else if (a == "--song") opt.song = std::clamp(std::atoi(value()), 1, 6);
     else if (a == "--fixed") opt.fixed = true;
     else if (a == "--seed") opt.seed = std::uint32_t(std::strtoul(value(), nullptr, 10)), opt.seed_given = true;
@@ -466,35 +475,187 @@ int run(int argc, char** argv) {
     std::printf("GPU: %s\nCourses: %s\n", renderer.gpu_name(), fixed ? "fixed (the same every play)" : "vary from play to play, like the original");
     Session s{opt, save, fixed, disc, script, scene, hud, audio, fx, window, renderer,
               opt.line_width.value_or(save.options.line_width), {}, {}};
-
-    std::vector<int> songs;
-    if (opt.song) songs = {opt.song};
-    else songs = {int(opt.course) * 2 + 1, int(opt.course) * 2 + 2};
     std::uint32_t seed = opt.seed;
-    int points = 0;
-    bool finished = false;  // the course ended, cleared or lost, rather than being quit
-    for (std::size_t i = 0; i < songs.size(); ++i) {
-      const Result r = play_song(s, songs[i], int(i), points, seed);
-      seed = next_random(seed);
-      if (r == Result::Quit) break;
-      if (r == Result::GameOver) {
-        std::printf("Game over.\n");
-        finished = true;
-        break;
+    int last_rank = 0;
+
+    // One course from start to end (or one song as practice). Returns false if the
+    // window was closed.
+    auto play_course = [&](Course course, int song) -> bool {
+      s.course = course;
+      s.song = song;
+      std::vector<int> songs;
+      if (song) songs = {song};
+      else songs = {int(course) * 2 + 1, int(course) * 2 + 2};
+      int points = 0;
+      bool finished = false;  // the course ended, cleared or lost, rather than being left
+      for (std::size_t i = 0; i < songs.size(); ++i) {
+        const Result r = play_song(s, songs[i], int(i), points, seed);
+        seed = next_random(seed);
+        if (r == Result::Quit) return false;
+        if (r == Result::Abort) break;
+        if (r == Result::GameOver) {
+          std::printf("Game over.\n");
+          finished = true;
+          break;
+        }
+        if (i + 1 == songs.size()) {
+          std::printf("Course clear! Total %d\n", points);
+          finished = true;
+        }
       }
-      if (i + 1 == songs.size()) {
-        std::printf("Course clear! Total %d\n", points);
-        finished = true;
+      last_rank = 0;
+      // High scores belong to whole courses, as in the original (one song is practice).
+      if (finished && !song) {
+        static const char* places[] = {"", "1st", "2nd", "3rd"};
+        static const char* names[] = {"Bronze", "Silver", "Gold"};
+        last_rank = save.record(course, points);
+        const auto& table = save.high_scores[std::size_t(course)];
+        std::printf("%s high scores: %d, %d, %d%s%s\n", names[int(course)], table[0], table[1], table[2], last_rank ? "   new " : "",
+                    places[last_rank]);
+        write_save();
       }
-    }
-    // High scores belong to whole courses, as in the original (a single --song is practice).
-    if (finished && !opt.song) {
-      static const char* places[] = {"", "1st", "2nd", "3rd"};
-      static const char* names[] = {"Bronze", "Silver", "Gold"};
-      const int place = save.record(opt.course, points);
-      const auto& table = save.high_scores[std::size_t(opt.course)];
-      std::printf("%s high scores: %d, %d, %d%s%s\n", names[int(opt.course)], table[0], table[1], table[2],
-                  place ? "   new " : "", places[place]);
+      return true;
+    };
+
+    if (opt.song || opt.course_given) {
+      play_course(opt.course, opt.song);  // straight into play, as before
+    } else {
+      // The menus, run at the original's 50 frames a second whatever the display does.
+      TitleScreens title(pak);
+      using S = TitleScreens::Screen;
+      using R = TitleScreens::Result;
+      title.sound_effects = save.options.sound_effects;
+      title.vibration = save.options.vibration;
+      auto show_scores = [&]() {
+        for (std::size_t c = 0; c < 3; ++c) title.psj_high_scores[c] = save.high_scores[c];
+      };
+      show_scores();
+      title.go_to(S::Main);
+      TitleScreens::Input pressed, held;
+      std::vector<std::vector<vibr::LineInstance>> menu_lines;
+      std::uint64_t last_ns = SDL_GetTicksNS();
+      double behind = 0;
+      bool course_chosen = false, running = true;
+      Course chosen = Course::Bronze;
+      while (running) {
+        SDL_Event e;
+        while (SDL_PollEvent(&e)) {
+          auto press = [&](int which, bool down) {
+            bool* p[6] = {&pressed.up, &pressed.down, &pressed.left, &pressed.right, &pressed.confirm, &pressed.cancel};
+            bool* h[4] = {&held.up, &held.down, &held.left, &held.right};
+            if (down) *p[which] = true;
+            if (which < 4) *h[which] = down;
+          };
+          switch (e.type) {
+            case SDL_EVENT_QUIT: running = false; break;
+            case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+            case SDL_EVENT_WINDOW_RESIZED: renderer.request_resize(); break;
+            case SDL_EVENT_KEY_DOWN:
+            case SDL_EVENT_KEY_UP: {
+              if (e.key.repeat) break;
+              const bool down = e.type == SDL_EVENT_KEY_DOWN;
+              switch (e.key.key) {
+                case SDLK_UP: case SDLK_W: press(0, down); break;
+                case SDLK_DOWN: case SDLK_S: press(1, down); break;
+                case SDLK_LEFT: case SDLK_A: press(2, down); break;
+                case SDLK_RIGHT: case SDLK_D: press(3, down); break;
+                case SDLK_RETURN: case SDLK_SPACE: case SDLK_Z: press(4, down); break;
+                case SDLK_ESCAPE: case SDLK_BACKSPACE: case SDLK_X: press(5, down); break;
+                default: break;
+              }
+              break;
+            }
+            case SDL_EVENT_GAMEPAD_ADDED:
+              if (SDL_Gamepad* g = SDL_OpenGamepad(e.gdevice.which)) s.pads[e.gdevice.which] = g;
+              break;
+            case SDL_EVENT_GAMEPAD_REMOVED:
+              if (auto it = s.pads.find(e.gdevice.which); it != s.pads.end()) {
+                SDL_CloseGamepad(it->second);
+                s.pads.erase(it);
+              }
+              break;
+            case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+            case SDL_EVENT_GAMEPAD_BUTTON_UP: {
+              const bool down = e.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+              switch (e.gbutton.button) {
+                case SDL_GAMEPAD_BUTTON_DPAD_UP: press(0, down); break;
+                case SDL_GAMEPAD_BUTTON_DPAD_DOWN: press(1, down); break;
+                case SDL_GAMEPAD_BUTTON_DPAD_LEFT: press(2, down); break;
+                case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: press(3, down); break;
+                case SDL_GAMEPAD_BUTTON_SOUTH: case SDL_GAMEPAD_BUTTON_START: press(4, down); break;
+                case SDL_GAMEPAD_BUTTON_EAST: case SDL_GAMEPAD_BUTTON_NORTH: press(5, down); break;
+                default: break;
+              }
+              break;
+            }
+            default: break;
+          }
+        }
+        if (!running) break;
+        const std::uint64_t now_ns = SDL_GetTicksNS();
+        behind = std::min(behind + double(now_ns - last_ns) * 1e-9, 0.1);
+        last_ns = now_ns;
+        while (behind >= 1.0 / TitleScreens::kFrameRate) {
+          behind -= 1.0 / TitleScreens::kFrameRate;
+          TitleScreens::Input in = pressed;
+          in.held_up = held.up, in.held_down = held.down, in.held_left = held.left, in.held_right = held.right;
+          pressed = {};
+          const R r = title.tick(in);
+          switch (r) {
+            case R::PsjModes: title.go_to(S::PsjModeSelect); break;
+            case R::UnknownModes: std::printf("Courses from your own music come later.\n"); break;
+            case R::Options: title.go_to(S::Option); break;
+            case R::Leave: running = false; break;
+            case R::Bronze: case R::Silver: case R::Gold:
+              chosen = r == R::Bronze ? Course::Bronze : r == R::Silver ? Course::Silver : Course::Gold;
+              course_chosen = true;
+              title.go_to(S::Done);
+              break;
+            case R::PsjHiscores: title.go_to(S::PsjHiscore); break;
+            case R::PsjBack: title.go_to(S::Main); break;
+            case R::OptionBack: title.go_to(S::Main); break;
+            case R::HiscoreBack: title.go_to(S::PsjModeSelect); break;
+            case R::ResultsDone: title.go_to(S::PsjModeSelect); break;
+            default: break;
+          }
+          if (title.sound_effects != save.options.sound_effects || title.vibration != save.options.vibration) {
+            save.options.sound_effects = title.sound_effects;
+            save.options.vibration = title.vibration;
+            audio.set_volumes(opt.music.value_or(save.options.music_volume),
+                              save.options.sound_effects ? opt.sfx.value_or(save.options.effects_volume) : 0.0f);
+            write_save();
+          }
+          if (!running) break;
+        }
+        if (!running) break;
+        if (course_chosen && title.done()) {
+          course_chosen = false;
+          if (!play_course(chosen, 0)) break;
+          show_scores();
+          if (last_rank) {
+            title.results_course = int(chosen);
+            title.results_rank = last_rank;
+            title.go_to(S::Results);
+          } else {
+            title.go_to(S::PsjModeSelect);
+          }
+          last_ns = SDL_GetTicksNS();
+          behind = 0;
+          continue;
+        }
+        // Draw the last frame the menus made.
+        const auto& layers = title.layers();
+        menu_lines.resize(layers.size());
+        std::vector<vibr::Layer> out;
+        for (std::size_t i = 0; i < layers.size(); ++i) {
+          menu_lines[i].clear();
+          for (const SceneLine& l : layers[i].lines)
+            menu_lines[i].push_back({{l.a.x, l.a.y, l.a.z}, {l.b.x, l.b.y, l.b.z}, {l.colour.r / 255.0f, l.colour.g / 255.0f, l.colour.b / 255.0f, 1.0f}});
+          const SceneView& v = layers[i].view;
+          out.push_back({&menu_lines[i], vibr::look_at({v.eye.x, v.eye.y, v.eye.z}, {v.target.x, v.target.y, v.target.z}, {0, -1, 0}), v.fov_y});
+        }
+        renderer.draw(out, float(s.line_width * std::max(1, renderer.height()) / 288.0));
+      }
     }
     write_save();
     for (auto& [id, pad] : s.pads) SDL_CloseGamepad(pad);

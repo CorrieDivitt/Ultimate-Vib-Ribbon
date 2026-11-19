@@ -12,6 +12,7 @@
 #include "vib/pak.h"
 #include "vib/course_gen.h"
 #include "vib/scene.h"
+#include "vib/title.h"
 #include "vib/course_script.h"
 #include "vib/motion.h"
 #include "vib/sound_bank.h"
@@ -165,4 +166,62 @@ TEST(disc_sces02873_hud_draws) {
   hud.draw(f, layers);
   CHECK(layers.size() == 3);
   for (const auto& l : layers) CHECK(!l.lines.empty() && l.view.fov_y > 0.1f);
+}
+
+TEST(disc_sces02873_menus_flow) {
+  const std::string cue = test_cue();
+  if (cue.empty()) SKIP("set VIB_TEST_CUE to your SCES-02873 .cue to run");
+  DiscImage disc = DiscImage::open(path_from_utf8(cue));
+  Iso9660 iso(disc);
+  const Pak game(iso.read("GAME/02_FILES.PAK"));
+  TitleScreens t(game);
+  using R = TitleScreens::Result;
+  using S = TitleScreens::Screen;
+  // Runs `n` frames pressing `press` on the first, returns the first result seen.
+  auto run = [&](int n, TitleScreens::Input press) {
+    R seen = R::None;
+    for (int i = 0; i < n; ++i) {
+      const R r = t.tick(i == 0 ? press : TitleScreens::Input{});
+      if (seen == R::None) seen = r;
+      if (t.screen() != S::None && t.screen() != S::Done) {
+        CHECK(!t.layers().empty());
+        std::size_t lines = 0;
+        for (const auto& l : t.layers()) lines += l.lines.size();
+        CHECK(lines > 0);
+      }
+    }
+    return seen;
+  };
+  TitleScreens::Input confirm, down, cancel, right;
+  confirm.confirm = true;
+  down.down = true;
+  cancel.cancel = true;
+  right.right = true;
+  t.go_to(S::Main);
+  CHECK(run(60, {}) == R::None);
+  CHECK(t.screen() == S::Main);
+  CHECK(run(5, confirm) == R::PsjModes);
+  t.go_to(S::PsjModeSelect);
+  run(80, {});
+  CHECK(t.screen() == S::PsjModeSelect);
+  run(10, down);  // to silver
+  CHECK(run(5, confirm) == R::Silver);
+  t.go_to(S::Done);
+  run(40, {});
+  CHECK(t.done());
+  // Back from a course to the high scores and the options.
+  t.go_to(S::PsjHiscore);
+  run(60, {});
+  run(10, right);
+  CHECK(run(10, down) == R::None);
+  CHECK(run(5, confirm) == R::HiscoreBack);
+  t.go_to(S::Option);
+  run(80, {});
+  CHECK(t.sound_effects);
+  run(5, confirm);
+  CHECK(!t.sound_effects);
+  t.results_course = 1;
+  t.results_rank = 2;
+  t.go_to(S::Results);
+  CHECK(run(200, {}) == R::ResultsDone);
 }

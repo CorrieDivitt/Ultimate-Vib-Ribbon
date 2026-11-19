@@ -9,6 +9,7 @@
 
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 #include "vib/fixed.h"
@@ -74,11 +75,23 @@ class LineBuilder {
   // that point (in this object's local space) to its first vertex is added, and
   // `join` becomes its last vertex. Objects with a facing marker that faces away
   // from the view are left out.
-  void object(const TmdObject& obj, const Xform& xf, int range, std::int32_t z_offset, Vec3f* join, std::vector<SceneLine>& out);
+  // `colour`: draw every line in this colour instead of its own (the original hides
+  // objects this way, drawing them nearly black).
+  void object(const TmdObject& obj, const Xform& xf, int range, std::int32_t z_offset, Vec3f* join, std::vector<SceneLine>& out,
+              const Rgb* colour = nullptr);
   // Every object keyed in `frame` of `anim`, placed at `origin`. `swap_first`: draw
   // this object wherever the clip asks for object 0 (the score marks); -1 for none.
   void animated(const TmdModel& model, const ModelAnimation& anim, int frame, Vec3f origin, int range, std::vector<SceneLine>& out,
                 int swap_first = -1);
+
+  // Per-object overrides for a model, as the menus use them. Empty vectors mean none.
+  struct Look {
+    std::vector<int> swap;                    // object i is drawn as object swap[i]
+    std::vector<int> jitter;                  // per-object range, replacing the model's
+    std::vector<std::optional<Rgb>> colour;   // per-object colour override
+  };
+  void animated(const TmdModel& model, const ModelAnimation& anim, int frame, Vec3f origin, int range, std::vector<SceneLine>& out,
+                const Look& look);
 
  private:
   std::int32_t offset(int range);
