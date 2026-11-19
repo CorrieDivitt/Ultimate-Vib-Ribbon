@@ -14,6 +14,7 @@
 #include "vib/game_text.h"
 #include "vib/scene.h"
 #include "vib/title.h"
+#include "vib/title_intro.h"
 #include "vib/course_script.h"
 #include "vib/motion.h"
 #include "vib/sound_bank.h"
@@ -306,4 +307,49 @@ TEST(fill_in_takes_a_number_and_a_name) {
   CHECK(fill_in("a %d b", 42) == "a 42 b");
   CHECK(fill_in("%s: %d", 7, "x") == "x: 7");
   CHECK(fill_in("100%% %d %d", 1) == "100% 1 %d");
+}
+
+TEST(disc_sces02873_title_intro) {
+  const std::string cue = test_cue();
+  if (cue.empty()) SKIP("set VIB_TEST_CUE to your SCES-02873 .cue to run");
+  DiscImage disc = DiscImage::open(path_from_utf8(cue));
+  Iso9660 iso(disc);
+  const Pak title_pak(iso.read("TITLE/FILES.PAK"));
+  CHECK(TitleIntro::game_frames(0) == 0);
+  CHECK(TitleIntro::game_frames(821) == 1359);  // the title, about 27 s in
+  TitleIntro t(title_pak);
+  auto lines = [&] {
+    std::size_t n = 0;
+    for (const auto& l : t.layers()) n += l.lines.size();
+    return n;
+  };
+  // The intro starts with its first sound and lines.
+  t.tick(false);
+  CHECK(t.take_sounds() == std::vector<int>{0x110});
+  CHECK(!t.intro_over());
+  // Played through: lines from the first few frames on (it opens on nothing), the
+  // second and third sounds at their times, then the title.
+  int heard = 0;
+  for (int i = 1; i < 1400; ++i) {
+    t.tick(false);
+    heard += int(t.take_sounds().size());
+    if (i >= 10) CHECK(lines() > 0);
+  }
+  CHECK(heard == 2);
+  CHECK(t.intro_over());
+  t.leave();
+  for (int i = 0; i < 25; ++i) t.tick(false);
+  CHECK(t.over());
+  // A button during the intro jumps to the title.
+  t.start(false);
+  for (int i = 0; i < 100; ++i) t.tick(false);
+  (void)t.take_sounds();
+  t.tick(true);
+  CHECK(t.take_sounds() == std::vector<int>{0x111});
+  t.tick(true);  // no longer skippable
+  CHECK(t.intro_over());
+  // Coming back from a course: straight to the title, its lines gathering in.
+  t.start(true);
+  t.tick(false);
+  CHECK(t.intro_over());
 }

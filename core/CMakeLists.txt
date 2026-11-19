@@ -17,6 +17,7 @@ add_library(vibcore STATIC
   src/save.cpp
   src/title.cpp
   src/game_text.cpp
+  src/title_intro.cpp
 )
 target_include_directories(vibcore PUBLIC include)
 target_link_libraries(vibcore PRIVATE vib_warnings)

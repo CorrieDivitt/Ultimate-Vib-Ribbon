@@ -58,6 +58,7 @@
 #include "vib/scene.h"
 #include "vib/sound_bank.h"
 #include "vib/title.h"
+#include "vib/title_intro.h"
 
 namespace {
 
@@ -70,9 +71,10 @@ constexpr double kOriginalRefresh = 49.759;                       // the PAL ori
 
 class Effects {
  public:
-  Effects(Iso9660& iso, vibg::Audio& audio) : audio_(audio) {
-    bank_ = parse_vh(iso.read("GAME/AUDIO/PSJ_SE.VH"));
-    const Bytes vb = iso.read("GAME/AUDIO/PSJ_SE.VB");
+  // `bank`: the path of the bank's .VH and .VB without their extension.
+  Effects(Iso9660& iso, vibg::Audio& audio, const std::string& bank = "GAME/AUDIO/PSJ_SE") : audio_(audio) {
+    bank_ = parse_vh(iso.read(bank + ".VH"));
+    const Bytes vb = iso.read(bank + ".VB");
     for (const ByteView s : split_vb(bank_, vb)) {
       DecodedSample d = decode_spu_adpcm(s);
       samples_.push_back(std::move(d.pcm));
@@ -659,7 +661,13 @@ int run(int argc, char** argv) {
         for (std::size_t c = 0; c < 3; ++c) title.psj_high_scores[c] = save.high_scores[c];
       };
       show_scores();
-      title.go_to(S::Main);
+      // First the title (the original's MAIN_T): its intro, then the title waiting for a
+      // button, which leads to the main menu.
+      const Pak title_pak(iso.read("TITLE/FILES.PAK"));
+      TitleIntro intro(title_pak);
+      Effects title_fx(iso, audio, "TITLE/AUDIO/TITLE");
+      constexpr int kTitleVoice = 2;
+      bool at_title = true;
       // The menus' two sound sequences: music on voices 0 and 12, Vibri's voice on 1 and 13.
       SoundSequence music(fx, 0), voices(fx, 1);
       auto play_requests = [&]() {
@@ -740,15 +748,32 @@ int run(int argc, char** argv) {
           pressed = {};
           in.voices_playing = voices.playing();
           in.music_playing = music.playing();
+          if (at_title) {
+            const bool button = in.confirm || in.cancel;
+            const bool was_intro = !intro.intro_over();
+            intro.tick(button);
+            for (const int n : intro.take_sounds()) title_fx.number(n, 64, kTitleVoice);
+            if (!was_intro && button && !intro.leaving()) intro.leave();  // the title: a button starts
+            if (intro.over()) {
+              at_title = false;
+              title_fx.stop(kTitleVoice);
+              title.go_to(S::Main);  // its lines scatter in, as the original's first screen
+            }
+            continue;
+          }
           const R r = title.tick(in);
           switch (r) {
             case R::PsjModes: title.go_to(S::PsjModeSelect); break;
             case R::UnknownModes: std::printf("Courses from your own music come later.\n"); break;
             case R::Options: title.go_to(S::Option); break;
-            // The original's "leave" goes back to its title screen, which leads to this
-            // menu again. Until the title is built, the menu simply comes back; close
-            // the window to quit.
-            case R::Leave: title.go_to(S::Main); break;
+            // The original's "leave" goes back to its title screen (close the window to quit).
+            case R::Leave:
+              music.stop();
+              voices.stop();
+              title.go_to(S::None);
+              intro.start(true);
+              at_title = true;
+              break;
             case R::Bronze: case R::Silver: case R::Gold:
               chosen = r == R::Bronze ? Course::Bronze : r == R::Silver ? Course::Silver : Course::Gold;
               course_chosen = true;
@@ -799,8 +824,8 @@ int run(int argc, char** argv) {
           behind = 0;
           continue;
         }
-        // Draw the last frame the menus made.
-        const auto& layers = title.layers();
+        // Draw the last frame the title or the menus made.
+        const auto& layers = at_title ? intro.layers() : title.layers();
         menu_lines.resize(layers.size());
         std::vector<vibr::Layer> out;
         for (std::size_t i = 0; i < layers.size(); ++i) {
