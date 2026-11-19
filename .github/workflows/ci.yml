@@ -14,6 +14,14 @@ jobs:
       - uses: ilammy/msvc-dev-cmd@v1
         if: runner.os == 'Windows'
       - uses: seanmiddleditch/gha-setup-ninja@v5
+      - name: Install Vulkan SDK (Windows, for the viewer)
+        if: runner.os == 'Windows'
+        uses: jakoch/install-vulkan-sdk-action@v1
+        with:
+          vulkan_version: 1.4.309.0
+          install_runtime: true
+          cache: true
+          stripdown: true
       - name: Configure
         run: cmake --preset dev -DVIB_WARNINGS_AS_ERRORS=ON
       - name: Build

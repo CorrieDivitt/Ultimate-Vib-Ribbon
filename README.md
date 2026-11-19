@@ -15,6 +15,7 @@ This repository contains no game code, data, music or BIOS, and never will. The 
 | Folder | What it holds |
 |---|---|
 | `core/` | `vibcore`: portable game library. Disc, CUE, ISO 9660 and PAK readers so far. No graphics or platform code. |
+| `apps/viewer/` | `vibview`: desktop viewer that draws the disc's models and animations as lines. Windows, needs the Vulkan SDK. |
 | `tools/vibtool/` | Developer command line for inspecting and extracting your disc. |
 | `tools/research/` | Python prototypes from the research phase. |
 | `tests/` | Unit tests. Disc tests run only when `VIB_TEST_CUE` points at your CUE file. |
@@ -22,7 +23,7 @@ This repository contains no game code, data, music or BIOS, and never will. The 
 
 ## Building on Windows
 
-Needs Visual Studio 2022 or later with "Desktop development with C++", CMake 3.24+, and Ninja. Run from a **Developer PowerShell for VS**:
+Needs Visual Studio 2022 or later with "Desktop development with C++", CMake 3.24+, Ninja, and the Vulkan SDK from LunarG. The first configure downloads SDL3. Run from a **Developer PowerShell for VS**:
 
 ```powershell
 cmake --preset dev

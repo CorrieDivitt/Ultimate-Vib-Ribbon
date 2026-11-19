@@ -12,6 +12,12 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(VIB_BUILD_TOOLS "Build developer command-line tools (vibtool)" ON)
 option(VIB_BUILD_TESTS "Build unit tests" ON)
+if(WIN32)
+  set(_vib_viewer_default ON)
+else()
+  set(_vib_viewer_default OFF)
+endif()
+option(VIB_BUILD_VIEWER "Build vibview, the desktop model viewer (needs the Vulkan SDK)" ${_vib_viewer_default})
 option(VIB_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
 
 # Shared warning settings, applied per target.
@@ -23,7 +29,7 @@ if(MSVC)
     target_compile_options(vib_warnings INTERFACE /WX)
   endif()
 else()
-  target_compile_options(vib_warnings INTERFACE -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wno-sign-conversion)
+  target_compile_options(vib_warnings INTERFACE -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wno-sign-conversion -Wno-missing-field-initializers)
   if(VIB_WARNINGS_AS_ERRORS)
     target_compile_options(vib_warnings INTERFACE -Werror)
   endif()
@@ -33,6 +39,10 @@ add_subdirectory(core)
 
 if(VIB_BUILD_TOOLS AND NOT ANDROID)
   add_subdirectory(tools/vibtool)
+endif()
+
+if(VIB_BUILD_VIEWER AND NOT ANDROID)
+  add_subdirectory(apps/viewer)
 endif()
 
 if(VIB_BUILD_TESTS AND NOT ANDROID)
