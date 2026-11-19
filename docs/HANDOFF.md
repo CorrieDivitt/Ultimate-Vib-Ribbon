@@ -11,7 +11,7 @@ Confidence labels used below: **[measured]** = computed this session from the di
 
 ## 1. Where things stand
 
-**Latest (2026-11-19):** Phase 2 under way. The course generator reproduces Polaroid exactly; see section 2b. Tasks 2.1 and 2.2 done, 2.3 and 2.5 active, 1.6 active (owner recording the remaining songs). Next: compare songs 2 to 6 as recordings arrive, then 2.4 gameplay rules.
+**Latest (2026-11-19):** Phase 2 under way. The course generator reproduces Polaroid exactly; see section 2b. Tasks 2.1 and 2.2 done, 2.3, 2.4 and 2.5 active, 1.6 active (owner recording the remaining songs; they will say when the files are complete). Gameplay rules are written (section 2c). Next: compare songs 2 to 6 when recordings are done, extend the recorder to log score and level, then 2.7.
 
 Phase 0 is signed off. Phase 1 is under way: 1.1 and 1.3 done, 1.2 waits only on the Vulkan SDK install. 1.4 is done: TMD, ANM, ANC, FSL and VH/VB loaders plus posing are in vibcore, and build on the owner's PC. TIM was dropped (D10: the only images are the Sony and NanaOn-Sha logos). 1.5 is in progress: `apps/viewer` (vibview) is written and compiles in Windows CI (SDL3 3.2.26 via FetchContent, Vulkan 1.0, shaders compiled by glslc with -mfmt=c into .inc files; CI installs Vulkan SDK 1.4.309.0 with jakoch/install-vulkan-sdk-action). It has never been run: the assistant's workspace has no Vulkan and may not execute downloaded shader-compiler binaries, so shaders were first validated by CI's glslc. First run on the owner's PC (2026-11-18) worked: RTX 4090 selected, no validation messages, Vibri upright with limbs attached, smooth lines, animation speed looks sensible with the header rate treated as frames per second. One open observation: from an oblique front view one eye appears edge-on and apart from the head. The owner thinks it is the original's look; unverified. The game's own camera looks from the side (road pieces lie in the YZ plane) and hides back faces, so check eye placement against the emulator in task 1.6 before changing anything. Task 1.5 is marked done. Renderer design: lines are instanced screen-space quads with a feathered edge and a small depth pull toward the camera; fills draw first with depth write, no culling (the original culls back faces, e.g. Vibri's eyes; revisit); validation layer is enabled when present and prints `[vulkan]` lines to stderr; prefers the discrete GPU. Gotcha seen in session 2: a new Developer PowerShell starts 32-bit; building from it compiles but fails at the link step. Run Launch-VsDevShell.ps1 -Arch amd64 -HostArch amd64 first. Task 1.2 is done: Vulkan SDK 1.4.363.1 at C:\VulkanSDK confirmed working (VULKAN_SDK set, glslc from shaderc v2026.4).
 
@@ -109,6 +109,33 @@ What this settles:
 Not yet exercised by any comparison: tempo effect patterns, distribution (weighted random) selectors with the script seed, medley tracks. Polaroid uses fixed patterns only. Songs 2 to 6 will show them.
 
 Tests: `tests/test_course_gen.cpp` (synthetic bursts, no game data) and `disc_sces02873_first_song_course` in test_disc.cpp (needs VIB_TEST_CUE). 26 tests in all.
+
+## 2c. Gameplay rules (session 2, 2026-11-19)
+
+`core/include/vib/gameplay.h`, `core/src/gameplay.cpp`, `core/include/vib/fixed.h` (16.16 arithmetic with the original's rounding, including its 8-bit-precision divide). Written after re-reading revib's Gameplay and Score sources for behaviour; nothing copied. `tests/test_gameplay.cpp` has 12 tests on hand-made courses. `vibtool play <cue> <round>` runs a perfect player through the real pipeline (generator 1,379 blocks ahead of the heard position, gameplay updated once per block).
+
+Interface: `Gameplay::start(RoundSetup)`, `add_event(CourseEvent)`, `end_at`, `quiet`, `update(position, pressed bits, move_done)` returning Playing / Clear / GameOver, then `events()` (hit, miss, stray, form changes, camera, select on/off) and state getters. Buttons arrive already folded to four bits (block, pit, loop, wave); the platform layer maps L1/L2, Up/Down, R1/R2, Triangle/Cross.
+
+Perfect-play results, no stray presses (score + end bonus): Polaroid 1408 + 422, song 2 1782 + 534, song 3 2178 + 653, song 4 3146 + 943, song 5 2370 + 711, song 6 2420 + 726. Unverified against the original. The default top scores (6000 for bronze) are above a plain perfect run of two songs, so stray-press bonuses are part of high-score play.
+
+Details that go beyond SPEC section 4 (now the reference for them is the code):
+
+- Points carry between a course's two songs as score + end bonus of the first; the second song's end bonus is a percentage of the whole total.
+- Score shown is capped at 116,279; the bonus is computed from the uncapped points.
+- A stray press is credited against the earliest part not yet hit or missed. Only the first pressed action in the order block, pit, loop, wave counts in one update.
+- 18-hit run does not count in auto-play or speed courses. In the best form hits score double, including the 18th hit that reaches it.
+- The round clears (or game over is reported) only when no part is in the hit window and none is within one length behind Vibri.
+- Screw effect: a new one only moves the start/end once the running one has ended.
+- Original video delay is 882 samples (two frame periods at 49.759 Hz), not about 886 as SPEC says. `RoundSetup::video_delay` defaults to 0: the VR build should predict display time itself (Phase 4 decision).
+
+Deliberate differences from the original, to keep in mind for golden tests:
+
+- Speed courses: the original raises speed 0.2% per video frame. Ours does it per 443 samples of music (one original frame), so it does not depend on headset refresh rate.
+- The speed curve's square root uses an exact integer root; the original calls the PlayStation library's `csqrt`, which may differ in the last bit.
+- Ties in part position are kept in arrival order (the original's sort leaves them unspecified).
+- `move_done` (presses ignored until Vibri's move animation is half over) is an input; the animation side does not exist yet. Open design question for Phase 4: judging with the press's own timestamp instead of the frame's, for consistent timing at any refresh rate.
+
+Not wired yet: speed-course `fixed_period()` and the audio-CD select on/off events are produced by Gameplay but the CourseGenerator does not consume them (both belong to audio-CD play, the stretch goal). Recorder does not log score or level; adding that would let 2.4 be checked against the original.
 
 ## 2a. Format findings from the loaders (session 2) [measured]
 
