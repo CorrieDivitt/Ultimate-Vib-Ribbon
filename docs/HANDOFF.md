@@ -198,6 +198,8 @@ Owner's first headset test, 2026-11-19 (Quest 3 over Link): works and "looks rea
 
 Owner's second test: unsure the right stick changed the lines (steps of 0.025 near 0.15 are hard to see under the 0.75 px feather, and the console is out of sight). Now each headset step is x1.25, plays the confirm click (sound 1), and works in the menus too. Owner felt the menus were fully stereoscopic but the levels less so: same code path for both, but play's cameras stand 1374-31766 units from Vibri (mean 3817), so at 1 mm a unit most of play is 4-30 m away where stereo disparity fades, while the menus' models sit 2.5-3 m away and have depth of their own. Smaller --vr-scale (0.0005) brings everything closer with more depth but makes the world feel smaller; the real answer is Phase 4 staging (the player placed near Vibri, not at the original's camera).
 
+Owner's third test: the right stick still does not change the line width (no click heard either, so the action or the pushed key event never arrives; suspects: the Vector2 action on the right thumbstick sharing the stick with the R3 click binding, or SDL ignoring a pushed key event with no window id). Lines look fine at the default; owner chose not to spend more time on it now. Open, low priority. **Owner decision: the VR view goes down with Vibri** (the player placed in the world near her, not at the original's camera) for a real stereo effect; this is Phase 4 staging (4.2).
+
 Known limits of the spike: everything rides the original's camera (the intro and play move it; comfort to judge), the HUD sits where its own camera puts it, menus blend only at 50 Hz, no recentre button of our own (the headset's works), no Quest standalone (Android) build yet.
 
 ## 2c. Gameplay rules (session 2, 2026-11-19)

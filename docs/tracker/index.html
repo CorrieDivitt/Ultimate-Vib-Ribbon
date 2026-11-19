@@ -146,7 +146,7 @@ button.copy{font-family:var(--display);font-size:12px;background:var(--ink);colo
    status values: done | active | todo | blocked | ask (needs the owner's answer) */
 const T = {
   goal: "A version of Vib-Ribbon playable in VR on PCVR and Meta Quest 3, with responsive, consistent timing and visuals that do justice to the original. Steam Frame and levels from your own music are stretch goals.",
-  updated: "2026-11-19, session 2 (headset line width steps; stereo depth note)",
+  updated: "2026-11-19, session 2 (decision: VR view down with Vibri)",
   approach: "Native VR port. Game logic from the decompilation, assets read from your own disc, emulator used as the reference to test against.",
   asks: [
         {id:"Q13", t:"When you want to try fixed courses: open save.txt (path printed when vibplay starts), change fixed_courses 0 to 1, and play. Or add --fixed for one run.", why:"Your decision: courses vary from play to play like the original by default; the same-every-time courses are an option for you to judge by playing."},
@@ -201,7 +201,7 @@ const T = {
      exit:"Complete game playable through Quest Link, SteamVR and Virtual Desktop at headset refresh rate.",
      tasks:[
       {id:"4.1", s:"todo", t:"OpenXR session, stereo rendering, controllers and haptics"},
-      {id:"4.2", s:"todo", t:"VR staging: diorama scale and placement, original camera moves, comfort options, classic-screen mode"},
+      {id:"4.2", s:"todo", t:"VR staging: diorama scale and placement, original camera moves, comfort options, classic-screen mode", note:"Your decision: the view goes down with Vibri, in the world near her, not where the original's camera stands; menus showed how much better close stereo looks."},
       {id:"4.3", s:"todo", t:"Line quality in the headset: sub-pixel anti-aliasing, glow, 90 and 120 Hz"},
       {id:"4.4", s:"todo", t:"In-world menus in the original style"},
       {id:"4.5", s:"todo", t:"VR timing: predicted display time mapped to the audio clock. Calibration tool."}
@@ -254,7 +254,7 @@ const T = {
     {id:"R7", t:"PAL disc. Video ran at 50 Hz on the original.", why:"Low risk because gameplay follows the audio clock."}
   ],
   commands: [
-    {state:"Common", what:"Play in the headset (PCVR). First: Quest connected with Link or Air Link and Meta Quest Link set as the OpenXR runtime (Meta Quest Link app, Settings, General, OpenXR Runtime). Keep the small window in front on the PC if you use the keyboard. Controllers: left trigger block, right trigger loop, X or Y pit, A wave and confirm, B back, left menu button start, left stick moves in the menus, right stick click (R3) recentres, right stick up/down makes the lines a quarter thicker or thinner each push, with a click (saved; works in the menus too). For more depth in play try --vr-scale 0.0005 (closer, but the world feels smaller). Add --vr-scale 0.002 to make the world twice as big.",
+    {state:"Common", what:"Play in the headset (PCVR). First: Quest connected with Link or Air Link and Meta Quest Link set as the OpenXR runtime (Meta Quest Link app, Settings, General, OpenXR Runtime). Keep the small window in front on the PC if you use the keyboard. Controllers: left trigger block, right trigger loop, X or Y pit, A wave and confirm, B back, left menu button start, left stick moves in the menus, right stick click (R3) recentres, (right stick line width does not work yet; use - and = on the keyboard). For more depth in play try --vr-scale 0.0005 (closer, but the world feels smaller). Add --vr-scale 0.002 to make the world twice as big.",
      code:'cd F:\\VibRibbonVR\\Vib-Ribbon-VR\ngit pull\ncmake --build --preset dev\n.\\build\\dev\\apps\\game\\vibplay.exe "F:\\VibRibbonVR\\research\\Gamefiles\\Vib-Ribbon (Europe) (En,Fr,De,Es,It).cue" --vr'},
     {state:"Common", what:"Test the end of a course quickly: every song starts 20 seconds before its end, with a perfect automatic player having played the rest (so the score and Vibri's form are a perfect run's). Pick a course from the menus as usual. Change 20 to start earlier or later. Works with --fixed and --smooth too.",
      code:'cd F:\\VibRibbonVR\\Vib-Ribbon-VR\ngit pull\ncmake --build --preset dev\n.\\build\\dev\\apps\\game\\vibplay.exe "F:\\VibRibbonVR\\research\\Gamefiles\\Vib-Ribbon (Europe) (En,Fr,De,Es,It).cue" --last 20'},
