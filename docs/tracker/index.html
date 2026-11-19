@@ -146,7 +146,7 @@ button.copy{font-family:var(--display);font-size:12px;background:var(--ink);colo
    status values: done | active | todo | blocked | ask (needs the owner's answer) */
 const T = {
   goal: "A version of Vib-Ribbon playable in VR on PCVR and Meta Quest 3, with responsive, consistent timing and visuals that do justice to the original. Steam Frame and levels from your own music are stretch goals.",
-  updated: "2026-11-19, session 2 (scoring confirmed against the original)",
+  updated: "2026-11-19, session 2 (score marks, time meter and Round sign on screen)",
   approach: "Native VR port. Game logic from the decompilation, assets read from your own disc, emulator used as the reference to test against.",
   asks: [
     {id:"Q15", t:"Try the first playable build, vibplay (commands in the Notes section), and tell me how it looks, sounds and feels.", why:"This is the first time the course, rules, scene and sound run together. Most useful: whether presses feel on time (adjust with [ and ] and tell me the offset you settle on), whether the camera and Vibri look right next to the original, and anything that crashes or looks wrong."},
@@ -192,7 +192,7 @@ const T = {
      exit:"All six songs playable start to finish on desktop, matching the original side by side.",
      tasks:[
       {id:"3.1", s:"active", t:"Vulkan line renderer: thick anti-aliased lines, the original wobble", note:"Renderer shared by vibview and vibplay (apps/common). The wobble (jitter) follows the original's rules and changes at its 50 Hz. Line width defaults to the original's one pixel on 288 lines, scaled to the window."},
-      {id:"3.2", s:"active", t:"Scene: road, Vibri's four forms and animations, meters, messages, font", note:"Done: road pieces with joins and screw lean, Vibri in four forms with every move, evolution meter, game camera with all its clips and transitions. Not yet: score and time meters, Round sign, text."},
+      {id:"3.2", s:"active", t:"Scene: road, Vibri's four forms and animations, meters, messages, font", note:"Done: road pieces with joins and screw lean, Vibri in four forms with every move, evolution meter, game camera with all its clips and transitions, the score shown as circling marks, the time meter and the Round 1/2 sign, each through its own camera as in the original. Not yet: text (font), speed meter."},
       {id:"3.3", s:"active", t:"Audio output slaved to the device clock, with latency compensation. Sound effects.", note:"SDL3 audio; the game clock comes from what the device has played, smoothed. Hit, miss, stray, form-up and round-start sounds from the disc's bank at their real pitch. Latency is estimated; calibrate with [ and ]. Not yet: effect volume following music loudness."},
       {id:"3.4", s:"active", t:"Timestamped gamepad and keyboard input", note:"Each press is judged where the music was at the press's own timestamp, not at the next frame. Keyboard and any SDL gamepad, with the original's button layout."},
       {id:"3.5", s:"todo", t:"Title and menu flow, language select, high scores", note:"Starts with reading the original's menu drawing code in detail (deferred from 1.7)."},

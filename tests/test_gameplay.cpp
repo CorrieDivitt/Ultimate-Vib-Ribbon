@@ -2,6 +2,7 @@
 
 #include "test.h"
 #include "vib/gameplay.h"
+#include "vib/scene.h"
 
 using namespace vib;
 
@@ -203,4 +204,23 @@ TEST(speed_course_speeds_up_with_points_and_clears_at_the_top) {
   CHECK(n >= 210 && n <= 230);  // 210 points bring the top speed, one point per single part
   CHECK(r.g.speed() >= Fixed::from(3.5f));
   CHECK(r.g.fixed_period() == int((std::int64_t(22050) << 16) / Fixed::from(3.5f).raw()));
+}
+
+TEST(score_marks_count_rows_of_shapes) {
+  // The score is the index of its row of marks among all rows of 7 marks whose
+  // shapes (0-14) never rise along the row.
+  CHECK((Hud::marks(0) == std::array<int, 7>{0, 0, 0, 0, 0, 0, 0}));
+  CHECK((Hud::marks(1) == std::array<int, 7>{1, 0, 0, 0, 0, 0, 0}));
+  CHECK((Hud::marks(8) == std::array<int, 7>{2, 0, 0, 0, 0, 0, 0}));
+  CHECK((Hud::marks(116279) == std::array<int, 7>{14, 14, 14, 14, 14, 14, 14}));
+  CHECK((Hud::marks(500000) == Hud::marks(116279)));
+  int last = -1;
+  for (int score = 0; score < 3000; ++score) {  // every row valid, and each one different
+    const auto m = Hud::marks(score);
+    for (std::size_t i = 1; i < m.size(); ++i) CHECK(m[i] <= m[i - 1]);
+    int key = 0;
+    for (int v : m) key = key * 16 + v;
+    CHECK(key != last);
+    last = key;
+  }
 }

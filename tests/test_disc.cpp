@@ -148,3 +148,21 @@ TEST(disc_sces02873_scene_draws) {
   // Vibri stands at road position 1.25: z = (1.25 - 5) x 600.
   CHECK(std::abs(view.target.z - -2250.0f) < 3000.0f);
 }
+
+TEST(disc_sces02873_hud_draws) {
+  const std::string cue = test_cue();
+  if (cue.empty()) SKIP("set VIB_TEST_CUE to your SCES-02873 .cue to run");
+  DiscImage disc = DiscImage::open(path_from_utf8(cue));
+  Iso9660 iso(disc);
+  const Pak game(iso.read("GAME/02_FILES.PAK"));
+  Hud hud(game);
+  hud.start_round(0, true);
+  std::vector<Hud::Layer> layers;
+  Hud::Frame f;
+  f.seconds = 0.02;
+  f.score = 1234;
+  f.time_left = 0.5;
+  hud.draw(f, layers);
+  CHECK(layers.size() == 3);
+  for (const auto& l : layers) CHECK(!l.lines.empty() && l.view.fov_y > 0.1f);
+}

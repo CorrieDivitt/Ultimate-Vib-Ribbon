@@ -14,6 +14,7 @@
 // Output stays on your machine. Never commit it.
 
 #include <cctype>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -255,15 +256,27 @@ int cmd_sounds(const fs::path& cue, const fs::path& out) {
     const auto samples = split_vb(bank, vb);
     std::string folder = name;
     folder = folder.substr(folder.rfind('/') + 1);
+    // Each sample is written at the rate the game plays it: the first tone that uses
+    // it, keyed at tone + 1 against the tone's centre note (44.1 kHz at the centre).
+    std::vector<int> rates(samples.size(), 44100);
+    std::vector<bool> seen(samples.size(), false);
+    for (const VabProgram& p : bank.programs)
+      for (std::size_t t = 0; t < p.tones.size(); ++t) {
+        const VabTone& tone = p.tones[t];
+        if (tone.sample < 1 || std::size_t(tone.sample) > samples.size() || seen[std::size_t(tone.sample - 1)]) continue;
+        const double semitones = double(int(t) + 1 - tone.centre_note) - tone.centre_fine / 128.0;
+        rates[std::size_t(tone.sample - 1)] = int(std::lround(44100.0 * std::pow(2.0, semitones / 12.0)));
+        seen[std::size_t(tone.sample - 1)] = true;
+      }
     for (std::size_t i = 0; i < samples.size(); ++i) {
       const DecodedSample d = decode_spu_adpcm(samples[i]);
       char file[32];
       std::snprintf(file, sizeof file, "%03zu%s.wav", i + 1, d.loop_start >= 0 ? "_loop" : "");
-      write_file(out / path_from_utf8(folder) / file, wav_mono(d.pcm, 44100));
+      write_file(out / path_from_utf8(folder) / file, wav_mono(d.pcm, rates[i]));
     }
     std::printf("  %s: %zu programs, %zu samples\n", name, bank.programs.size(), samples.size());
   }
-  std::printf("Pitch assumption: each sample is written at 44,100 Hz, its rate when keyed at its centre note.\n");
+  std::printf("Each sample is written at the rate the gameplay bank plays it (most effects at 11,025 Hz); the title and kiosk banks use the same rule, unverified.\n");
   return 0;
 }
 

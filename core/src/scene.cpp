@@ -309,7 +309,7 @@ void Scene::play_evo() {
   evo_.set_speed(1);
 }
 
-std::int32_t Scene::jitter_offset(int range) {
+std::int32_t LineBuilder::offset(int range) {
   // An offset in [-range, range), from the shared generator, as the original makes it.
   random_ = next_random(random_);
   if (range <= 0) return 0;
@@ -321,8 +321,8 @@ std::int32_t Scene::jitter_offset(int range) {
   return d;
 }
 
-void Scene::object(const TmdObject& obj, const Xform& xf, int range, std::int32_t z_offset, Vec3f* join,
-                   std::vector<SceneLine>& out) {
+void LineBuilder::object(const TmdObject& obj, const Xform& xf, int range, std::int32_t z_offset, Vec3f* join,
+                         std::vector<SceneLine>& out) {
   auto world = [&](Vec3f v) { return add(xf.m.apply(v), xf.t); };
   if (obj.marker == FaceMarker::DrawOnlyWhenFacing) {
     auto vtx = [&](int i) {
@@ -333,7 +333,7 @@ void Scene::object(const TmdObject& obj, const Xform& xf, int range, std::int32_
   }
   std::vector<Vec3f> work(obj.vertices.size());
   for (std::size_t i = 0; i < obj.vertices.size(); ++i) {
-    const std::int32_t dx = jitter_offset(range), dy = jitter_offset(range), dz = jitter_offset(range);
+    const std::int32_t dx = offset(range), dy = offset(range), dz = offset(range);
     const Vec3s& v = obj.vertices[i];
     work[i] = {float(v.x + dx), float(v.y + dy), float(v.z + z_offset + dz)};
   }
@@ -347,27 +347,28 @@ void Scene::object(const TmdObject& obj, const Xform& xf, int range, std::int32_
   }
 }
 
-void Scene::animated(const TmdModel& model, const ModelAnimation& anim, const Clip& clip, Vec3f origin, int range,
-                     std::vector<SceneLine>& out) {
+void LineBuilder::animated(const TmdModel& model, const ModelAnimation& anim, int frame, Vec3f origin, int range,
+                           std::vector<SceneLine>& out, int swap_first) {
   if (anim.frames.empty()) return;
-  for (const ModelKey& k : anim.frames[std::size_t(clip.frame())]) {
-    if (k.object >= model.objects.size()) continue;
+  for (const ModelKey& k : anim.frames[std::size_t(std::clamp(frame, 0, int(anim.frames.size()) - 1))]) {
+    const std::size_t index = (k.object == 0 && swap_first >= 0) ? std::size_t(swap_first) : std::size_t(k.object);
+    if (index >= model.objects.size()) continue;
     Xform xf;
     const Mat3 rot = k.has_rotation ? rotation_xyz(k.rotation) : Mat3{};
     const Vec3f scale = k.has_scale ? Vec3f{k.scale.x / 4096.0f, k.scale.y / 4096.0f, k.scale.z / 4096.0f} : Vec3f{1, 1, 1};
-    for (int r = 0; r < 3; ++r) {
-      xf.m.m[std::size_t(r)][0] = rot.m[std::size_t(r)][0] * scale.x;
-      xf.m.m[std::size_t(r)][1] = rot.m[std::size_t(r)][1] * scale.y;
-      xf.m.m[std::size_t(r)][2] = rot.m[std::size_t(r)][2] * scale.z;
+    for (std::size_t r = 0; r < 3; ++r) {
+      xf.m.m[r][0] = rot.m[r][0] * scale.x;
+      xf.m.m[r][1] = rot.m[r][1] * scale.y;
+      xf.m.m[r][2] = rot.m[r][2] * scale.z;
     }
     xf.t = add(origin, k.has_position ? Vec3f{float(k.position.x), float(k.position.y), float(k.position.z)} : Vec3f{});
-    object(model.objects[k.object], xf, range, 0, nullptr, out);
+    object(model.objects[index], xf, range, 0, nullptr, out);
   }
 }
 
 void Scene::draw(const Frame& f, std::vector<SceneLine>& out, SceneView& view) {
   out.clear();
-  random_ = f.jitter_seed;
+  lines_.seed(f.jitter_seed);
   if (f.form != form_) {
     // The move goes on in the new form's version.
     const double at = current().clip.position();
@@ -383,16 +384,17 @@ void Scene::draw(const Frame& f, std::vector<SceneLine>& out, SceneView& view) {
   const auto vibri_z = static_cast<float>((offset_ + start_).times(600).integer());
   view_ = camera_.update(f.seconds, {0, 0, vibri_z});
   view = view_;
+  lines_.set_view(view_);
 
   // The road: a far point behind, every piece, a far point ahead, all joined up.
   const Fixed before = -length_.times(4), after = length_.times(5);
   Vec3f join{0, 0, float(before.times(600).integer())};
   const int side = camera_.side();
   auto piece = [&](const TmdObject& obj, Fixed position, bool missed, int lean) {
-    Xform xf;
+    LineBuilder::Xform xf;
     xf.m = lean ? rotation_z(lean) : Mat3{};
     const int range = (missed ? speed_jitter.times(5) : jitter * Fixed::from(1.5)).integer();
-    object(obj, xf, range, (offset_ + position).times(600).integer(), &join, out);
+    lines_.object(obj, xf, range, (offset_ + position).times(600).integer(), &join, out);
   };
   piece(point_.objects.front(), before, false, 0);
   for (const RoadPiece& p : f.road) {
@@ -414,7 +416,7 @@ void Scene::draw(const Frame& f, std::vector<SceneLine>& out, SceneView& view) {
   const Fixed vibri_jitter = Fixed() < f.shake ? jitter + f.shake * jitter.times(8) : jitter;
   Move& mv = current();
   mv.clip.set_speed((f.speed * Fixed::from(0.5)).to_double());
-  animated(forms_[std::size_t(form_)], mv.anim, mv.clip, {0, 0, vibri_z}, vibri_jitter.integer(), out);
+  lines_.animated(forms_[std::size_t(form_)], mv.anim, mv.clip.frame(), {0, 0, vibri_z}, vibri_jitter.integer(), out);
   mv.clip.advance(f.seconds);
   if (mv.clip.finished()) {  // on to running
     alternate_ = false;
@@ -423,11 +425,115 @@ void Scene::draw(const Frame& f, std::vector<SceneLine>& out, SceneView& view) {
   }
 
   // The evolution meter rides with her.
-  animated(evo_model_, evo_anim_, evo_, {0, 0, vibri_z}, evo_jitter_, out);
+  lines_.animated(evo_model_, evo_anim_, evo_.frame(), {0, 0, vibri_z}, evo_jitter_, out);
   evo_.advance(f.seconds);
   if (evo_.speed() > 0 && kEvoEnds[form_] < evo_.position()) {
     evo_.set_speed(0);
     evo_.seek(evo_frame_);
+  }
+}
+
+// ---------------------------------------------------------------- Hud
+
+namespace {
+// For mark i (0 = first) and shape n: how many rows the marks from i on make with
+// shapes below n. Combinations with repetition; built rather than tabulated.
+std::array<std::array<std::uint32_t, 16>, 7> mark_rows() {
+  std::array<std::array<std::uint32_t, 16>, 7> rows{};
+  for (int i = 6; i >= 0; --i)
+    for (int n = 0; n < 16; ++n) {
+      // rows[i][n] = C(n + (7 - i), 7 - i): rows of 7 - i marks, each at most n
+      std::uint64_t c = 1;
+      const int k = 7 - i;
+      for (int j = 1; j <= k; ++j) c = c * std::uint64_t(n + j) / std::uint64_t(j);
+      rows[std::size_t(i)][std::size_t(n)] = static_cast<std::uint32_t>(c);
+    }
+  return rows;
+}
+
+SceneView fixed_view(const CameraAnimation& cam) {
+  SceneView v;
+  if (cam.keys.empty()) return v;
+  const CameraKey& k = cam.keys.front();
+  v.eye = {float(k.eye.x), float(k.eye.y), float(k.eye.z)};
+  v.target = {float(k.target.x), float(k.target.y), float(k.target.z)};
+  v.fov_y = float(k.fov * kTau / 4096.0);
+  return v;
+}
+}  // namespace
+
+std::array<int, 7> Hud::marks(int score) {
+  static const auto rows = mark_rows();
+  std::uint32_t left = std::uint32_t(std::clamp(score, 0, kMaxScore));
+  std::array<int, 7> out{};
+  for (std::size_t i = 0; i < 7; ++i) {
+    int shape = 0;
+    while (shape < 16 && left >= rows[i][std::size_t(shape)]) ++shape;
+    if (shape) left -= rows[i][std::size_t(shape - 1)];
+    out[i] = shape;
+  }
+  return out;
+}
+
+Hud::Hud(const Pak& pak, const char* language) {
+  mark_model_ = parse_tmd(pak.view("FONT/MARK.TMD"));
+  score_anim_ = parse_anm(pak.view("METERS/SCORE.ANM"));
+  score_ = Clip(int(score_anim_.frames.size()), score_anim_.rate, true);
+  time_model_ = parse_tmd(pak.view("METERS/TIME.TMD"));
+  time_anim_ = parse_anm(pak.view("METERS/TIME.ANM"));
+  time_camera_ = parse_anc(pak.view("METERS/TIME.ANC"));
+  time_ = Clip(int(time_anim_.frames.size()), time_anim_.rate, false);
+  sign_model_ = parse_tmd(pak.view(std::string("MESSAGE/") + language + "ROUND.TMD"));
+  sign_anims_[0] = parse_anm(pak.view("MESSAGE/ROUND01.ANM"));
+  sign_anims_[1] = parse_anm(pak.view("MESSAGE/ROUND02.ANM"));
+  sign_camera_ = parse_anc(pak.view("MESSAGE/ROUND.ANC"));
+}
+
+void Hud::start_round(int index, bool show_sign) {
+  sign_index_ = std::clamp(index, 0, 1);
+  show_sign_ = show_sign;
+  sign_ = Clip(int(sign_anims_[sign_index_].frames.size()), sign_anims_[sign_index_].rate, false);
+  sign_.rewind();
+}
+
+void Hud::draw(const Frame& f, std::vector<Layer>& layers) {
+  layers.clear();
+  lines_.seed(f.jitter_seed);
+  if (f.show_score) {
+    // The marks ride one looping clip, 20 frames apart, the first one moving it on.
+    // It runs backwards, faster as the run of hits grows: 1 + 9 x (run / 18)^2.
+    Layer l;
+    l.view.eye = {0, 0, -2906};
+    l.view.target = {0, 0, 0};
+    l.view.fov_y = float(296 * kTau / 4096.0);
+    lines_.set_view(l.view);
+    const auto m = marks(f.score);
+    const double run = f.combo / 18.0;
+    score_.set_speed(-(1.0 + 9.0 * run * run));
+    const double start = score_.position();
+    const int frames = score_.frames();
+    for (std::size_t i = 0; i < m.size(); ++i) {
+      const double at = std::fmod(start + 20.0 * double(i), double(frames));
+      lines_.animated(mark_model_, score_anim_, static_cast<int>(at), {}, 4, l.lines, m[i]);
+    }
+    score_.advance(f.seconds);
+    layers.push_back(std::move(l));
+  }
+  if (f.show_time) {
+    Layer l;
+    l.view = fixed_view(time_camera_);
+    lines_.set_view(l.view);
+    const double gone = std::clamp(1.0 - f.time_left, 0.0, 1.0);
+    lines_.animated(time_model_, time_anim_, static_cast<int>(gone * (time_.frames() - 1)), {}, 3, l.lines);
+    layers.push_back(std::move(l));
+  }
+  if (show_sign_) {
+    Layer l;
+    l.view = fixed_view(sign_camera_);
+    lines_.set_view(l.view);
+    lines_.animated(sign_model_, sign_anims_[sign_index_], sign_.frame(), {}, 3, l.lines);
+    sign_.advance(f.seconds);
+    layers.push_back(std::move(l));
   }
 }
 

@@ -66,6 +66,13 @@ struct LineInstance {
   float colour[4];
 };
 
+// Lines seen through one camera. Layers are drawn in order, later ones on top.
+struct Layer {
+  const std::vector<LineInstance>* lines = nullptr;
+  Mat4 view;
+  float fov_y = 0.8f;
+};
+
 class Renderer {
  public:
   explicit Renderer(SDL_Window* window);
@@ -79,6 +86,7 @@ class Renderer {
   float aspect() const;
   int height() const;  // pixels
   void draw(const std::vector<LineInstance>& lines, const Mat4& view, float fov_y, float line_width);
+  void draw(const std::vector<Layer>& layers, float line_width);
 
  private:
   class Impl;

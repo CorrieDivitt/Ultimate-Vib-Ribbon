@@ -7,6 +7,7 @@
 //
 // Coordinates are the PlayStation's: X right, Y down, Z along the road.
 
+#include <array>
 #include <cstdint>
 #include <vector>
 
@@ -55,6 +56,72 @@ class Clip {
   int frames_ = 0;
   double rate_ = 60, speed_ = 1, position_ = 0.5;
   bool loop_ = false, finished_ = false;
+};
+
+// Turns posed line models into world-space lines with the original's jitter.
+// One shared generator, reseeded by the caller (the original's runs on forever;
+// reseeding at its 50 Hz gives the same look).
+class LineBuilder {
+ public:
+  struct Xform {
+    Mat3 m;
+    Vec3f t;
+  };
+  void seed(std::uint32_t s) { random_ = s; }
+  void set_view(const SceneView& v) { view_ = v; }
+  // One object: each vertex moved by a random offset in [-range, range) on each
+  // axis, then `z_offset` added to z, then `xf` applied. With `join`, a line from
+  // that point (in this object's local space) to its first vertex is added, and
+  // `join` becomes its last vertex. Objects with a facing marker that faces away
+  // from the view are left out.
+  void object(const TmdObject& obj, const Xform& xf, int range, std::int32_t z_offset, Vec3f* join, std::vector<SceneLine>& out);
+  // Every object keyed in `frame` of `anim`, placed at `origin`. `swap_first`: draw
+  // this object wherever the clip asks for object 0 (the score marks); -1 for none.
+  void animated(const TmdModel& model, const ModelAnimation& anim, int frame, Vec3f origin, int range, std::vector<SceneLine>& out,
+                int swap_first = -1);
+
+ private:
+  std::int32_t offset(int range);
+  std::uint32_t random_ = 0;
+  SceneView view_;
+};
+
+// The overlays drawn over the scene, each through its own fixed camera: the score
+// as a row of circling marks, the time meter, and the "Round 1/2" sign.
+class Hud {
+ public:
+  // `language`: the archive's language prefix for text models, "02_" for English.
+  explicit Hud(const Pak& game_pak, const char* language = "02_");
+
+  // A round of the game's own courses begins; `index` 0 or 1 picks the sign.
+  void start_round(int index, bool show_sign);
+
+  struct Frame {
+    double seconds = 0;
+    std::uint32_t jitter_seed = 0;
+    int score = 0;          // shown as marks; capped at 116,279
+    int combo = 0;          // hits toward the next form: the marks circle faster
+    double time_left = 1;   // 1 at the start of the round, 0 at its end
+    bool show_score = true, show_time = true;
+  };
+  struct Layer {
+    std::vector<SceneLine> lines;
+    SceneView view;
+  };
+  void draw(const Frame& f, std::vector<Layer>& layers);
+
+  // The seven mark shapes (0-14, never rising along the row) for a score.
+  static std::array<int, 7> marks(int score);
+  static constexpr int kMaxScore = 116279;
+
+ private:
+  LineBuilder lines_;
+  TmdModel mark_model_, time_model_, sign_model_;
+  ModelAnimation score_anim_, time_anim_, sign_anims_[2];
+  CameraAnimation time_camera_, sign_camera_;
+  Clip score_, time_, sign_;
+  int sign_index_ = 0;
+  bool show_sign_ = false;
 };
 
 // The game camera: a camera clip played some number of times, then a transition
@@ -132,16 +199,8 @@ class Scene {
     ModelAnimation anim;
     Clip clip;
   };
-  struct Xform {
-    Mat3 m;
-    Vec3f t;
-  };
   Move& current() { return moves_[std::size_t(form_)][std::size_t(move_)][alternate_ ? 1 : 0]; }
   const Move& current() const { return moves_[std::size_t(form_)][std::size_t(move_)][alternate_ ? 1 : 0]; }
-  void object(const TmdObject& obj, const Xform& xf, int range, std::int32_t z_offset, Vec3f* join, std::vector<SceneLine>& out);
-  void animated(const TmdModel& model, const ModelAnimation& anim, const Clip& clip, Vec3f origin, int range,
-                std::vector<SceneLine>& out);
-  std::int32_t jitter_offset(int range);
 
   Fixed length_, start_, offset_;
   TmdModel road_, point_, evo_model_;
@@ -153,7 +212,7 @@ class Scene {
   GameCamera camera_;
   int form_ = 0, move_ = kRunning;
   bool alternate_ = false;
-  std::uint32_t random_ = 0;
+  LineBuilder lines_;
   SceneView view_;
 };
 

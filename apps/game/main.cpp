@@ -128,6 +128,7 @@ struct Session {
   DiscImage& disc;
   const CourseScript& script;
   Scene& scene;
+  Hud& hud;
   vibg::Audio& audio;
   Effects& fx;
   SDL_Window* window;
@@ -165,6 +166,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   setup.track_index = track_index;
   game.start(setup);
   s.scene.reset(true, false);
+  s.hud.start_round(track_index, !s.opt.song);  // the "Round 1/2" sign belongs to the two-song courses
 
   std::printf("\nSong %d: %d s, %s course (lead %d, frame phase %.0f)\n", song, total / kSampleRate,
               s.opt.fixed ? "fixed" : "original-style", timing.lead, double(timing.frame_phase_q16) / 65536.0);
@@ -180,6 +182,8 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   std::vector<PressEvent> presses;
   std::vector<SceneLine> scene_lines;
   std::vector<vibr::LineInstance> lines;
+  std::vector<Hud::Layer> hud_layers;
+  std::vector<std::vector<vibr::LineInstance>> hud_lines;
   Result result = Result::Clear;
 
   auto handle = [&](const std::vector<GameEvent>& events) {
@@ -317,13 +321,34 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     f.stage = game.stage();
     SceneView view;
     s.scene.draw(f, scene_lines, view);
-    lines.clear();
-    for (const SceneLine& l : scene_lines)
-      lines.push_back({{l.a.x, l.a.y, l.a.z}, {l.b.x, l.b.y, l.b.z}, {l.colour.r / 255.0f, l.colour.g / 255.0f, l.colour.b / 255.0f, 1.0f}});
-    const vibr::Mat4 view_matrix = vibr::look_at({view.eye.x, view.eye.y, view.eye.z}, {view.target.x, view.target.y, view.target.z}, {0, -1, 0});
+    auto convert = [](const std::vector<SceneLine>& in, std::vector<vibr::LineInstance>& dst) {
+      dst.clear();
+      for (const SceneLine& l : in)
+        dst.push_back({{l.a.x, l.a.y, l.a.z}, {l.b.x, l.b.y, l.b.z}, {l.colour.r / 255.0f, l.colour.g / 255.0f, l.colour.b / 255.0f, 1.0f}});
+    };
+    auto matrix = [](const SceneView& v) {
+      return vibr::look_at({v.eye.x, v.eye.y, v.eye.z}, {v.target.x, v.target.y, v.target.z}, {0, -1, 0});
+    };
+    convert(scene_lines, lines);
+    std::vector<vibr::Layer> layers{{&lines, matrix(view), view.fov_y}};
+
+    // The meters and the sign, each through its own camera, over the scene.
+    Hud::Frame h;
+    h.seconds = dt;
+    h.jitter_seed = next_random(f.jitter_seed);
+    h.score = game.score();
+    h.combo = game.combo();
+    const int seconds = heard >= 0 ? heard / kSampleRate : 0;  // whole seconds, as the original counts
+    h.time_left = 1.0 - double(seconds) / std::max(1, setup.course_seconds);
+    s.hud.draw(h, hud_layers);
+    hud_lines.resize(hud_layers.size());
+    for (std::size_t i = 0; i < hud_layers.size(); ++i) {
+      convert(hud_layers[i].lines, hud_lines[i]);
+      layers.push_back({&hud_lines[i], matrix(hud_layers[i].view), hud_layers[i].view.fov_y});
+    }
     // The original's lines are one pixel on a 288-line picture.
     const float width = float(s.line_width * std::max(1, s.renderer.height()) / 288.0);
-    s.renderer.draw(lines, view_matrix, view.fov_y, width);
+    s.renderer.draw(layers, width);
 
     title_timer -= dt;
     if (title_timer <= 0) {
@@ -385,6 +410,7 @@ int run(int argc, char** argv) {
   const Pak pak(iso.read("GAME/02_FILES.PAK"));
   const CourseScript script = parse_course_script(pak.view("SCRIPT/SYSTEM3.FSL"));
   Scene scene(pak);
+  Hud hud(pak);
 
   if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD)) throw std::runtime_error(std::string("SDL_Init: ") + SDL_GetError());
   SDL_Window* window = SDL_CreateWindow("Vib-Ribbon", 1200, 900, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
@@ -396,7 +422,7 @@ int run(int argc, char** argv) {
     audio.set_volumes(opt.music, opt.sfx);
     Effects fx(iso, audio);
     std::printf("GPU: %s\nCourses: %s\n", renderer.gpu_name(), opt.fixed ? "fixed (the same every play)" : "vary from play to play, like the original");
-    Session s{opt, disc, script, scene, audio, fx, window, renderer, opt.line_width, {}, {}};
+    Session s{opt, disc, script, scene, hud, audio, fx, window, renderer, opt.line_width, {}, {}};
 
     std::vector<int> songs;
     if (opt.song) songs = {opt.song};

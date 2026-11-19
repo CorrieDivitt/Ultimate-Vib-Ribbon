@@ -97,7 +97,7 @@ class Renderer::Impl {
   int height() const { return int(extent_.height); }
   void request_resize() { resize_ = true; }
 
-  void draw(const std::vector<LineInstance>& lines, const Mat4& view, float fov_y, float line_width) {
+  void draw(const std::vector<Layer>& layers, float line_width) {
     if (resize_ || extent_.width == 0) {
       vkDeviceWaitIdle(device_);
       create_swapchain();
@@ -111,16 +111,17 @@ class Renderer::Impl {
     if (r != VK_SUBOPTIMAL_KHR) check(r, "vkAcquireNextImageKHR");
     vkResetFences(device_, 1, &frame_fence_);
 
-    const std::uint32_t line_count = std::min<std::uint32_t>(std::uint32_t(lines.size()), kMaxLines);
-    if (line_count) std::memcpy(lines_.mapped, lines.data(), sizeof(LineInstance) * line_count);
-
-    PushConstants pc;
+    // Every layer's lines go into the one buffer, back to back.
+    std::vector<std::uint32_t> firsts, counts;
+    std::uint32_t used = 0;
+    for (const Layer& layer : layers) {
+      const std::uint32_t n = layer.lines ? std::min<std::uint32_t>(std::uint32_t(layer.lines->size()), kMaxLines - used) : 0;
+      if (n) std::memcpy(static_cast<LineInstance*>(lines_.mapped) + used, layer.lines->data(), sizeof(LineInstance) * n);
+      firsts.push_back(used);
+      counts.push_back(n);
+      used += n;
+    }
     const float aspect = float(extent_.width) / float(extent_.height);
-    pc.mvp = mul(perspective(fov_y, aspect, 10.0f, 100000.0f), view);
-    pc.viewport[0] = float(extent_.width);
-    pc.viewport[1] = float(extent_.height);
-    pc.width = line_width;
-    pc.feather = 0.75f;
 
     vkResetCommandBuffer(cmd_, 0);
     VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
@@ -139,12 +140,19 @@ class Renderer::Impl {
     const VkRect2D scissor{{0, 0}, extent_};
     vkCmdSetViewport(cmd_, 0, 1, &vp);
     vkCmdSetScissor(cmd_, 0, 1, &scissor);
-    vkCmdPushConstants(cmd_, layout_, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof pc, &pc);
     const VkDeviceSize zero = 0;
-    if (line_count) {
-      vkCmdBindPipeline(cmd_, VK_PIPELINE_BIND_POINT_GRAPHICS, line_pipeline_);
-      vkCmdBindVertexBuffers(cmd_, 0, 1, &lines_.buffer, &zero);
-      vkCmdDraw(cmd_, 6, line_count, 0, 0);
+    vkCmdBindPipeline(cmd_, VK_PIPELINE_BIND_POINT_GRAPHICS, line_pipeline_);
+    vkCmdBindVertexBuffers(cmd_, 0, 1, &lines_.buffer, &zero);
+    for (std::size_t i = 0; i < layers.size(); ++i) {
+      if (!counts[i]) continue;
+      PushConstants pc;
+      pc.mvp = mul(perspective(layers[i].fov_y, aspect, 10.0f, 100000.0f), layers[i].view);
+      pc.viewport[0] = float(extent_.width);
+      pc.viewport[1] = float(extent_.height);
+      pc.width = line_width;
+      pc.feather = 0.75f;
+      vkCmdPushConstants(cmd_, layout_, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof pc, &pc);
+      vkCmdDraw(cmd_, 6, counts[i], 0, firsts[i]);
     }
     vkCmdEndRenderPass(cmd_);
     check(vkEndCommandBuffer(cmd_), "vkEndCommandBuffer");
@@ -575,7 +583,8 @@ void Renderer::request_resize() { impl_->request_resize(); }
 float Renderer::aspect() const { return impl_->aspect(); }
 int Renderer::height() const { return impl_->height(); }
 void Renderer::draw(const std::vector<LineInstance>& lines, const Mat4& view, float fov_y, float line_width) {
-  impl_->draw(lines, view, fov_y, line_width);
+  impl_->draw({Layer{&lines, view, fov_y}}, line_width);
 }
+void Renderer::draw(const std::vector<Layer>& layers, float line_width) { impl_->draw(layers, line_width); }
 
 }  // namespace vibr
