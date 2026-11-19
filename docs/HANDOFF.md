@@ -11,6 +11,8 @@ Confidence labels used below: **[measured]** = computed this session from the di
 
 ## 1. Where things stand
 
+**Latest (2026-11-19):** Phase 2 under way. The course generator reproduces Polaroid exactly; see section 2b. Tasks 2.1 and 2.2 done, 2.3 and 2.5 active, 1.6 active (owner recording the remaining songs). Next: compare songs 2 to 6 as recordings arrive, then 2.4 gameplay rules.
+
 Phase 0 is signed off. Phase 1 is under way: 1.1 and 1.3 done, 1.2 waits only on the Vulkan SDK install. 1.4 is done: TMD, ANM, ANC, FSL and VH/VB loaders plus posing are in vibcore, and build on the owner's PC. TIM was dropped (D10: the only images are the Sony and NanaOn-Sha logos). 1.5 is in progress: `apps/viewer` (vibview) is written and compiles in Windows CI (SDL3 3.2.26 via FetchContent, Vulkan 1.0, shaders compiled by glslc with -mfmt=c into .inc files; CI installs Vulkan SDK 1.4.309.0 with jakoch/install-vulkan-sdk-action). It has never been run: the assistant's workspace has no Vulkan and may not execute downloaded shader-compiler binaries, so shaders were first validated by CI's glslc. First run on the owner's PC (2026-11-18) worked: RTX 4090 selected, no validation messages, Vibri upright with limbs attached, smooth lines, animation speed looks sensible with the header rate treated as frames per second. One open observation: from an oblique front view one eye appears edge-on and apart from the head. The owner thinks it is the original's look; unverified. The game's own camera looks from the side (road pieces lie in the YZ plane) and hides back faces, so check eye placement against the emulator in task 1.6 before changing anything. Task 1.5 is marked done. Renderer design: lines are instanced screen-space quads with a feathered edge and a small depth pull toward the camera; fills draw first with depth write, no culling (the original culls back faces, e.g. Vibri's eyes; revisit); validation layer is enabled when present and prints `[vulkan]` lines to stderr; prefers the discrete GPU. Gotcha seen in session 2: a new Developer PowerShell starts 32-bit; building from it compiles but fails at the link step. Run Launch-VsDevShell.ps1 -Arch amd64 -HostArch amd64 first. Task 1.2 is done: Vulkan SDK 1.4.363.1 at C:\VulkanSDK confirmed working (VULKAN_SDK set, glslc from shaderc v2026.4).
 
 Owner decisions, 2026-11-18:
@@ -86,6 +88,27 @@ Corrections it forced, already applied in code:
 Licence: MIT for our code (owner's choice), `LICENSE` in the repo root.
 
 How the reading was done: revib cloned to a temporary folder outside the repo, read, and described in our own words. Nothing was copied.
+
+## 2b. Course generator and first comparison with the original (session 2, 2026-11-19) [measured]
+
+Phase 2 has started. `core/include/vib/course_gen.h` and `core/src/course_gen.cpp` implement SPEC sections 1 to 3: `make_blocks` (44.1 kHz stereo to 22.05 kHz mono blocks of 128), `CourseGenerator` (onset detection, peak picking, course script stepping, selectors, tempo effect, the random generator). `vibtool course <cue> <round> [cue interval]` prints the events as JSON lines. `tools/reference/compare_events.py ours.jsonl recording.jsonl [n]` compares with a recording (n = which round inside the file, by order of first appearance).
+
+Results for Polaroid (round 1, CD track 2), our code fed straight from the disc image, script consulted every block:
+
+- Against `polaroid.jsonl`: 75 of 75 obstacles, every time identical after a constant shift of 168 samples, every type and tempo scale identical. Part lengths differ by up to 4 samples on 28 of 75, only where the period is ramping.
+- Against the second run (the owner saved it in `bronze.jsonl`, script_start 4545032, 65 parts when read, still recording): all types identical; shift 56 samples; times exact on 32, within 2 samples on almost all, outliers of 6, 8, 25 and 124 samples.
+
+What this settles:
+
+- Decoded CD samples give the same analysis as the original's sound-chip capture. No resampling or filtering is in the path. Risk R2 is largely retired.
+- The original is not repeatable to the sample between runs: the start shift differs (168 vs 56) and individual onsets wobble. The likely cause is that the capture buffer and CD playback are not locked to each other; unverified. Our generator is fully deterministic, which is what the project goal wants. Golden comparisons must allow a tolerance: the script uses 256 samples and requires all types to match.
+- The length differences come from the original fetching the script cue once per video frame while we fetch per block. With `cue_interval_blocks` 3 or 4 the count of exact lengths rises from 47 to 54 but one onset time changes at 4. Per-block stays the default; a length error of 4 samples in 13,000 is not perceptible.
+- Stream positions do not restart per song: `script_start` was 34184 in the first session and 4545032 in the second, so always subtract it.
+- `bronze.jsonl` begins with two parts under script_start 3723144 that match none of the six songs. Probably the recorder attached while something else was playing (tutorial or title demo); not investigated.
+
+Not yet exercised by any comparison: tempo effect patterns, distribution (weighted random) selectors with the script seed, medley tracks. Polaroid uses fixed patterns only. Songs 2 to 6 will show them.
+
+Tests: `tests/test_course_gen.cpp` (synthetic bursts, no game data) and `disc_sces02873_first_song_course` in test_disc.cpp (needs VIB_TEST_CUE). 26 tests in all.
 
 ## 2a. Format findings from the loaders (session 2) [measured]
 
@@ -184,7 +207,7 @@ Technical, to settle in Phase 1:
 
 - Exact look-ahead delay between analysis and heard audio.
 - Hit-window widths and the scoring table.
-- Whether analysis on decoded file samples matches analysis on sound-chip capture, sample for sample.
+- Whether analysis on decoded file samples matches analysis on sound-chip capture, sample for sample. Answered: yes for Polaroid (section 2b).
 - Which audio track is which song, and what the seventh track is.
 - Whether the ANM and ANC header field is frames per second.
 - Differences between the PAL build and the Japanese NTSC build.

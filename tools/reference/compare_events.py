@@ -13,7 +13,10 @@ import sys
 
 
 def load(path):
-    return [json.loads(line) for line in open(path, encoding="utf-8") if line.strip()]
+    data = open(path, "rb").read()
+    # Windows PowerShell's ">" writes UTF-16 with a byte-order mark.
+    text = data.decode("utf-16") if data[:2] in (b"\xff\xfe", b"\xfe\xff") else data.decode("utf-8-sig")
+    return [json.loads(line) for line in text.splitlines() if line.strip()]
 
 
 def main():
