@@ -146,7 +146,7 @@ button.copy{font-family:var(--display);font-size:12px;background:var(--ink);colo
    status values: done | active | todo | blocked | ask (needs the owner's answer) */
 const T = {
   goal: "A version of Vib-Ribbon playable in VR on PCVR and Meta Quest 3, with responsive, consistent timing and visuals that do justice to the original. Steam Frame and levels from your own music are stretch goals.",
-  updated: "2026-11-19, session 2 (high scores and options saved)",
+  updated: "2026-11-19, session 2 (menus: main, course select, options, high scores)",
   approach: "Native VR port. Game logic from the decompilation, assets read from your own disc, emulator used as the reference to test against.",
   asks: [
     {id:"Q13", t:"When you want to try fixed courses: open save.txt (path printed when vibplay starts), change fixed_courses 0 to 1, and play. Or add --fixed for one run.", why:"Your decision: courses vary from play to play like the original by default; the same-every-time courses are an option for you to judge by playing."},
@@ -194,7 +194,7 @@ const T = {
       {id:"3.2", s:"active", t:"Scene: road, Vibri's four forms and animations, meters, messages, font", note:"Done: road pieces with joins and screw lean, Vibri in four forms with every move, evolution meter, game camera with all its clips and transitions, the score shown as circling marks, the time meter and the Round 1/2 sign, each through its own camera as in the original. Not yet: text (font), speed meter."},
       {id:"3.3", s:"active", t:"Audio output slaved to the device clock, with latency compensation. Sound effects.", note:"SDL3 audio; the game clock comes from what the device has played, smoothed. Hit, miss, stray, form-up and round-start sounds from the disc's bank at their real pitch. Latency is estimated; calibrate with [ and ]. Not yet: effect volume following music loudness."},
       {id:"3.4", s:"active", t:"Timestamped gamepad and keyboard input", note:"Each press is judged where the music was at the press's own timestamp, not at the next frame. Keyboard and any SDL gamepad, with the original's button layout."},
-      {id:"3.5", s:"todo", t:"Title and menu flow, language select, high scores", note:"Starts with reading the original's menu drawing code in detail (deferred from 1.7)."},
+      {id:"3.5", s:"active", t:"Title and menu flow, language select, high scores", note:"First part in: vibplay now opens on the original's menus, drawn from the disc's title models with Vibri lying or sitting at the side: main menu, bronze/silver/gold course select, options (sound effects, vibration, saved) and the high-score tables, with the original's fades, camera moves and cursor behaviour. After a high score the table shows with the new place blinking. Not yet: menu music and Vibri's voice, the CLEAR and AGAIN result sequences, the title intro, the audio-CD and speed menus."},
       {id:"3.6", s:"todo", t:"Side-by-side comparison with the emulator and measured timing"}
      ]},
     {n:4, name:"PCVR", goal:"The full game in a headset over OpenXR.",
@@ -254,8 +254,8 @@ const T = {
     {id:"R7", t:"PAL disc. Video ran at 50 Hz on the original.", why:"Low risk because gameplay follows the audio clock."}
   ],
   commands: [
-    {state:"Common", what:"Play the game on your monitor (the bronze course; use silver, gold or --song 1 to 6 instead). Keys: Block = Left arrow or A, Pit = Up/Down arrow or W/S, Loop = Right arrow or D, Wave = Space or J. Gamepad: L1/L2, d-pad up/down, R1/R2, Triangle/Cross. [ and ] move the audio offset by 5 ms, - and = change line width, Esc quits. Add --fixed for the same course every play.",
-     code:'cd F:\\VibRibbonVR\\Vib-Ribbon-VR\ngit pull\ncmake --build --preset dev\n.\\build\\dev\\apps\\game\\vibplay.exe "F:\\VibRibbonVR\\research\\Gamefiles\\Vib-Ribbon (Europe) (En,Fr,De,Es,It).cue" bronze'},
+    {state:"Common", what:"Play the game on your monitor. It opens on the original's menus: arrows or d-pad to move, Enter, Space or Cross to choose, Esc, Backspace or Circle to go back. In a course: Block = Left arrow or A, Pit = Up/Down arrow or W/S, Loop = Right arrow or D, Wave = Space or J; gamepad L1/L2, d-pad, R1/R2, Triangle/Cross. [ and ] move the audio offset, - and = change line width, Esc goes back to the menus. Add bronze, silver, gold or --song 1 to 6 to skip the menus.",
+     code:'cd F:\\VibRibbonVR\\Vib-Ribbon-VR\ngit pull\ncmake --build --preset dev\n.\\build\\dev\\apps\\game\\vibplay.exe "F:\\VibRibbonVR\\research\\Gamefiles\\Vib-Ribbon (Europe) (En,Fr,De,Es,It).cue"'},
     {state:"Upcoming (Q14)", what:"Record a course with scoring logged (DuckStation running with the GDB server, as before). Ctrl+C when the course is over. Then check the recording against our scoring rules; it ends with SCORING MATCHES or lists the differences.",
      code:'cd F:\\VibRibbonVR\\Vib-Ribbon-VR\ngit pull\npython tools\\reference\\capture_events.py --scores --exe F:\\VibRibbonVR\\research\\extracted\\disc\\MAIN_G.EXE --out F:\\VibRibbonVR\\research\\reference\\scores.jsonl\npython tools\\reference\\check_scores.py F:\\VibRibbonVR\\research\\reference\\scores.jsonl'},
     {state:"Common", what:"Generate a song's course the way the original would on one particular play. Change the last number to get another play; the same number always gives the same course. Add the same two words to the play command to have the perfect player run that course.",
