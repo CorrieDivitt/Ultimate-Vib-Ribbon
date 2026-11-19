@@ -183,7 +183,8 @@ TEST(disc_sces02873_menus_flow) {
     for (int i = 0; i < n; ++i) {
       const R r = t.tick(i == 0 ? press : TitleScreens::Input{});
       if (seen == R::None) seen = r;
-      if (t.screen() != S::None && t.screen() != S::Done) {
+      // (A screen returns its result before drawing that frame, as the original does.)
+      if (seen == R::None && t.screen() != S::None && t.screen() != S::Done) {
         CHECK(!t.layers().empty());
         std::size_t lines = 0;
         for (const auto& l : t.layers()) lines += l.lines.size();
@@ -234,6 +235,18 @@ TEST(disc_sces02873_menus_flow) {
   t.go_to(S::Again);
   run(40, {});
   CHECK(run(200, confirm) == R::ResultsDone);
+  // Cleared: without a medal Vibri comments; with one, the medal steps play out.
+  t.results_rank = 0;
+  t.results_score = 900;
+  t.results_bonus = 100;
+  t.go_to(S::Clear);
+  CHECK(run(1200, {}) == R::ResultsDone);
+  t.results_course = 2;
+  t.results_score = 5000;
+  t.results_bonus = 1000;
+  t.results_form = 0;
+  t.go_to(S::Clear);
+  CHECK(run(3000, {}) == R::ResultsDone);
   t.go_to(S::AgainSelect);
   run(40, {});
   CHECK(run(5, confirm) == R::PlayAgain);

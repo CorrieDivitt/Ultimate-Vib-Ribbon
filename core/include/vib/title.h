@@ -23,7 +23,7 @@ namespace vib {
 
 class TitleScreens {
  public:
-  enum class Screen { None, Main, PsjModeSelect, Option, PsjHiscore, Results, Again, AgainSelect, Done };
+  enum class Screen { None, Main, PsjModeSelect, Option, PsjHiscore, Results, Clear, Again, AgainSelect, Done };
   enum class Result {
     None,
     PsjModes, UnknownModes, Options, Leave,          // main
@@ -39,6 +39,7 @@ class TitleScreens {
     bool up = false, down = false, left = false, right = false, confirm = false, cancel = false;
     bool held_up = false, held_down = false, held_left = false, held_right = false;
     bool voices_playing = false;  // the voice sequence is still sounding (Vibri's mouth moves until it ends)
+    bool music_playing = false;   // the music sequence is still sounding
   };
 
   // Sounds the screens ask for, on two sequences as in the original: the music,
@@ -56,6 +57,14 @@ class TitleScreens {
   static constexpr double kFrameRate = 49.759;
 
   explicit TitleScreens(const Pak& game_pak, const char* language = "02_");
+
+  // The score said in Japanese, as the original builds it from syllables: the
+  // sounds in order, and the same laid out on a beat grid with rests first.
+  struct SpokenNumber {
+    std::vector<int> clips, timeline;
+    int tempo = 0;  // 0, 1 or 2: the line lasts 6, 14 or 22 beats
+  };
+  static SpokenNumber say_number(int number, int form);
 
   // Fades to `screen`; Screen::None switches at once with no fade.
   void go_to(Screen screen);
@@ -77,6 +86,9 @@ class TitleScreens {
   // scores (1-3, 0 for none) and the score. Screen::Again is game over: Vibri's
   // reaction, the score, then the high scores if it made them.
   int results_course = 0, results_rank = 1, results_score = 0;
+  // Screen::Clear (a course cleared): the last song's score and end bonus, and
+  // Vibri's form at the end (0 best to 3), which picks the comment's sign.
+  int results_bonus = 0, results_form = 1;
 
  private:
   enum class Vibri { Lying, LyingSpeaking, Sitting, SittingSpeaking, Standing, StandingSpeaking, Paused, Hidden };
@@ -129,6 +141,8 @@ class TitleScreens {
   Result options(const Input& in);
   Result psj_hiscore(const Input& in, int frame);
   Result again(const Input& in);
+  Result clear(const Input& in);
+
   Result again_select(const Input& in);
 
   LineBuilder lines_;
@@ -154,6 +168,15 @@ class TitleScreens {
   std::array<int, 7> gov_ = {};           // her reactions: 03a 03b 03c 05 06a 06b 07
   std::array<int, 2> again_steps_ = {};
   int again_close_ = 0;
+  // CLEAR
+  int m_song_ = 0, clear_sign_ = 0, clear_title_ = 0, clear_bonus_vibri_ = 0;
+  std::array<int, 6> clr_ = {};        // Vibri: v04 (waits, loops), v05 (counts), v12 v14 v16 v15 (comments)
+  std::array<int, 10> song_ = {};      // the medal steps, Vibri v01 ... v08
+  int song_medal_ = 0, song_ten_ = 0;  // the medal and its score
+  std::array<int, 10> song_cams_ = {}; // the medal steps' cameras
+  int entering_frame_ = 0, repeat_ = 0, step_ = 0, medal_ = 2, pass_score_ = 2500;
+  bool medal_shown_ = false;
+  SpokenNumber spoken_;
   // cameras
   int cam_left_ = 0, cam_right_ = 0, cam_zoom_ = 0, cam_menu_ = 0;
 
@@ -173,7 +196,7 @@ class TitleScreens {
   bool entering_ = false, leaving_ = false;
   Vibri vibri_ = Vibri::Hidden;
   int vibri_movie_ = 0, vibri_frame_ = 0;
-  bool voice_playing_ = false;
+  bool voice_playing_ = false, music_playing_ = false;
   // key repeat
   int repeat_state_ = 0, repeat_timer_ = 0;
   std::uint32_t frame_count_ = 0;

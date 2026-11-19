@@ -210,6 +210,7 @@ struct Session {
   std::map<SDL_JoystickID, std::uint8_t> triggers;  // which triggers are held, per pad
   Course course = Course::Bronze;  // being played
   int song = 0;                    // 1-6 when practising one song
+  int final_score = 0, final_bonus = 0, final_form = 1;  // the last song cleared
 };
 
 Result play_song(Session& s, int song, int track_index, int& points, std::uint32_t seed) {
@@ -446,6 +447,9 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
       std::printf("Song %d clear: score %d + end bonus %d\n", song, game.score(), game.bonus());
       if (game.score() == 0) return Result::GameOver;  // the original counts 0 as a loss
       points = game.score() + game.bonus();
+      s.final_score = game.score();
+      s.final_bonus = game.bonus();
+      s.final_form = game.form();
       result = Result::Clear;
       break;
     }
@@ -532,7 +536,8 @@ int run(int argc, char** argv) {
               opt.line_width.value_or(save.options.line_width), {}, {}};
     std::uint32_t seed = opt.seed;
     int last_rank = 0, last_score = 0, lost_song = 0, points_before_lost = 0;
-    bool last_lost = false, last_left = false;  // game over; left with Start or Esc
+    bool last_lost = false, last_left = false, last_cleared = false;  // game over; left with Start or Esc; cleared
+    int last_song_score = 0, last_song_bonus = 0, last_form = 1;
 
     // A course from song `first` (0 or 1) to its end, or one song as practice.
     // Returns false if the window was closed.
@@ -544,7 +549,7 @@ int run(int argc, char** argv) {
       else songs = {int(course) * 2 + 1, int(course) * 2 + 2};
       int points = carried;
       bool finished = false;  // the course ended, cleared or lost, rather than being left
-      last_lost = last_left = false;
+      last_lost = last_left = last_cleared = false;
       for (std::size_t i = std::size_t(first); i < songs.size(); ++i) {
         const int before = points;
         const Result r = play_song(s, songs[i], int(i), points, seed);
@@ -568,6 +573,10 @@ int run(int argc, char** argv) {
         if (i + 1 == songs.size()) {
           std::printf("Course clear! Total %d\n", points);
           finished = true;
+          last_cleared = true;
+          last_song_score = s.final_score;
+          last_song_bonus = s.final_bonus;
+          last_form = s.final_form;
         }
       }
       // Whatever happened, the song stops here: leaving a course early must not leave
@@ -681,6 +690,7 @@ int run(int argc, char** argv) {
           in.held_up = held.up, in.held_down = held.down, in.held_left = held.left, in.held_right = held.right;
           pressed = {};
           in.voices_playing = voices.playing();
+          in.music_playing = music.playing();
           const R r = title.tick(in);
           switch (r) {
             case R::PsjModes: title.go_to(S::PsjModeSelect); break;
@@ -729,10 +739,12 @@ int run(int argc, char** argv) {
           show_scores();
           title.results_course = int(chosen);
           title.results_rank = last_rank;
-          title.results_score = std::min(last_score, Hud::kMaxScore);
+          title.results_score = std::min(last_cleared ? last_song_score : last_score, Hud::kMaxScore);
+          title.results_bonus = last_cleared ? last_song_bonus : 0;
+          title.results_form = last_form;
           if (last_lost) title.go_to(S::Again);                // Vibri's reaction, then "again?"
           else if (last_left) title.go_to(S::AgainSelect);     // Start during play: straight to "again?"
-          else if (last_rank) title.go_to(S::Results);         // the high scores, the new place blinking
+          else if (last_cleared) title.go_to(S::Clear);       // the score counted, the comment or the medal, the high scores
           else title.go_to(S::PsjModeSelect);
           last_ns = SDL_GetTicksNS();
           behind = 0;

@@ -3,6 +3,7 @@
 #include "test.h"
 #include "vib/gameplay.h"
 #include "vib/scene.h"
+#include "vib/title.h"
 
 using namespace vib;
 
@@ -223,4 +224,21 @@ TEST(score_marks_count_rows_of_shapes) {
     CHECK(key != last);
     last = key;
   }
+}
+
+TEST(score_said_in_japanese) {
+  using V = std::vector<int>;
+  auto clips = [](int n) { return TitleScreens::say_number(n, 0).clips; };
+  CHECK(clips(0).empty());
+  CHECK((clips(3) == V{67}));                 // san
+  CHECK((clips(10) == V{89, 91}));            // juu, said last, then a rest
+  CHECK((clips(12) == V{81, 66}));            // juu-ni
+  CHECK((clips(300) == V{67, 83}));           // san-byaku
+  CHECK((clips(600) == V{71, 78, 85}));       // rop-pyaku
+  CHECK((clips(1000) == V{86}));              // sen
+  CHECK((clips(3000) == V{67, 87}));          // san-zen
+  CHECK((clips(10000) == V{64, 65, 88}));     // ichi-man
+  const auto line = TitleScreens::say_number(1234, 0);
+  // 11 beats of words in a 14-beat line: three rests, then the six clips.
+  CHECK(line.tempo == 1 && line.timeline.size() == 9 && line.timeline.front() == 91 && line.timeline[3] == 86);
 }

@@ -81,6 +81,7 @@ TitleScreens::TitleScreens(const Pak& pak, const char* language) {
   m_hiscore_ = load_model(pak, language, "HISCORE/HI.TMD");
   m_end_ = load_model(pak, language, "END/CL_OV.TMD");
   m_again_ = load_model(pak, language, "AGAIN/AG.TMD");
+  m_song_ = load_model(pak, language, "END/CLR_SONG.TMD");
 
   // Vibri lying, sitting and standing, each still and speaking; all loop.
   const char* vibri[6] = {"VIBRI/MN_V01A.ANM", "VIBRI/MN_V01B.ANM", "VIBRI/MN_V02A.ANM",
@@ -111,6 +112,23 @@ TitleScreens::TitleScreens(const Pak& pak, const char* language) {
   again_steps_[0] = load_movie(pak, m_again_, "AGAIN/AG_12.ANM");
   again_steps_[1] = load_movie(pak, m_again_, "AGAIN/AG_21.ANM");
   again_close_ = load_movie(pak, m_again_, "AGAIN/CLOSE.ANM");
+  // CLEAR: the sign coming in and staying, Vibri during the bonus, then her waiting,
+  // counting, and her four comments when the score does not win a medal.
+  clear_title_ = load_movie(pak, m_end_, "END/CLR_01.ANM");
+  clear_sign_ = load_movie(pak, m_end_, "END/CLR_00.ANM");
+  clear_bonus_vibri_ = load_movie(pak, m_vibri_, "V_CL/CLR_V00.ANM");
+  const char* clr[6] = {"V_CL/CLR_V04.ANM", "V_CL/CLR_V05.ANM", "V_CL/CLR_V12.ANM", "V_CL/CLR_V14.ANM", "V_CL/CLR_V16.ANM", "V_CL/CLR_V15.ANM"};
+  for (std::size_t i = 0; i < 6; ++i) clr_[i] = load_movie(pak, m_vibri_, clr[i], i == 0);
+  // The medal sequence: ten steps, each Vibri's clip with its own camera.
+  const char* steps[10] = {"V01", "V02", "V03A", "V03B", "V04", "V05A", "V05B", "V06", "V07", "V08"};
+  const char* step_cams[10] = {"SONG_01.ANC", "SONG_02.ANC", "SONG_03A.ANC", "SONG_03B.ANC", "SONG_04.ANC",
+                               "SONG_05A.ANC", "SONG_05B.ANC", "SONG_06.ANC", "SONG_07.ANC", "SONG_08.ANC"};
+  for (std::size_t i = 0; i < 10; ++i) {
+    song_[i] = load_movie(pak, m_vibri_, (std::string("V_SONG/") + steps[i] + ".ANM").c_str());
+    song_cams_[i] = load_camera(pak, step_cams[i]);
+  }
+  song_medal_ = load_movie(pak, m_song_, "END/SONG_01.ANM", true);
+  song_ten_ = load_movie(pak, m_song_, "END/SONG_TEN.ANM");
 
   cam_left_ = load_camera(pak, "C_L.ANC");
   cam_right_ = load_camera(pak, "R_C.ANC");
@@ -163,6 +181,7 @@ TitleScreens::Result TitleScreens::tick(const Input& in) {
   ++frame_count_;
   layers_.clear();
   voice_playing_ = in.voices_playing;
+  music_playing_ = in.music_playing;
   lines_.seed(next_random(frame_count_ * 2654435761u));
   update_fade();
   Result r = Result::None;
@@ -172,6 +191,7 @@ TitleScreens::Result TitleScreens::tick(const Input& in) {
     case Screen::Option: r = options(in); break;
     case Screen::PsjHiscore: r = psj_hiscore(in, 0); break;
     case Screen::Results: r = psj_hiscore(in, ++results_frame_); break;
+    case Screen::Clear: r = clear(in); break;
     case Screen::Again: r = again(in); break;
     case Screen::AgainSelect: r = again_select(in); break;
     default: break;
@@ -291,7 +311,7 @@ void TitleScreens::draw_vibri(int jitter, std::vector<SceneLine>& out) {
   if (vibri_ == Vibri::Hidden) return;
   Model& m = models_[std::size_t(m_vibri_)];
   m.jitter_all((jitter + 4 * kGteOne) / kGteOne);
-  const bool results = screen_ == Screen::PsjHiscore || screen_ == Screen::Results || screen_ == Screen::Again;
+  const bool results = screen_ == Screen::PsjHiscore || screen_ == Screen::Results || screen_ == Screen::Again || screen_ == Screen::Clear;
   m.hide(19, results);
   m.hide(20, results);
   const int movie_of[6] = {0, 1, 2, 3, 4, 5};
@@ -825,6 +845,266 @@ TitleScreens::Result TitleScreens::again_select(const Input& in) {
     leaving_ = true;
     speed_ = 1;
   }
+  return Result::None;
+}
+
+TitleScreens::SpokenNumber TitleScreens::say_number(int number, int form) {
+  // Japanese, as the original says it: man (ten thousand), sen, hyaku, juu, with the
+  // sound changes before them (san-byaku, sen vs. san-zen, ...). Each piece is a
+  // sound of the gameplay bank lasting one or two beats.
+  struct Piece {
+    int sound, beats;
+  };
+  auto syllable = [](int i) {  // the digits' syllables, sounds 64-79
+    static const int beats[16] = {1, 1, 1, 2, 2, 2, 1, 1, 1, 2, 1, 1, 2, 1, 1, 1};
+    return Piece{64 + i, beats[i]};
+  };
+  enum Form { kPlain = 0, kSpeed = 1, kBeforeMan = 2, kBeforeHundred = 3 };
+  // A digit's syllables in each form; -1 for none.
+  auto digit_syllables = [](int d, int f) -> std::array<int, 2> {
+    switch (d) {
+      case 1: return f == kPlain ? std::array<int, 2>{0, 13} : f == kBeforeHundred ? std::array<int, 2>{-1, -1} : std::array<int, 2>{0, 1};
+      case 2: return {2, -1};
+      case 3: return {f == kBeforeMan ? 4 : 3, -1};
+      case 4: return {5, -1};
+      case 5: return {6, -1};
+      case 6: return {7, f == kBeforeHundred ? 14 : 8};
+      case 7: return {9, -1};
+      case 8: return {10, (f == kPlain || f == kBeforeHundred) ? 15 : 11};
+      case 9: return {12, -1};
+      default: return {-1, -1};
+    }
+  };
+  std::vector<int> clips;
+  int beats = 0;
+  auto digit = [&](int d, int f) {
+    if (d == 0) return;
+    for (int i : digit_syllables(d, f))
+      if (i >= 0) {
+        const Piece c = syllable(i);
+        clips.push_back(c.sound);
+        beats += c.beats;
+      }
+  };
+  auto unit = [&](int sound) {
+    clips.push_back(sound);
+    beats += 2;
+  };
+  static const int tens_sound[10] = {0, 81, 80, 80, 80, 81, 81, 80, 81, 80};
+  static const int hundreds_sound[10] = {0, 82, 82, 83, 84, 85, 85, 84, 85, 84};
+  auto tens = [&](int n, int f) {  // 0-99
+    const int t = n / 10, u = n % 10;
+    if (t > 0) {
+      if (t >= 2) digit(t, f != kBeforeMan ? f : kPlain);
+      if (u == 0 && f == kPlain) {  // "juu" said last, then a rest
+        clips.push_back(89);
+        clips.push_back(91);
+        beats += 2;
+      } else {
+        unit(tens_sound[t]);
+      }
+    }
+    digit(u, f);
+  };
+  auto thousands = [&](int n, int f) {  // 0-9999
+    const int th = n / 1000, h = n / 100 % 10;
+    if (th >= 2) digit(th, f);
+    if (th > 0) unit(th == 3 ? 87 : 86);
+    if (h >= 2) digit(h, kBeforeHundred);
+    if (h > 0) unit(hundreds_sound[h]);
+    tens(n % 100, f);
+  };
+  SpokenNumber out;
+  if (number <= 0) return out;
+  number = std::min(number, 999999);
+  const int man = number / 10000;
+  tens(man, kBeforeMan);
+  if (man > 0) unit(88);
+  thousands(number % 10000, form);
+  out.clips = clips;
+  const int length = beats >= 15 ? 22 : beats >= 7 ? 14 : 6;
+  out.tempo = beats >= 15 ? 2 : beats >= 7 ? 1 : 0;
+  // The beat grid: rests (sound 91) first, then the clips, as the original lays it out.
+  const int rests = length - beats;
+  for (int i = 0; i < length; ++i) {
+    if (i < rests) out.timeline.push_back(91);
+    else if (int(clips.size()) - (i - rests) > 0) out.timeline.push_back(clips[std::size_t(i - rests)]);
+  }
+  return out;
+}
+
+TitleScreens::Result TitleScreens::clear(const Input& in) {
+  static const std::vector<int> medal_words[3] = {
+      {48, 48}, {48, 48, 51, 52}, {48, 48, 49, 50, 48, 48, 51, 52}};
+  static const std::vector<int> course_name_words[3] = {{36, 53, 54}, {35, 53, 54}, {34, 53, 54}};
+  static const std::vector<int> score_beat[3] = {{62, 60, 61}, {62, 63, 62, 60, 61}, {62, 63, 62, 63, 62, 60, 61}};
+  static const std::vector<int> comment_words[4] = {
+      {196}, {197, 198, 199}, {200, 201, 202, 203, 204}, {208, 209, 210, 211, 212, 213, 214, 215, 216, 217}};
+  // Each medal's steps, bronze to gold; which of them show the medal (0) or the score (1).
+  static const std::vector<int> medal_steps[3] = {{0, 4, 5, 6, 7, 9}, {0, 1, 4, 5, 6, 7, 8, 9}, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9}};
+  static const int step_sign[10] = {0, 0, 0, 0, 1, 1, 1, -1, 0, 0};
+  static const int medal_scores[3][3] = {{2000, 4000, 6000}, {2000, 4000, 6000}, {1500, 3500, 5500}};
+  static const int comment_for_form[4] = {3, 1, 0, 2};  // the sign's comment by Vibri's final form
+  static const int comment_signs[4] = {10, 7, 8, 9};    // its objects
+  Model& end = models_[std::size_t(m_end_)];
+  Model& vibri = models_[std::size_t(m_vibri_)];
+  Model& song = models_[std::size_t(m_song_)];
+  const int course = std::clamp(results_course, 0, 2);
+  const int total = results_score + results_bonus;
+
+  if (arrived_) {
+    spoken_ = say_number(total, 0);
+    for (Camera& c : cameras_) c.clip.rewind();
+    end.reset_look();
+    song.reset_look();
+    // The score, the bonus and the total as digits; the score as marks too.
+    show_number(end, {31, 32, 33, 34, 35, 36}, 52, results_score);
+    const auto marks = Hud::marks(results_score);
+    for (int i = 0; i < 7; ++i) end.swap(27 - i, 37 + marks[std::size_t(i)]);
+    show_number(end, {0, 1, 2, 3, 4, 5}, 52, results_bonus);
+    show_number(end, {11, 12, 13, 14, 15, 16}, 52, total);
+    show_number(song, {14, 15, 16, 17, 18, 19}, 2, total);
+    random_ = next_random(random_);
+    const int n = static_cast<int>((std::uint64_t(random_) * 10) >> 32);
+    comment_ = n < 4 ? 0 : n < 7 ? 1 : n < 9 ? 2 : 3;
+    // The sign shows the comment for her final form; what she does and says is the one just picked.
+    static const int sign_shows[4] = {1, 0, 2, 3};
+    end.swap(10, comment_signs[sign_shows[comment_for_form[std::clamp(results_form, 0, 3)]]]);
+    result_frame_ = wait_frame_ = repeat_ = hiscore_frame_ = leave_frame_ = 0;
+    rewind_movies();
+    sounds_.push_back({Channel::Music, {}, 0, true});
+    say({13, 14, 225, 226, 227, 192}, 64, Vibri::Hidden);
+    pass_score_ = medal_scores[course][0];
+    if (total >= medal_scores[course][2]) medal_ = 2;
+    else if (total >= medal_scores[course][1]) medal_ = 1;
+    else if (total >= pass_score_) medal_ = 0;
+    entering_ = leaving_ = medal_shown_ = false;
+    step_ = 0;
+  }
+  const int leave_jitter = leave_frame_ * 300 * kGteOne;
+  int jitter = kMenuJitter * kGteOne + leave_jitter;
+  if (fade_ == kOut) {
+    jitter += fade_jitter();
+    sounds_.push_back({Channel::Music, {}, 0, true});
+  }
+  for (Model* m : {&end, &vibri, &song}) m->jitter_all(jitter / kGteOne);
+  vibri.hide(19, true);
+  vibri.hide(20, true);
+  if ((in.confirm || in.cancel) && fade_ == kNone && !hiscore_frame_ && !leave_frame_) {
+    sounds_.push_back({Channel::Music, {}, 0, true});
+    say({1}, 90, Vibri::Hidden);
+    if (results_rank == 0) return Result::ResultsDone;
+    leave_frame_ = 1;
+  }
+  if (leave_frame_ && ++leave_frame_ == frames(20)) {
+    hiscore_frame_ = 1;
+    leave_frame_ = 0;
+  }
+  if (hiscore_frame_) {
+    sounds_.push_back({Channel::Music, {}, 0, true});
+    return psj_hiscore(in, hiscore_frame_++);
+  }
+
+  Hud::Layer layer;
+  layer.view.eye = {0, 0, -3000};
+  layer.view.target = {0, 0, 0};
+  layer.view.fov_y = float(454 * kTau / 4096.0);
+  const int f = result_frame_;
+  Result result = Result::None;
+  auto wait = [&](int sixtieths) {
+    if (++wait_frame_ == frames(sixtieths)) {
+      wait_frame_ = 0;
+      return true;
+    }
+    return false;
+  };
+  // The music (here the score said, under the counting) comes in at 7.2 seconds.
+  if (f == frames(360)) sounds_.push_back({Channel::Music, spoken_.clips, 64, false});
+  std::vector<SceneLine>& out = layer.lines;
+  lines_.set_view(layer.view);
+  if (f < frames(112)) draw_movie(clear_title_, 1, out);
+  else if (!medal_shown_) draw_movie(clear_sign_, 1, out);
+  if (f < frames(360)) {
+    draw_movie(clear_bonus_vibri_, 1, out);  // the bonus (its words are text, not drawn yet)
+  } else if (!leaving_ && !medal_shown_) {
+    // The score counted, then whether it wins a medal.
+    if (!entering_ && frames(362) < f && !in.voices_playing && !music_playing_) {
+      entering_ = true;
+      sounds_.push_back({Channel::Music, {193, 207, 194}, 64, false});
+    }
+    if (entering_) {
+      draw_movie(clr_[1], 1, out);
+      if (movies_[std::size_t(clr_[1])].clip.finished() && wait(40)) {
+        if (total < pass_score_) {
+          leaving_ = true;
+          say(comment_words[comment_], 64, Vibri::Hidden);
+        } else {
+          medal_shown_ = true;
+          say(medal_words[medal_], 64, Vibri::Hidden);
+        }
+        entering_ = false;
+      }
+    } else {
+      draw_movie(clr_[0], 1, out);
+    }
+  } else if (leaving_) {
+    // No medal: Vibri's comment.
+    const int movie = clr_[std::size_t(2 + comment_)];
+    draw_movie(movie, 1, out);
+    if (movies_[std::size_t(movie)].clip.finished() && wait(30)) {
+      if (results_rank != 0) leave_frame_ = 1;
+      else result = Result::ResultsDone;
+    }
+  } else {
+    // The medal, the course's score said aloud, and the high score if there is one.
+    if (frames(30) < wait_frame_) {
+      wait_frame_ = 0;
+      if (results_rank == 0) return Result::ResultsDone;
+      leave_frame_ = 1;
+    }
+    const std::vector<int>& steps = medal_steps[medal_];
+    const int step = steps[std::size_t(step_)];
+    const int movie = song_[std::size_t(step)];
+    layer.view = camera_view(song_cams_[std::size_t(step)]);
+    cameras_[std::size_t(song_cams_[std::size_t(step)])].clip.advance(kTick);
+    lines_.set_view(layer.view);
+    draw_movie(movie, 1, out);
+    if (step_sign[step] == 0) draw_movie(song_medal_, 1, out);
+    if (step_sign[step] == 1) draw_movie(song_ten_, 1, out);
+    if (movies_[std::size_t(movie)].clip.finished()) {
+      if (step == 4) {  // "the course score is": now the number, over its beat
+        say(spoken_.timeline, 64, Vibri::Hidden);
+        sounds_.push_back({Channel::Music, score_beat[spoken_.tempo], 64, false});
+      }
+      if (step == 5 && repeat_ < spoken_.tempo - 1) {
+        movies_[std::size_t(movie)].clip.rewind();  // counted again while it is said
+        ++repeat_;
+      } else if (step == 4) {
+        if (spoken_.tempo != 0) {
+          ++step_;
+          movies_[std::size_t(movie)].clip.rewind();
+        } else {
+          step_ += 2;
+        }
+      } else if (step == 6) {
+        step_ += results_rank != 0 ? 1 : 2;  // the high-score step only when there is one
+      } else if (step_ + 1 < int(steps.size())) {
+        ++step_;
+        movies_[std::size_t(song_[std::size_t(steps[std::size_t(step_)])])].clip.rewind();
+      } else {
+        ++wait_frame_;
+      }
+      step_ = std::min(step_, int(steps.size()) - 1);
+      const int now = steps[std::size_t(step_)];
+      if (now == 4) say(course_name_words[course], 64, Vibri::Hidden);
+      else if (now == 9 && !wait_frame_) say({59}, 90, Vibri::Hidden);
+      else if (now == 8) say({57, 58}, 64, Vibri::Hidden);
+      else if (now == 7) say({56}, 90, Vibri::Hidden);
+    }
+  }
+  layers_.push_back(std::move(layer));
+  if (result != Result::None) return result;
+  ++result_frame_;
   return Result::None;
 }
 
