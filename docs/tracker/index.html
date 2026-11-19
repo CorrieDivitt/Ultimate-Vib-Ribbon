@@ -136,11 +136,11 @@ button.copy{font-family:var(--display);font-size:12px;background:var(--ink);colo
    status values: done | active | todo | blocked | ask (needs the owner's answer) */
 const T = {
   goal: "A version of Vib-Ribbon playable in VR on PCVR and Meta Quest 3, with responsive, consistent timing and visuals that do justice to the original. Steam Frame and levels from your own music are stretch goals.",
-  updated: "2026-11-18, session 2 (toolchain check)",
+  updated: "2026-11-18, session 2 (first Windows build)",
   approach: "Native VR port. Game logic from the decompilation, assets read from your own disc, emulator used as the reference to test against.",
   asks: [
     {id:"Q4", t:"Pick a licence for the project's own code. I suggest MIT.", why:"Needed before the first public release, and before anyone else contributes. It covers only code we write: the game's data always comes from the player's disc."},
-    {id:"Q5", t:"Install the Vulkan SDK, then do the first Windows build in a 64-bit developer shell (commands in the Notes section).", why:"Compiler and Android NDK are confirmed. The Vulkan SDK is missing; it is needed from task 1.5 on."},
+    {id:"Q5", t:"Install the Vulkan SDK (vulkan.lunarg.com), then run the check in the Notes section.", why:"The first Windows build passed. The SDK is the last missing tool, needed from task 1.5 on."},
     {id:"Q6", t:"OK for me to draft a courtesy message to revib's author?", why:"You confirmed we write our own code (D9). The message is to stay on good terms and credit their work, not to ask for permission to copy."}
   ],
   phases: [
@@ -160,7 +160,7 @@ const T = {
      tasks:[
       {id:"1.1", s:"done", t:"Repository skeleton in CorrieDivitt/Vib-Ribbon-VR", note:"CMake + presets, core/, tools/, tests/, docs/, CI for Windows and Linux. Game data is ignored by git."},
       {id:"1.2", s:"active", t:"Install and verify the Windows toolchain", note:"Confirmed: git 2.56, CMake 4.4.4, Ninja 1.12.1, Python 3.15.2, adb, Vulkan 1.4 runtime, MSVC 14.44 (VS 2022 Build Tools), Android NDK 27.3 and 28.2. Missing: Vulkan SDK. Developer shell defaults to 32-bit; use the amd64 command."},
-      {id:"1.3", s:"active", t:"Disc ingest library and CLI", note:"Done in C++: CUE, raw BIN sectors, ISO 9660, PAK, SHA-1 disc check. vibtool info / extract / audio. Tested on your disc on Linux. CI builds it with MSVC and passes. Not yet built on your PC."},
+      {id:"1.3", s:"done", t:"Disc ingest library and CLI", note:"C++: CUE, raw BIN sectors, ISO 9660, PAK, SHA-1 disc check. vibtool info / extract / audio. All 8 tests pass on your PC against your disc; output matches the Linux run."},
       {id:"1.4", s:"todo", t:"Format loaders: TMD, ANM, ANC, FSL, VH/VB, TIM", note:"Python prototypes for TMD exist in tools\\research."},
       {id:"1.5", s:"todo", t:"Desktop asset viewer", note:"First pixels: any TMD with any ANM, drawn as lines."},
       {id:"1.6", s:"todo", t:"Reference capture rig", note:"Emulator with debugger (PCSX-Redux first) plus revib's symbol addresses. Dump obstacle events and scores for the six songs."},
@@ -249,9 +249,9 @@ const T = {
      code:"$env:VULKAN_SDK\nglslc --version"},
     {state:"Used in session 2", what:"Toolchain gap check. Found MSVC (32-bit shell by default) and NDK 27.3 and 28.2; Vulkan SDK missing.",
      code:'where.exe cl\n$env:VULKAN_SDK\nglslc --version\nGet-ChildItem "$env:LOCALAPPDATA\\Android\\Sdk\\ndk"'},
-    {state:"Upcoming (Q5)", what:"Download the repo next to the research folder, then build it and run the tests. Run in a Developer PowerShell for VS.",
+    {state:"Used in session 2", what:"Download the repo next to the research folder, then build it and run the tests. Run in a Developer PowerShell for VS.",
      code:"cd F:\\VibRibbonVR\ngit clone https://github.com/CorrieDivitt/Vib-Ribbon-VR\ncd Vib-Ribbon-VR\ncmake --preset dev\ncmake --build --preset dev\nctest --preset dev"},
-    {state:"Upcoming (Q5)", what:"Run the tests against your disc, then show what is on it. The info output should say SCES-02873, supported.",
+    {state:"Used in session 2", what:"Run the tests against your disc, then show what is on it. The info output should say SCES-02873, supported.",
      code:'cd F:\\VibRibbonVR\\Vib-Ribbon-VR\n$env:VIB_TEST_CUE = "F:\\VibRibbonVR\\research\\Gamefiles\\Vib-Ribbon (Europe) (En,Fr,De,Es,It).cue"\n.\\build\\dev\\tests\\vibcore_tests.exe\n.\\build\\dev\\tools\\vibtool\\vibtool.exe info $env:VIB_TEST_CUE'},
     {state:"Common", what:"Rebuild after pulling new changes, and rerun the tests.",
      code:"cd F:\\VibRibbonVR\\Vib-Ribbon-VR\ngit pull\ncmake --build --preset dev\nctest --preset dev"},
@@ -267,7 +267,7 @@ const T = {
      code:"adb devices\nadb install -r VibRibbonVR.apk\nadb logcat -s VibRibbonVR"}
   ],
   log: [
-    {id:"S2", t:"2026-11-18. Owner approval; repo created; C++ disc ingest and vibtool written and tested on the disc.", why:"Decisions D6 to D9 recorded. Custom music and Steam Frame moved to a stretch phase. 1.1 done, 1.2 and 1.3 in progress."},
+    {id:"S2", t:"2026-11-18. Owner approval; repo created; C++ disc ingest and vibtool written, built on the owner's PC and tested on the disc.", why:"Decisions D6 to D9 recorded. Custom music and Steam Frame moved to a stretch phase. 1.1 and 1.3 done; 1.2 waits only on the Vulkan SDK."},
     {id:"S1", t:"2026-11-18. Research, disc and repo analysis, architecture decision, plan, tracker and handoff.", why:"Phase 0 complete."}
   ]
 };
