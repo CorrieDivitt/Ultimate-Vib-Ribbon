@@ -136,12 +136,12 @@ button.copy{font-family:var(--display);font-size:12px;background:var(--ink);colo
    status values: done | active | todo | blocked | ask (needs the owner's answer) */
 const T = {
   goal: "A version of Vib-Ribbon playable in VR on PCVR and Meta Quest 3, with responsive, consistent timing and visuals that do justice to the original. Steam Frame and levels from your own music are stretch goals.",
-  updated: "2026-11-18, session 2",
+  updated: "2026-11-18, session 2 (toolchain check)",
   approach: "Native VR port. Game logic from the decompilation, assets read from your own disc, emulator used as the reference to test against.",
   asks: [
     {id:"Q4", t:"Pick a licence for the project's own code. I suggest MIT.", why:"Needed before the first public release, and before anyone else contributes. It covers only code we write: the game's data always comes from the player's disc."},
-    {id:"Q5", t:"Run the toolchain checks and the first Windows build (commands in the Notes section).", why:"Your tool output covered git, CMake, Ninja, Python, adb and the Vulkan runtime. Still unconfirmed: the C++ compiler, the Vulkan SDK and the Android NDK."},
-    {id:"Q6", t:"OK for me to draft a message to revib's author asking how they want the decompilation used?", why:"The repo has no licence. Until we hear back, code is written fresh from the behaviour it documents, never copied."}
+    {id:"Q5", t:"Install the Vulkan SDK, then do the first Windows build in a 64-bit developer shell (commands in the Notes section).", why:"Compiler and Android NDK are confirmed. The Vulkan SDK is missing; it is needed from task 1.5 on."},
+    {id:"Q6", t:"OK for me to draft a courtesy message to revib's author?", why:"You confirmed we write our own code (D9). The message is to stay on good terms and credit their work, not to ask for permission to copy."}
   ],
   phases: [
     {n:0, name:"Research and architecture", goal:"Know the game, the existing work and the tools well enough to pick an approach.",
@@ -159,7 +159,7 @@ const T = {
      exit:"Any model and animation from the disc plays in a desktop viewer. A stereo test scene runs on PCVR and Quest 3. Reference event lists exist for all six songs.",
      tasks:[
       {id:"1.1", s:"done", t:"Repository skeleton in CorrieDivitt/Vib-Ribbon-VR", note:"CMake + presets, core/, tools/, tests/, docs/, CI for Windows and Linux. Game data is ignored by git."},
-      {id:"1.2", s:"active", t:"Install and verify the Windows toolchain", note:"Confirmed: git 2.56, CMake 4.4.4, Ninja 1.12.1, Python 3.15.2, adb, Vulkan 1.4 runtime on the RTX 4090. To check: MSVC, Vulkan SDK (glslc), Android NDK."},
+      {id:"1.2", s:"active", t:"Install and verify the Windows toolchain", note:"Confirmed: git 2.56, CMake 4.4.4, Ninja 1.12.1, Python 3.15.2, adb, Vulkan 1.4 runtime, MSVC 14.44 (VS 2022 Build Tools), Android NDK 27.3 and 28.2. Missing: Vulkan SDK. Developer shell defaults to 32-bit; use the amd64 command."},
       {id:"1.3", s:"active", t:"Disc ingest library and CLI", note:"Done in C++: CUE, raw BIN sectors, ISO 9660, PAK, SHA-1 disc check. vibtool info / extract / audio. Tested on your disc on Linux. CI builds it with MSVC and passes. Not yet built on your PC."},
       {id:"1.4", s:"todo", t:"Format loaders: TMD, ANM, ANC, FSL, VH/VB, TIM", note:"Python prototypes for TMD exist in tools\\research."},
       {id:"1.5", s:"todo", t:"Desktop asset viewer", note:"First pixels: any TMD with any ANM, drawn as lines."},
@@ -231,7 +231,7 @@ const T = {
     {id:"D6", t:"Quest 3 is the only target hardware for now. Steam Frame is a stretch goal the architecture must not rule out.", why:"Rules: vibcore stays platform-free; input goes through OpenXR interaction profiles, not vendor SDKs; Android build uses the Khronos OpenXR loader; no x86-only dependencies."},
     {id:"D7", t:"Levels from your own music are a stretch goal, not a core feature.", why:"The analysis algorithm stays core because the official songs depend on it. The custom-music features around it (picker, decoders, import) are stretch."},
     {id:"D8", t:"Free public release from github.com/CorrieDivitt/Vib-Ribbon-VR.", why:"Repo is the master copy of code, plan, handoff and tracker source."},
-    {id:"D9", t:"No code is copied from revib or open-ribbon until their authors say how it may be used.", why:"Neither shows a licence. We read them to learn behaviour and write our own implementation."}
+    {id:"D9", t:"We write our own code. Nothing is copied from revib or open-ribbon.", why:"Confirmed by the owner 2026-11-18. A decompilation reconstructs Sony's program, so permission from its author would not cover copied code. We read the decompilations to learn behaviour and test our version against the emulator."}
   ],
   risks: [
     {id:"R1", t:"Licence of the decompilation sources is unsettled.", why:"Handled by D9 and Q6. Writing our own code from the behaviour spec keeps the plan the same either way."},
@@ -243,7 +243,11 @@ const T = {
     {id:"R7", t:"PAL disc. Video ran at 50 Hz on the original.", why:"Low risk because gameplay follows the audio clock."}
   ],
   commands: [
-    {state:"Upcoming (Q5)", what:"Check the three tools not yet confirmed: the MSVC compiler, the Vulkan SDK's shader compiler, and the Android NDK. Run in a Developer PowerShell for VS.",
+    {state:"Common", what:"Switch a Developer PowerShell for VS to 64-bit. Run this first in every new developer shell. The where.exe line should show Hostx64\\x64.",
+     code:'& "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\Common7\\Tools\\Launch-VsDevShell.ps1" -Arch amd64 -HostArch amd64\nwhere.exe cl'},
+    {state:"Upcoming (Q5)", what:"After installing the Vulkan SDK from vulkan.lunarg.com, open a new shell and check it. Both lines should print something.",
+     code:"$env:VULKAN_SDK\nglslc --version"},
+    {state:"Used in session 2", what:"Toolchain gap check. Found MSVC (32-bit shell by default) and NDK 27.3 and 28.2; Vulkan SDK missing.",
      code:'where.exe cl\n$env:VULKAN_SDK\nglslc --version\nGet-ChildItem "$env:LOCALAPPDATA\\Android\\Sdk\\ndk"'},
     {state:"Upcoming (Q5)", what:"Download the repo next to the research folder, then build it and run the tests. Run in a Developer PowerShell for VS.",
      code:"cd F:\\VibRibbonVR\ngit clone https://github.com/CorrieDivitt/Vib-Ribbon-VR\ncd Vib-Ribbon-VR\ncmake --preset dev\ncmake --build --preset dev\nctest --preset dev"},
