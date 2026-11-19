@@ -146,10 +146,10 @@ button.copy{font-family:var(--display);font-size:12px;background:var(--ink);colo
    status values: done | active | todo | blocked | ask (needs the owner's answer) */
 const T = {
   goal: "A version of Vib-Ribbon playable in VR on PCVR and Meta Quest 3, with responsive, consistent timing and visuals that do justice to the original. Steam Frame and levels from your own music are stretch goals.",
-  updated: "2026-11-19, session 2 (first playtest done)",
+  updated: "2026-11-19, session 2 (high scores and options saved)",
   approach: "Native VR port. Game logic from the decompilation, assets read from your own disc, emulator used as the reference to test against.",
   asks: [
-    {id:"Q13", t:"Later, once the game is playable: try the fixed-course option and decide whether you like it.", why:"Your decision: courses vary from play to play like the original by default; the same-every-time courses are an option for you to judge by playing. Nothing to do until Phase 3."}
+    {id:"Q13", t:"When you want to try fixed courses: open save.txt (path printed when vibplay starts), change fixed_courses 0 to 1, and play. Or add --fixed for one run.", why:"Your decision: courses vary from play to play like the original by default; the same-every-time courses are an option for you to judge by playing."},
 
   ],
   phases: [
@@ -185,12 +185,12 @@ const T = {
       {id:"2.4", s:"done", t:"Gameplay rules: parts, hit and miss, scoring, chains, Vibri's forms, speed courses, effects", note:"Checked against your scoring recording (silver course): 88 hits and 19 extra presses, every one scored exactly as the original did, including double points in the best form, form changes up and down, and the end bonus carried into song 2. Not covered by that recording: pair obstacles and a third extra press before an obstacle."},
       {id:"2.5", s:"done", t:"Golden tests against the reference captures", note:"All six songs compared. Songs 1, 2, 4 reproduce the original. On songs 5 and 6 your repeat recordings showed the original disagrees with itself between runs about as much as ours disagrees with it (song 5: two original runs share 85 to 97 of about 112 obstacles; ours shares 81 to 90). So there is no single official course for those songs. Decision (yours): by default the port varies from play to play the way the original does; the fixed course is an option. Our varied courses spread like the original (song 5: 108 to 113 obstacles against the original 109 to 112; any two of ours share 73 to 96 percent of obstacles, two original runs 76 to 87 percent). Polaroid is an automatic test."},
       {id:"2.6", s:"active", t:"Demo (auto-play) mode", note:"The rules side is in (auto-play hits everything; the demo misses on purpose every 5 to 18 parts). Needs the title flow in Phase 3 to be reachable."},
-      {id:"2.7", s:"todo", t:"High scores and options storage"}
+      {id:"2.7", s:"done", t:"High scores and options storage", note:"save.txt in your user folder (the path is printed when vibplay starts): three high scores per course with the original's defaults and its rule for ties, sound effects and vibration on/off, fixed courses on/off, line width, audio offset and volumes. Plain text, so you can edit it by hand. Whole courses only record high scores, as in the original. Gamepads rumble on a miss when vibration is on."}
      ]},
     {n:3, name:"Flat desktop build", goal:"Prove the game is right on a monitor before putting it in a headset.",
      exit:"All six songs playable start to finish on desktop, matching the original side by side.",
      tasks:[
-      {id:"3.1", s:"active", t:"Vulkan line renderer: thick anti-aliased lines, the original wobble", note:"Renderer shared by vibview and vibplay (apps/common). The wobble (jitter) follows the original's rules and changes at its 50 Hz. Line width defaults to half the original's one pixel on 288 lines, scaled to the window (your playtests found 1 and then 0.75 too strong). - and = now step by 0.125 and print the width."},
+      {id:"3.1", s:"active", t:"Vulkan line renderer: thick anti-aliased lines, the original wobble", note:"Renderer shared by vibview and vibplay (apps/common). The wobble (jitter) follows the original's rules and changes at its 50 Hz. Line width defaults to 0.3 of the original's one pixel on 288 lines, scaled to the window (your pick between 0.25 and 0.375). - and = step by 0.125, and the width you choose is saved."},
       {id:"3.2", s:"active", t:"Scene: road, Vibri's four forms and animations, meters, messages, font", note:"Done: road pieces with joins and screw lean, Vibri in four forms with every move, evolution meter, game camera with all its clips and transitions, the score shown as circling marks, the time meter and the Round 1/2 sign, each through its own camera as in the original. Not yet: text (font), speed meter."},
       {id:"3.3", s:"active", t:"Audio output slaved to the device clock, with latency compensation. Sound effects.", note:"SDL3 audio; the game clock comes from what the device has played, smoothed. Hit, miss, stray, form-up and round-start sounds from the disc's bank at their real pitch. Latency is estimated; calibrate with [ and ]. Not yet: effect volume following music loudness."},
       {id:"3.4", s:"active", t:"Timestamped gamepad and keyboard input", note:"Each press is judged where the music was at the press's own timestamp, not at the next frame. Keyboard and any SDL gamepad, with the original's button layout."},

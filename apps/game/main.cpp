@@ -11,6 +11,11 @@
 //   Loop   (R1/R2)             Right arrow, D         gamepad: right shoulder or trigger
 //   Wave   (Triangle/Cross)    Space, J, K            gamepad: top or bottom face button
 //   [ and ]: audio offset -/+ 5 ms     - and =: line width     Esc: quit
+//
+// High scores and options (sound effects, vibration, fixed courses, line width,
+// audio offset, volumes) live in save.txt in the per-user folder SDL picks, printed
+// at start. Offset and width changes made while playing are saved there. Options on
+// the command line apply to that run only.
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
@@ -22,7 +27,10 @@
 #include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <fstream>
 #include <map>
+#include <optional>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -35,6 +43,7 @@
 #include "vib/gameplay.h"
 #include "vib/iso9660.h"
 #include "vib/known_discs.h"
+#include "vib/save.h"
 #include "vib/pak.h"
 #include "vib/scene.h"
 #include "vib/sound_bank.h"
@@ -110,21 +119,24 @@ std::uint8_t pad_bits(Uint8 button) {
 
 // ---------------------------------------------------------------- one song
 
-struct Options {
+// Command line. Anything given here overrides the saved options for this run only.
+struct Args {
   std::string cue;
   Course course = Course::Bronze;
   int song = 0;  // 1-6 for a single song; 0 = the course's two
   bool fixed = false;
   std::uint32_t seed = 0;
   bool seed_given = false;
-  double offset_ms = 0, line_width = 0.5;  // owner's playtests: thinner than the original's one pixel on 288 lines looks right
-  float sfx = 1.0f, music = 1.0f;
+  std::optional<double> offset_ms, line_width;
+  std::optional<float> sfx, music;
 };
 
 enum class Result { Clear, GameOver, Quit };
 
 struct Session {
-  const Options& opt;
+  const Args& opt;
+  SaveData& save;
+  bool fixed;
   DiscImage& disc;
   const CourseScript& script;
   Scene& scene;
@@ -140,7 +152,7 @@ struct Session {
 
 Result play_song(Session& s, int song, int track_index, int& points, std::uint32_t seed) {
   // Timing: like the original, a little different on every play, unless --fixed.
-  const CourseTiming timing = s.opt.fixed ? CourseTiming::consistent() : CourseTiming::like_original(seed);
+  const CourseTiming timing = s.fixed ? CourseTiming::consistent() : CourseTiming::like_original(seed);
   const std::vector<std::int16_t> pcm = s.disc.read_audio_track(song + 1);
   const std::vector<Block> blocks = make_blocks(pcm, timing.lead);
   const auto total = static_cast<std::int32_t>(blocks.size() * kBlockSize);
@@ -169,7 +181,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   s.hud.start_round(track_index, !s.opt.song);  // the "Round 1/2" sign belongs to the two-song courses
 
   std::printf("\nSong %d: %d s, %s course (lead %d, frame phase %.0f)\n", song, total / kSampleRate,
-              s.opt.fixed ? "fixed" : "original-style", timing.lead, double(timing.frame_phase_q16) / 65536.0);
+              s.fixed ? "fixed" : "original-style", timing.lead, double(timing.frame_phase_q16) / 65536.0);
   s.audio.play_music(std::move(out));
   s.fx.play(0, 11, 63, 4);  // the round's opening sound
 
@@ -203,6 +215,8 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
         }
         case GameEvent::Type::Miss:
           s.fx.play(1, 10, 127, 2);
+          if (s.save.options.vibration)
+            for (auto& [id, pad] : s.pads) SDL_RumbleGamepad(pad, 0x6000, 0xC000, 200);
           miss = true;
           break;
         case GameEvent::Type::FormUp:
@@ -232,10 +246,12 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
           if (e.key.key == SDLK_ESCAPE) return Result::Quit;
           if (e.key.key == SDLK_LEFTBRACKET || e.key.key == SDLK_RIGHTBRACKET) {
             s.audio.adjust_offset(e.key.key == SDLK_LEFTBRACKET ? -5 : 5);
+            s.save.options.audio_offset_ms = s.audio.offset_ms();
             std::printf("audio offset %+.0f ms (latency now %.0f ms)\n", s.audio.offset_ms(), s.audio.latency_ms());
           } else if (e.key.key == SDLK_MINUS || e.key.key == SDLK_EQUALS) {
             s.line_width = std::clamp(s.line_width + (e.key.key == SDLK_MINUS ? -0.125 : 0.125), 0.125, 4.0);
-            std::printf("line width %.3f (start with --width %.3f to keep it)\n", s.line_width, s.line_width);
+            s.save.options.line_width = s.line_width;
+            std::printf("line width %.3f (saved)\n", s.line_width);
           } else if (const std::uint8_t b = key_bits(e.key.key)) {
             presses.push_back({b, e.key.timestamp});
           }
@@ -370,6 +386,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     }
     if (outcome == Outcome::GameOver) {
       std::printf("Game over on song %d: score %d\n", song, game.score());
+      points = game.score();
       result = Result::GameOver;
       break;
     }
@@ -378,7 +395,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
 }
 
 int run(int argc, char** argv) {
-  Options opt;
+  Args opt;
   for (int i = 1; i < argc; ++i) {
     const std::string a = argv[i];
     auto value = [&]() -> const char* {
@@ -416,30 +433,70 @@ int run(int argc, char** argv) {
   if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD)) throw std::runtime_error(std::string("SDL_Init: ") + SDL_GetError());
   SDL_Window* window = SDL_CreateWindow("Vib-Ribbon", 1200, 900, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
   if (!window) throw std::runtime_error(std::string("SDL_CreateWindow: ") + SDL_GetError());
+  // Saved high scores and options, in the per-user folder SDL picks for the platform.
+  std::string save_path;
+  if (char* pref = SDL_GetPrefPath("VibRibbonVR", "VibRibbonVR")) {
+    save_path = std::string(pref) + "save.txt";
+    SDL_free(pref);
+  }
+  SaveData save;
+  if (!save_path.empty()) {
+    std::ifstream in(path_from_utf8(save_path));
+    if (in) {
+      std::stringstream text;
+      text << in.rdbuf();
+      save = SaveData::from_text(text.str());
+    }
+    std::printf("Save file: %s\n", save_path.c_str());
+  }
+  auto write_save = [&]() {
+    if (save_path.empty()) return;
+    std::ofstream out(path_from_utf8(save_path), std::ios::binary);
+    out << save.to_text();
+  };
+
   int code = 0;
   {
     vibr::Renderer renderer(window);
-    vibg::Audio audio(opt.offset_ms);
-    audio.set_volumes(opt.music, opt.sfx);
+    vibg::Audio audio(opt.offset_ms.value_or(save.options.audio_offset_ms));
+    const float sfx = save.options.sound_effects ? opt.sfx.value_or(save.options.effects_volume) : 0.0f;
+    audio.set_volumes(opt.music.value_or(save.options.music_volume), sfx);
     Effects fx(iso, audio);
-    std::printf("GPU: %s\nCourses: %s\n", renderer.gpu_name(), opt.fixed ? "fixed (the same every play)" : "vary from play to play, like the original");
-    Session s{opt, disc, script, scene, hud, audio, fx, window, renderer, opt.line_width, {}, {}};
+    const bool fixed = opt.fixed || save.options.fixed_courses;
+    std::printf("GPU: %s\nCourses: %s\n", renderer.gpu_name(), fixed ? "fixed (the same every play)" : "vary from play to play, like the original");
+    Session s{opt, save, fixed, disc, script, scene, hud, audio, fx, window, renderer,
+              opt.line_width.value_or(save.options.line_width), {}, {}};
 
     std::vector<int> songs;
     if (opt.song) songs = {opt.song};
     else songs = {int(opt.course) * 2 + 1, int(opt.course) * 2 + 2};
     std::uint32_t seed = opt.seed;
     int points = 0;
+    bool finished = false;  // the course ended, cleared or lost, rather than being quit
     for (std::size_t i = 0; i < songs.size(); ++i) {
       const Result r = play_song(s, songs[i], int(i), points, seed);
       seed = next_random(seed);
       if (r == Result::Quit) break;
       if (r == Result::GameOver) {
         std::printf("Game over.\n");
+        finished = true;
         break;
       }
-      if (i + 1 == songs.size()) std::printf("Course clear! Total %d\n", points);
+      if (i + 1 == songs.size()) {
+        std::printf("Course clear! Total %d\n", points);
+        finished = true;
+      }
     }
+    // High scores belong to whole courses, as in the original (a single --song is practice).
+    if (finished && !opt.song) {
+      static const char* places[] = {"", "1st", "2nd", "3rd"};
+      static const char* names[] = {"Bronze", "Silver", "Gold"};
+      const int place = save.record(opt.course, points);
+      const auto& table = save.high_scores[std::size_t(opt.course)];
+      std::printf("%s high scores: %d, %d, %d%s%s\n", names[int(opt.course)], table[0], table[1], table[2],
+                  place ? "   new " : "", places[place]);
+    }
+    write_save();
     for (auto& [id, pad] : s.pads) SDL_CloseGamepad(pad);
   }
   SDL_DestroyWindow(window);

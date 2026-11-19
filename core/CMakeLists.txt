@@ -14,6 +14,7 @@ add_library(vibcore STATIC
   src/course_gen.cpp
   src/gameplay.cpp
   src/scene.cpp
+  src/save.cpp
 )
 target_include_directories(vibcore PUBLIC include)
 target_link_libraries(vibcore PRIVATE vib_warnings)
