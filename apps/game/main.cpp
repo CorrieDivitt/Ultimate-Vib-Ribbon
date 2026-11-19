@@ -248,22 +248,6 @@ SceneView vr_play_view(float vibri_z, float zoom) {
   return v;
 }
 
-// In a headset, a gamepad's right trigger held zooms in and the left one out:
-// twice as close or as far for each second at full pull.
-void zoom_with_triggers(Session& s, double seconds) {
-  float pull = 0;
-  for (auto& [id, pad] : s.pads)
-    pull += float(SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) - SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER)) / 32767.0f;
-  static bool zooming = false;
-  if (std::abs(pull) > 0.1f) {
-    s.renderer.set_zoom(s.renderer.zoom() * std::exp2(pull * float(std::min(seconds, 0.1))));
-    zooming = true;
-  } else if (zooming) {
-    zooming = false;
-    std::printf("Zoom %.2f\n", double(s.renderer.zoom()));
-  }
-}
-
 // In a headset: a gamepad's right stick held up zooms in (the view closer to Vibri),
 // down zooms out, smoothly, twice as close or as far for each second at full tilt.
 void zoom_with_stick(Session& s, double seconds) {
@@ -284,6 +268,11 @@ void zoom_with_stick(Session& s, double seconds) {
   }
 }
 
+// A gamepad trigger pulled past halfway (once until it is let go): the press it
+// stands for in play, or in a headset, thicker lines (R2) or thinner (L2).
+// Returns the press for play, 0 for none.
+std::uint8_t trigger_pulled(Session& s, const SDL_GamepadAxisEvent& a);
+
 // Thicker or thinner lines, saved for the display in use. In a headset each step is
 // a quarter more or less, with the confirm click so it can be heard without a console.
 void change_line_width(Session& s, bool thicker) {
@@ -296,6 +285,22 @@ void change_line_width(Session& s, bool thicker) {
     s.save.options.line_width = s.line_width;
   }
   std::printf("%sline width %.3f (saved)\n", s.opt.vr ? "headset " : "", s.line_width);
+}
+
+std::uint8_t trigger_pulled(Session& s, const SDL_GamepadAxisEvent& a) {
+  if (a.axis != SDL_GAMEPAD_AXIS_LEFT_TRIGGER && a.axis != SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) return 0;
+  const std::uint8_t bit = a.axis == SDL_GAMEPAD_AXIS_LEFT_TRIGGER ? 1 : 2;
+  std::uint8_t& held = s.triggers[a.which];
+  if (a.value > 16000 && !(held & bit)) {  // pulled past halfway
+    held = std::uint8_t(held | bit);
+    if (s.opt.vr) {
+      change_line_width(s, bit == 2);
+      return 0;
+    }
+    return bit == 1 ? std::uint8_t(kPressBlock) : std::uint8_t(kPressLoop);
+  }
+  if (a.value < 8000) held = std::uint8_t(held & ~bit);
+  return 0;
 }
 
 Result play_song(Session& s, int song, int track_index, int& points, std::uint32_t seed) {
@@ -464,17 +469,8 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
           if (const std::uint8_t b = pad_bits(e.gbutton.button)) presses.push_back({b, e.gbutton.timestamp});
           break;
         case SDL_EVENT_GAMEPAD_AXIS_MOTION:
-          // (In a headset the triggers zoom instead; LB and RB block and loop.)
-          if (!s.opt.vr && (e.gaxis.axis == SDL_GAMEPAD_AXIS_LEFT_TRIGGER || e.gaxis.axis == SDL_GAMEPAD_AXIS_RIGHT_TRIGGER)) {
-            const std::uint8_t bit = e.gaxis.axis == SDL_GAMEPAD_AXIS_LEFT_TRIGGER ? 1 : 2;
-            std::uint8_t& held = s.triggers[e.gaxis.which];
-            if (e.gaxis.value > 16000 && !(held & bit)) {  // pulled past halfway: a press
-              held = std::uint8_t(held | bit);
-              presses.push_back({bit == 1 ? std::uint8_t(kPressBlock) : std::uint8_t(kPressLoop), e.gaxis.timestamp});
-            } else if (e.gaxis.value < 8000) {
-              held = std::uint8_t(held & ~bit);
-            }
-          }
+          // (In a headset the triggers change the line width for testing; LB and RB block and loop.)
+          if (const std::uint8_t b = trigger_pulled(s, e.gaxis)) presses.push_back({b, e.gaxis.timestamp});
           break;
         default: break;
       }
@@ -483,7 +479,6 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     const std::uint64_t now_ns = SDL_GetTicksNS();
     const double dt = double(now_ns - last_ns) * 1e-9;
     zoom_with_stick(s, dt);
-    if (s.opt.vr) zoom_with_triggers(s, dt);
     last_ns = now_ns;
     // Heard position, 22.05 kHz samples from the song's start (negative during the 8 s ahead).
     auto heard_at = [&](std::uint64_t ns) {
@@ -822,6 +817,13 @@ int run(int argc, char** argv) {
               if (auto it = s.pads.find(e.gdevice.which); it != s.pads.end()) {
                 SDL_CloseGamepad(it->second);
                 s.pads.erase(it);
+              }
+              break;
+            case SDL_EVENT_GAMEPAD_AXIS_MOTION:
+              if (opt.vr) {  // the line width, in the menus too
+                const double before = s.line_width;
+                trigger_pulled(s, e.gaxis);
+                if (s.line_width != before) write_save();
               }
               break;
             case SDL_EVENT_GAMEPAD_BUTTON_DOWN:

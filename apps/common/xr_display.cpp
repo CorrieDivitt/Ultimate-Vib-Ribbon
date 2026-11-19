@@ -90,6 +90,9 @@ Mat4 scaling(float x, float y, float z) {
 // shot is a 3 degree telephoto from 23 m) would look tiny and far off at the
 // headset's own field of view, so its scene comes closer by the ratio of the two,
 // framed as the original framed it.
+// How far the zoom goes: 4 times closer, 12 times further away than at the start.
+constexpr float kZoomIn = 4.0f, kZoomOut = 1.0f / 12.0f;
+
 constexpr float kNarrowestFov = 25.0f * 3.14159265f / 180.0f;
 
 float depth_for(float fov_y) {
@@ -138,7 +141,7 @@ class XrDisplay::Impl {
   int height() const { return eyes_[0].height; }
   void recentre() { recentre_ = true; }
   float zoom() const { return zoom_; }
-  void set_zoom(float z) { zoom_ = std::clamp(z, 0.25f, 4.0f); }
+  void set_zoom(float z) { zoom_ = std::clamp(z, kZoomOut, kZoomIn); }
   float scale() const { return scale_; }
   void set_scale(float s) { scale_ = s; }
 
@@ -670,7 +673,7 @@ class XrDisplay::Impl {
       const float y = XR_SUCCEEDED(xrGetActionStateFloat(session_, &zi, &zs)) && zs.isActive ? zs.currentState : 0.0f;
       if (std::abs(y) > 0.2f) {
         const float t = (std::abs(y) - 0.2f) / 0.8f * (y > 0 ? 1.0f : -1.0f);
-        zoom_ = std::clamp(zoom_ * std::exp2(t * std::min(seconds, 0.1f)), 0.25f, 4.0f);
+        zoom_ = std::clamp(zoom_ * std::exp2(t * std::min(seconds, 0.1f)), kZoomOut, kZoomIn);
         zooming_ = true;
       } else if (zooming_) {
         zooming_ = false;
