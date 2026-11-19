@@ -107,7 +107,12 @@ class Gameplay {
   // State after the last update.
   const std::vector<GameEvent>& events() const { return events_; }
   const std::vector<Part>& parts() const { return parts_; }
-  std::vector<RoadPiece> road() const;
+  // The road's pieces to draw. As the original: from just behind Vibri to its
+  // horizon. `far` (for a headset, to look along the line): every part built so far
+  // ahead (the course is made eight seconds ahead), and the ones passed within
+  // keep_passed()'s time behind. Drawing only: the rules never see the passed ones.
+  std::vector<RoadPiece> road(bool far = false) const;
+  void keep_passed(std::int32_t samples) { keep_passed_ = samples; }
   int points() const { return points_; }
   int score() const { return points_ < kMaxScore ? points_ : kMaxScore; }
   int bonus() const;                 // end-of-round bonus for the current form
@@ -141,6 +146,8 @@ class Gameplay {
   RoundSetup setup_{};
   bool running_ = false, home_ = true, speed_course_ = false, auto_ = false, auto_play_ = false;
   std::vector<Part> parts_;
+  std::vector<Part> passed_;     // gone from parts_, kept for drawing (oldest first)
+  std::int32_t keep_passed_ = 0;
   std::vector<GameEvent> events_, incoming_;
   Interval start_, end_, quiet_, fade_;
   // screw effect

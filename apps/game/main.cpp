@@ -230,7 +230,7 @@ struct Session {
   Course course = Course::Bronze;  // being played
   int song = 0;                    // 1-6 when practising one song
   int final_score = 0, final_bonus = 0, final_form = 1;  // the last song cleared
-  bool zooming = false;                                   // the right stick is zooming (headset)
+  bool zooming = false, turning = false;                  // the sticks are moving the view (headset)
 };
 
 // In a headset, play is seen from down beside Vibri instead of from the original's
@@ -238,24 +238,40 @@ struct Session {
 // the side, as the original mostly shows it, it has almost no depth; looking along
 // it from just behind her, it runs away in front of you. The view goes with her;
 // `zoom` brings it closer (larger) or further away. Game units, y down.
-SceneView vr_play_view(float vibri_z, float zoom) {
-  const float distance = 1200.0f / zoom;  // from Vibri, 45 degrees behind and to the right
-  const float side = distance * 0.7071f, back = distance * 0.7071f;
+SceneView vr_play_view(float vibri_z, float zoom, double angle_degrees) {
+  // From Vibri: 1.2 m at zoom 1, at `angle` around her (0 behind, 90 to her right).
+  const float distance = 1200.0f / zoom;
+  const double a = angle_degrees * 3.14159265358979 / 180.0;
+  const float side = distance * float(std::sin(a)), back = distance * float(std::cos(a));
   SceneView v;
   v.eye = {side, -250.0f, vibri_z - back};  // eyes a little above her head
-  v.target = {0.0f, -200.0f, vibri_z + 2000.0f};
+  // Looking down the road from behind her, at her from the side or the front.
+  v.target = {0.0f, -200.0f, vibri_z + 2000.0f * float(std::max(0.0, std::cos(a)))};
   v.fov_y = 1.0f;  // (the headset shows its own field of view)
   return v;
 }
 
 // In a headset: a gamepad's right stick held up zooms in (the view closer to Vibri),
-// down zooms out, smoothly, twice as close or as far for each second at full tilt.
+// down zooms out, smoothly, twice as close or as far for each second at full tilt;
+// the left stick left or right takes the view round her, 90 degrees a second.
 void zoom_with_stick(Session& s, double seconds) {
   if (!s.opt.vr) return;
-  float y = 0;
+  float y = 0, x = 0;
   for (const auto& [id, pad] : s.pads) {
     const float v = -float(SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_RIGHTY)) / 32767.0f;  // SDL: up is negative
     if (std::abs(v) > std::abs(y)) y = v;
+    const float h = float(SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFTX)) / 32767.0f;
+    if (std::abs(h) > std::abs(x)) x = h;
+  }
+  if (std::abs(x) > 0.2f) {
+    const double t = (std::abs(x) - 0.2) / 0.8 * (x > 0 ? 1.0 : -1.0);
+    double& a = s.save.options.vr_angle;
+    a += 90.0 * t * std::min(seconds, 0.1);
+    a = std::remainder(a, 360.0);  // kept within -180 to 180
+    s.turning = true;
+  } else if (s.turning) {
+    s.turning = false;
+    std::printf("View angle %.0f degrees\n", s.save.options.vr_angle);
   }
   if (std::abs(y) > 0.2f) {
     const double t = (std::abs(y) - 0.2) / 0.8 * (y > 0 ? 1.0 : -1.0);
@@ -343,6 +359,9 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   setup.points = points;
   setup.track_index = track_index;
   game.start(setup);
+  // In a headset the whole line is in view: passed parts stay on it for 8 s, and
+  // every part built so far (8 s ahead) shows ahead.
+  if (s.opt.vr) game.keep_passed(kLookAheadBlocks * kBlockSize);
   s.scene.reset(true, false);
   s.hud.start_round(track_index, !s.song);  // the "Round 1/2" sign belongs to the two-song courses
 
@@ -509,14 +528,14 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     f.seconds = dt;
     f.jitter_seed = next_random(static_cast<std::uint32_t>(double(now_ns - start_ns) * 1e-9 * kOriginalRefresh) * 2654435761u);
     f.speed = game.speed();
-    f.road = game.road();
+    f.road = game.road(s.opt.vr);
     f.still = game.near_part();
     f.shake = game.shake();
     f.form = game.form();
     f.stage = game.stage();
     SceneView view;
     s.scene.draw(f, scene_lines, view);
-    if (s.opt.vr) view = vr_play_view(s.scene.vibri_z(), s.renderer.zoom());
+    if (s.opt.vr) view = vr_play_view(s.scene.vibri_z(), s.renderer.zoom(), s.save.options.vr_angle);
     auto convert = [](const std::vector<SceneLine>& in, std::vector<vibr::LineInstance>& dst) {
       dst.clear();
       for (const SceneLine& l : in)

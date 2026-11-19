@@ -90,8 +90,8 @@ Mat4 scaling(float x, float y, float z) {
 // shot is a 3 degree telephoto from 23 m) would look tiny and far off at the
 // headset's own field of view, so its scene comes closer by the ratio of the two,
 // framed as the original framed it.
-// How far the zoom goes: 4 times closer, 12 times further away than at the start.
-constexpr float kZoomIn = 4.0f, kZoomOut = 1.0f / 12.0f;
+// How far the zoom goes: 4 times closer, 24 times further away than at the start.
+constexpr float kZoomIn = 4.0f, kZoomOut = 1.0f / 24.0f;
 
 constexpr float kNarrowestFov = 25.0f * 3.14159265f / 180.0f;
 

@@ -76,6 +76,7 @@ void Gameplay::start(const RoundSetup& s) {
   beat_period_ = Fixed::from(1.0 / (beats_.to_double()));
   new_part_ = game_over_ = false;
   parts_.clear();
+  passed_.clear();
   events_.clear();
   incoming_.clear();
   points_ = s.points;
@@ -228,11 +229,13 @@ void Gameplay::miss(Part& p) {
 
 int Gameplay::bonus() const { return points_ * kEndBonusPercent[level_ / 3] / 100; }
 
-std::vector<RoadPiece> Gameplay::road() const {
+std::vector<RoadPiece> Gameplay::road(bool far) const {
   std::vector<RoadPiece> out;
+  if (far)
+    for (const Part& p : passed_) out.push_back({p.road, p.position + vibri_, p.missed, p.screw});
   const Fixed limit = distance_ - vibri_ + Fixed::from(3.0);
   for (const Part& p : parts_) {
-    if (p.position >= limit) break;  // parts_ is sorted by position
+    if (!far && p.position >= limit) break;  // parts_ is sorted by position
     out.push_back({p.road, p.position + vibri_, p.missed, p.screw});
   }
   return out;
@@ -251,7 +254,14 @@ Outcome Gameplay::update(std::int32_t position, std::uint8_t pressed, bool move_
   for (Part& p : parts_) p.position = (common.raw() != 0 ? common : p.rate).times((p.time - position) >> 6);
   std::stable_sort(parts_.begin(), parts_.end(), [](const Part& a, const Part& b) { return a.position < b.position; });
   const Fixed behind = Fixed::whole(-3) - vibri_;
-  parts_.erase(parts_.begin(), std::find_if(parts_.begin(), parts_.end(), [&](const Part& p) { return p.position >= behind; }));
+  const auto gone = std::find_if(parts_.begin(), parts_.end(), [&](const Part& p) { return p.position >= behind; });
+  if (keep_passed_ > 0) {
+    // Kept for drawing only, moving on as the rest do, until they are far enough behind.
+    passed_.insert(passed_.end(), parts_.begin(), gone);
+    for (Part& p : passed_) p.position = (common.raw() != 0 ? common : p.rate).times((p.time - position) >> 6);
+    passed_.erase(passed_.begin(), std::find_if(passed_.begin(), passed_.end(), [&](const Part& p) { return position - p.time <= keep_passed_; }));
+  }
+  parts_.erase(parts_.begin(), gone);
 
   // The parts around Vibri.
   Part *current = nullptr, *passed = nullptr, *next = nullptr, *pending = nullptr;

@@ -473,7 +473,12 @@ void Scene::draw(const Frame& f, std::vector<SceneLine>& out, SceneView& view) {
   lines_.set_view(view_);
 
   // The road: a far point behind, every piece, a far point ahead, all joined up.
-  const Fixed before = -length_.times(4), after = length_.times(5);
+  Fixed before = -length_.times(4), after = length_.times(5);
+  // (When more of the road is drawn than the original shows, the line runs on past it.)
+  if (!f.road.empty()) {
+    if (f.road.front().position - length_ < before) before = f.road.front().position - length_;
+    if (after < f.road.back().position + length_) after = f.road.back().position + length_;
+  }
   Vec3f join{0, 0, float(before.times(600).integer())};
   const int side = camera_.side();
   auto piece = [&](const TmdObject& obj, Fixed position, bool missed, int lean) {

@@ -23,6 +23,7 @@ struct Options {
   double line_width = 0.3;     // relative to the original's one pixel on a 288-line picture
   double vr_line_width = 0.15;  // the same, in a headset (an eye's picture is much taller)
   double vr_zoom = 1.0;         // in a headset, how close the view stands to Vibri in play (larger: closer)
+  double vr_angle = 45.0;       // and where around her, degrees: 0 behind, 90 to her right, -90 to her left
   double audio_offset_ms = 0;  // added to the estimated output latency
   float music_volume = 1.0f, effects_volume = 1.0f;
 };

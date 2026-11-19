@@ -266,3 +266,25 @@ TEST(smooth_animation_blends_between_poses) {
   CHECK(p.a == 3 && p.b == 0 && std::abs(p.t - 0.5f) < 1e-4f);
   Clip::set_smooth(false);
 }
+
+TEST(far_road_keeps_passed_parts_for_drawing_only) {
+  // Two parts; once both have gone by, the original's road has neither, the far one
+  // still shows them (behind Vibri) for as long as it is asked to, and play is the same.
+  Run plain, kept;
+  kept.g.keep_passed(8 * 22050);
+  for (Run* r : {&plain, &kept}) {
+    r->g.add_event(part(44100, 0));
+    r->g.add_event(part(55125, 1));
+    r->press_at(44100, kPressBlock);
+    r->press_at(55125, kPressPit);
+    r->run_to(44100 * 4);
+  }
+  CHECK(plain.hits == 2 && kept.hits == 2 && plain.g.points() == kept.g.points());
+  CHECK(plain.g.road().empty() && kept.g.road().empty());
+  const auto far = kept.g.road(true);
+  CHECK(far.size() == 2);
+  CHECK(far.size() == 2 && far[0].position < Fixed() && far[0].position < far[1].position);
+  CHECK(plain.g.road(true).empty());
+  kept.run_to(44100 * 4 + 8 * 22050 + 22050);
+  CHECK(kept.g.road(true).empty());  // gone once 8 s behind
+}
