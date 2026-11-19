@@ -232,6 +232,20 @@ struct Session {
   int final_score = 0, final_bonus = 0, final_form = 1;  // the last song cleared
 };
 
+// Thicker or thinner lines, saved for the display in use. In a headset each step is
+// a quarter more or less, with the confirm click so it can be heard without a console.
+void change_line_width(Session& s, bool thicker) {
+  if (s.opt.vr) {
+    s.line_width = std::clamp(thicker ? s.line_width * 1.25 : s.line_width / 1.25, 0.03, 4.0);
+    s.save.options.vr_line_width = s.line_width;
+    s.fx.number(1, 90, 5);
+  } else {
+    s.line_width = std::clamp(s.line_width + (thicker ? 0.125 : -0.125), 0.125, 4.0);
+    s.save.options.line_width = s.line_width;
+  }
+  std::printf("%sline width %.3f (saved)\n", s.opt.vr ? "headset " : "", s.line_width);
+}
+
 Result play_song(Session& s, int song, int track_index, int& points, std::uint32_t seed) {
   // Timing: like the original, a little different on every play, unless --fixed.
   const CourseTiming timing = s.fixed ? CourseTiming::consistent() : CourseTiming::like_original(seed);
@@ -375,11 +389,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
             s.save.options.audio_offset_ms = s.audio.offset_ms();
             std::printf("audio offset %+.0f ms (latency now %.0f ms)\n", s.audio.offset_ms(), s.audio.latency_ms());
           } else if (e.key.key == SDLK_MINUS || e.key.key == SDLK_EQUALS) {
-            // Finer steps in a headset, where each is worth far more on the picture; each saved for its own display.
-            const double step = s.opt.vr ? 0.025 : 0.125;
-            s.line_width = std::clamp(s.line_width + (e.key.key == SDLK_MINUS ? -step : step), step, 4.0);
-            (s.opt.vr ? s.save.options.vr_line_width : s.save.options.line_width) = s.line_width;
-            std::printf("%sline width %.3f (saved)\n", s.opt.vr ? "headset " : "", s.line_width);
+            change_line_width(s, e.key.key == SDLK_EQUALS);
           } else if (const std::uint8_t b = key_bits(e.key.key)) {
             presses.push_back({b, e.key.timestamp});
           }
@@ -737,6 +747,12 @@ int run(int argc, char** argv) {
                 case SDLK_RIGHT: case SDLK_D: press(3, down); break;
                 case SDLK_RETURN: case SDLK_SPACE: case SDLK_Z: press(4, down); break;
                 case SDLK_ESCAPE: case SDLK_BACKSPACE: case SDLK_X: press(5, down); break;
+                case SDLK_MINUS: case SDLK_EQUALS:
+                  if (down) {
+                    change_line_width(s, e.key.key == SDLK_EQUALS);
+                    write_save();
+                  }
+                  break;
                 default: break;
               }
               break;
