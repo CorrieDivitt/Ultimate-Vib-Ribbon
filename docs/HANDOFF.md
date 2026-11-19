@@ -204,6 +204,8 @@ Owner's direction after the third test: polish PCVR before the standalone build;
 
 Owner's fourth test: Developer Mode is on (for the standalone build). The view beside Vibri starts close, but the right stick did not zoom either (so neither the stick's Vector2 nor its y float reached us). Owner asked for R2/L2; on Touch those are the triggers, already block and loop (as the original's L2/R2 are block and loop on the PlayStation), so zoom went to the grips (squeeze/value): right in, left out, also still the stick. Diagnostics added: the console prints each hand's interaction profile on XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED, each controller button press (as its gamepad name), and each zoom input over 0.5. If the profile is not oculus/touch_controller, the bindings never applied (and the menus' controller input was really the gamepad).
 
+Resolved: the owner plays with an Xbox controller (SDL gamepad), not the Touch controllers, so the right-stick line width and zoom (OpenXR actions) never saw it; the "menus worked" were the gamepad. `zoom_with_stick` in vibplay reads every open gamepad's SDL_GAMEPAD_AXIS_RIGHTY (up negative) each frame in play and in the menus (deadzone 0.2, x2 a second at full tilt, saved as vr_zoom when let go). Grip zoom and the per-press console lines removed; the interaction-profile line stays. The Touch controllers are untested.
+
 Known limits of the spike: everything rides the original's camera (the intro and play move it; comfort to judge), the HUD sits where its own camera puts it, menus blend only at 50 Hz, no recentre button of our own (the headset's works), no Quest standalone (Android) build yet.
 
 ## 2c. Gameplay rules (session 2, 2026-11-19)
