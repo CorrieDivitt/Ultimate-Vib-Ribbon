@@ -13,7 +13,6 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
-#include <map>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -586,8 +585,7 @@ class XrDisplay::Impl {
     stick_ = action("menu_stick", "Menu direction", XR_ACTION_TYPE_VECTOR2F_INPUT);
     recentre_action_ = action("recentre", "Recentre the view", XR_ACTION_TYPE_BOOLEAN_INPUT);
     zoom_stick_ = action("zoom", "Zoom (testing)", XR_ACTION_TYPE_FLOAT_INPUT);
-    zoom_in_ = action("zoom_in", "Zoom in (testing)", XR_ACTION_TYPE_FLOAT_INPUT);
-    zoom_out_ = action("zoom_out", "Zoom out (testing)", XR_ACTION_TYPE_FLOAT_INPUT);
+
 
     // Touch controllers (Quest), and the plainest controller any runtime offers.
     std::vector<XrActionSuggestedBinding> touch = {
@@ -601,8 +599,7 @@ class XrDisplay::Impl {
         {stick_, path("/user/hand/left/input/thumbstick")},
         {recentre_action_, path("/user/hand/right/input/thumbstick/click")},
         {zoom_stick_, path("/user/hand/right/input/thumbstick/y")},
-        {zoom_in_, path("/user/hand/right/input/squeeze/value")},
-        {zoom_out_, path("/user/hand/left/input/squeeze/value")},
+
     };
     XrInteractionProfileSuggestedBinding sb{XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING};
     sb.interactionProfile = path("/interaction_profiles/oculus/touch_controller");
@@ -648,7 +645,6 @@ class XrDisplay::Impl {
       XrActionStateBoolean st{XR_TYPE_ACTION_STATE_BOOLEAN};
       if (XR_FAILED(xrGetActionStateBoolean(session_, &gi, &st))) continue;
       const bool down = st.isActive && st.currentState;
-      if (down && !b.down) std::printf("Controller: %s\n", SDL_GetGamepadStringForButton(b.pad));
       if (down != b.down) push_button(b.pad, down);
       b.down = down;
     }
@@ -667,19 +663,11 @@ class XrDisplay::Impl {
       const std::uint64_t now = SDL_GetTicksNS();
       const float seconds = zoom_ns_ ? float(double(now - zoom_ns_) * 1e-9) : 0.0f;
       zoom_ns_ = now;
-      // The right grip zooms in and the left one out; the right stick's y as well.
-      auto value = [&](XrAction a, const char* name) {
-        XrActionStateGetInfo zi{XR_TYPE_ACTION_STATE_GET_INFO};
-        zi.action = a;
-        XrActionStateFloat zs{XR_TYPE_ACTION_STATE_FLOAT};
-        const XrResult r = xrGetActionStateFloat(session_, &zi, &zs);
-        const float v = XR_SUCCEEDED(r) && zs.isActive ? zs.currentState : 0.0f;
-        if (XR_SUCCEEDED(r) && zs.isActive && zs.changedSinceLastSync && std::abs(v) > 0.5f && !reported_[a])
-          std::printf("Controller: %s %.2f\n", name, double(v));
-        reported_[a] = std::abs(v) > 0.5f;
-        return v;
-      };
-      const float y = std::clamp(value(zoom_stick_, "right stick") + value(zoom_in_, "right grip") - value(zoom_out_, "left grip"), -1.0f, 1.0f);
+      // The Touch right stick's y (a gamepad's right stick is read by the game).
+      XrActionStateGetInfo zi{XR_TYPE_ACTION_STATE_GET_INFO};
+      zi.action = zoom_stick_;
+      XrActionStateFloat zs{XR_TYPE_ACTION_STATE_FLOAT};
+      const float y = XR_SUCCEEDED(xrGetActionStateFloat(session_, &zi, &zs)) && zs.isActive ? zs.currentState : 0.0f;
       if (std::abs(y) > 0.2f) {
         const float t = (std::abs(y) - 0.2f) / 0.8f * (y > 0 ? 1.0f : -1.0f);
         zoom_ = std::clamp(zoom_ * std::exp2(t * std::min(seconds, 0.1f)), 0.25f, 4.0f);
@@ -842,8 +830,7 @@ class XrDisplay::Impl {
   XrSpace space_ = XR_NULL_HANDLE, head_ = XR_NULL_HANDLE;
   Mat4 scene_place_;  // the scene in the headset's starting space (identity until recentred)
   bool recentre_ = false;
-  XrAction recentre_action_ = XR_NULL_HANDLE, zoom_stick_ = XR_NULL_HANDLE, zoom_in_ = XR_NULL_HANDLE, zoom_out_ = XR_NULL_HANDLE;
-  std::map<XrAction, bool> reported_;  // for the console: inputs seen, once per press
+  XrAction recentre_action_ = XR_NULL_HANDLE, zoom_stick_ = XR_NULL_HANDLE;
   float zoom_ = 1.0f;
   bool zooming_ = false;
   std::uint64_t zoom_ns_ = 0;

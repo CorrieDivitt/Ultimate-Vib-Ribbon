@@ -230,6 +230,7 @@ struct Session {
   Course course = Course::Bronze;  // being played
   int song = 0;                    // 1-6 when practising one song
   int final_score = 0, final_bonus = 0, final_form = 1;  // the last song cleared
+  bool zooming = false;                                   // the right stick is zooming (headset)
 };
 
 // In a headset, play is seen from down beside Vibri instead of from the original's
@@ -245,6 +246,42 @@ SceneView vr_play_view(float vibri_z, float zoom) {
   v.target = {0.0f, -200.0f, vibri_z + 2000.0f};
   v.fov_y = 1.0f;  // (the headset shows its own field of view)
   return v;
+}
+
+// In a headset, a gamepad's right trigger held zooms in and the left one out:
+// twice as close or as far for each second at full pull.
+void zoom_with_triggers(Session& s, double seconds) {
+  float pull = 0;
+  for (auto& [id, pad] : s.pads)
+    pull += float(SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) - SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER)) / 32767.0f;
+  static bool zooming = false;
+  if (std::abs(pull) > 0.1f) {
+    s.renderer.set_zoom(s.renderer.zoom() * std::exp2(pull * float(std::min(seconds, 0.1))));
+    zooming = true;
+  } else if (zooming) {
+    zooming = false;
+    std::printf("Zoom %.2f\n", double(s.renderer.zoom()));
+  }
+}
+
+// In a headset: a gamepad's right stick held up zooms in (the view closer to Vibri),
+// down zooms out, smoothly, twice as close or as far for each second at full tilt.
+void zoom_with_stick(Session& s, double seconds) {
+  if (!s.opt.vr) return;
+  float y = 0;
+  for (const auto& [id, pad] : s.pads) {
+    const float v = -float(SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_RIGHTY)) / 32767.0f;  // SDL: up is negative
+    if (std::abs(v) > std::abs(y)) y = v;
+  }
+  if (std::abs(y) > 0.2f) {
+    const double t = (std::abs(y) - 0.2) / 0.8 * (y > 0 ? 1.0 : -1.0);
+    s.renderer.set_zoom(float(s.renderer.zoom() * std::exp2(t * std::min(seconds, 0.1))));
+    s.zooming = true;
+  } else if (s.zooming) {
+    s.zooming = false;
+    s.save.options.vr_zoom = s.renderer.zoom();
+    std::printf("Zoom %.2f\n", double(s.renderer.zoom()));
+  }
 }
 
 // Thicker or thinner lines, saved for the display in use. In a headset each step is
@@ -427,7 +464,8 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
           if (const std::uint8_t b = pad_bits(e.gbutton.button)) presses.push_back({b, e.gbutton.timestamp});
           break;
         case SDL_EVENT_GAMEPAD_AXIS_MOTION:
-          if (e.gaxis.axis == SDL_GAMEPAD_AXIS_LEFT_TRIGGER || e.gaxis.axis == SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) {
+          // (In a headset the triggers zoom instead; LB and RB block and loop.)
+          if (!s.opt.vr && (e.gaxis.axis == SDL_GAMEPAD_AXIS_LEFT_TRIGGER || e.gaxis.axis == SDL_GAMEPAD_AXIS_RIGHT_TRIGGER)) {
             const std::uint8_t bit = e.gaxis.axis == SDL_GAMEPAD_AXIS_LEFT_TRIGGER ? 1 : 2;
             std::uint8_t& held = s.triggers[e.gaxis.which];
             if (e.gaxis.value > 16000 && !(held & bit)) {  // pulled past halfway: a press
@@ -444,6 +482,8 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
 
     const std::uint64_t now_ns = SDL_GetTicksNS();
     const double dt = double(now_ns - last_ns) * 1e-9;
+    zoom_with_stick(s, dt);
+    if (s.opt.vr) zoom_with_triggers(s, dt);
     last_ns = now_ns;
     // Heard position, 22.05 kHz samples from the song's start (negative during the 8 s ahead).
     auto heard_at = [&](std::uint64_t ns) {
@@ -804,6 +844,7 @@ int run(int argc, char** argv) {
         }
         if (!running) break;
         const std::uint64_t now_ns = SDL_GetTicksNS();
+        zoom_with_stick(s, double(now_ns - last_ns) * 1e-9);
         behind = std::min(behind + double(now_ns - last_ns) * 1e-9, 0.1);
         last_ns = now_ns;
         while (behind >= 1.0 / TitleScreens::kFrameRate) {
