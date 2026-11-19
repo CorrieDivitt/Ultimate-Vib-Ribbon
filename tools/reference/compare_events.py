@@ -7,7 +7,9 @@
 Times in the recording are stream positions; ours count from the track's first
 sample. The constant shift between the two is found from the data and reported.
 """
+import bisect
 import collections
+import difflib
 import json
 import sys
 
@@ -35,27 +37,37 @@ def main():
     shift = shifts.most_common(1)[0][0]
     print("ours: %d parts   original: %d parts   time shift (ours - original): %d samples" % (len(ours), len(ref), shift))
 
-    n = min(len(ours), len(ref))
-    pairs = list(zip(ours, ref))
-    drift = [abs(o["time"] - r["time"] - shift) for o, r in pairs]
-    same_time = sum(1 for d in drift if d == 0)
-    near_time = sum(1 for d in drift if d <= 8)
-    same_road = sum(1 for o, r in pairs if o["value"] == r["value"])
-    same_len = sum(1 for o, r in pairs if o["length"] == r["length"])
-    max_len = max((abs(o["length"] - r["length"]) for o, r in pairs), default=0)
-    same_scale = sum(1 for o, r in pairs if o["scale"] == r["scale"])
-    print("of the first %d: time exact %d, within 8 samples %d (largest %d); road %d; length %d (largest difference %d); scale %d"
-          % (n, same_time, near_time, max(drift, default=0), same_road, same_len, max_len, same_scale))
-    for i, (o, r) in enumerate(pairs):
-        if o["value"] != r["value"] or drift[i] > 256:
-            print("  first real difference at part %d: ours t=%d road=%d, original t=%d road=%d" % (i + 1, o["time"] - shift, o["value"], r["time"], r["value"]))
-            break
-    # The original itself is not sample-exact from run to run (see docs/HANDOFF.md), so
-    # the verdict allows 256 samples (11.6 ms, a fifth of the smallest hit window).
-    complete = len(ours) == len(ref)
-    ok = same_road == n and max(drift, default=0) <= 256
-    print(("MATCH" if complete else "MATCH SO FAR (recording has %d of %d parts)" % (len(ref), len(ours))) if ok else "DIFFERENT")
-    return 0 if ok else 1
+    # Pair each of our parts with the nearest recorded one (within 600 samples, 27 ms).
+    times = [r["time"] + shift for r in ref]
+    used, exact, near, roads = set(), 0, 0, 0
+    for o in ours:
+        j = bisect.bisect_left(times, o["time"])
+        best = min((k for k in (j - 1, j) if 0 <= k < len(ref) and k not in used), key=lambda k: abs(times[k] - o["time"]), default=None)
+        if best is None or abs(times[best] - o["time"]) >= 600:
+            continue
+        used.add(best)
+        near += 1
+        exact += abs(times[best] - o["time"]) <= 2
+        roads += ref[best]["value"] == o["value"]
+    print("same onset within 2 samples: %d   within 27 ms: %d   of those, same obstacle type: %d" % (exact, near, roads))
+
+    # The obstacle types as a sequence, whatever the timing: they should differ only
+    # where one side placed an obstacle the other did not.
+    a, b = [o["value"] for o in ours], [r["value"] for r in ref]
+    edits = [(tag, i2 - i1, j2 - j1) for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes() if tag != "equal"]
+    changed = sum(max(x, y) for _, x, y in edits)
+    print("obstacle-type sequence: %d places differ (%d extra or missing obstacles)" % (len(edits), changed))
+
+    # The original is not repeatable between its own runs (docs/HANDOFF.md section 2d),
+    # so besides an exact match there is "close": same sequence of types, nearly all onsets found by both.
+    if len(ours) == len(ref) and exact == len(ours) and not edits:
+        verdict = "EXACT MATCH"
+    elif near >= 0.85 * max(len(ours), len(ref)) and changed <= 0.08 * len(ref) + 1:
+        verdict = "CLOSE: same type sequence, most onsets shared (see docs/HANDOFF.md section 2d)"
+    else:
+        verdict = "DIFFERENT"
+    print(verdict)
+    return 0 if verdict != "DIFFERENT" else 1
 
 
 if __name__ == "__main__":

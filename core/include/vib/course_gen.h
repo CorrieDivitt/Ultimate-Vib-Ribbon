@@ -46,6 +46,16 @@ class CourseGenerator {
   explicit CourseGenerator(const CourseScript& script, int cue_interval_blocks = 1);
   ~CourseGenerator();
 
+  // Consult the script once per video frame instead, as the original does: every
+  // block that arrives during one frame uses the cue fetched for the first of them.
+  // `period_q16` is the frame length in samples times 65536 (the PAL original:
+  // 22050 / 49.759 Hz), `phase_q16` where in a frame the round's first block falls.
+  void set_frame_timing(std::int64_t period_q16, std::int64_t phase_q16) {
+    frame_period_ = period_q16;
+    frame_phase_ = phase_q16;
+  }
+  static constexpr std::int64_t kOriginalFramePeriodQ16 = 29041657;  // 443.14 samples
+
   // Begins a round on the game's own disc: `round` counts from 1 and selects the
   // script track; `start_time` is the stream position of the track's first sample.
   void start_round(int round, std::int32_t start_time, std::uint32_t script_seed = 0);
@@ -81,6 +91,7 @@ class CourseGenerator {
   const CourseScript& script_;
   int cue_interval_;
   int blocks_since_cue_ = 0;
+  std::int64_t frame_period_ = 0, frame_phase_ = 0, last_frame_ = -1;
   Cue current_cue_;
 
   // script position

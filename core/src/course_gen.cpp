@@ -142,6 +142,7 @@ void CourseGenerator::start_round(int round, std::int32_t start_time, std::uint3
   for (auto& b : history_) b.fill(0);
   short_level_ = long_level_ = 0;
   blocks_since_cue_ = 0;
+  last_frame_ = frame_period_ > 0 ? frame_phase_ / frame_period_ : -1;
   current_cue_ = next_cue(start_time);
 }
 
@@ -240,7 +241,8 @@ void CourseGenerator::take_candidate() {
   pending_ = std::move(candidate_);
   candidate_.reset();
   pending_scale_ = pending_->cue.tempo ? pending_->cue.tempo->next(pending_->time) : kOne;
-  pending_length_ = static_cast<std::int32_t>((std::int64_t(pending_scale_) * pending_->cue.period) >> 16);
+  // 32-bit product, as in the original: it wraps for very long parts under a tempo effect.
+  pending_length_ = static_cast<std::int32_t>(std::uint32_t(pending_scale_) * std::uint32_t(pending_->cue.period)) >> 16;
 }
 
 void CourseGenerator::end_window(std::int32_t time) {
@@ -249,7 +251,8 @@ void CourseGenerator::end_window(std::int32_t time) {
       if (candidate_->time - pending_->time > 2 * pending_length_) {
         place();  // far enough apart: the earlier one stands
         take_candidate();
-      } else if (ratio_above(candidate_->level, candidate_->background, 3 * pending_->level / 2, pending_->background)) {
+      } else if (ratio_above(candidate_->level, candidate_->background, static_cast<std::int32_t>(3u * std::uint32_t(pending_->level)) / 2,
+                             pending_->background)) {
         take_candidate();  // too close, but much louder: it replaces the earlier one
       } else {
         candidate_.reset();
@@ -262,11 +265,19 @@ void CourseGenerator::end_window(std::int32_t time) {
 }
 
 void CourseGenerator::process(std::int32_t time, const Block& block) {
-  if (blocks_since_cue_ >= cue_interval_) {
-    current_cue_ = next_cue(time);
-    blocks_since_cue_ = 0;
+  if (frame_period_ > 0) {
+    const std::int64_t frame = (std::int64_t(time - start_time_) * 65536 + frame_phase_) / frame_period_;
+    if (frame != last_frame_) {
+      current_cue_ = next_cue(time);
+      last_frame_ = frame;
+    }
+  } else {
+    if (blocks_since_cue_ >= cue_interval_) {
+      current_cue_ = next_cue(time);
+      blocks_since_cue_ = 0;
+    }
+    ++blocks_since_cue_;
   }
-  ++blocks_since_cue_;
   const Cue& cue = current_cue_;
 
   history_[std::size_t(history_index_)] = block;

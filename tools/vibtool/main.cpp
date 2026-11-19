@@ -46,7 +46,7 @@ int usage() {
       "  vibtool audio   <disc.cue> <out_dir>\n"
       "  vibtool formats <disc.cue>\n"
       "  vibtool sounds  <disc.cue> <out_dir>\n"
-      "  vibtool course  <disc.cue> <round 1-6> [<cue interval in blocks>]\n"
+      "  vibtool course  <disc.cue> <round 1-6> [<cue interval in blocks> [<lead in 44.1 kHz samples> [<frame phase in samples>]]]\n"
       "  vibtool play    <disc.cue> <round 1-6>\n"
       "  vibtool obj     <disc.cue> <pak> <model.tmd> <out.obj> [<anim.anm> <frame>]\n"
       "                  e.g. vibtool obj disc.cue GAME/02_FILES.PAK CHARA/PEELOO/MODEL.TMD peeloo.obj\n",
@@ -266,15 +266,21 @@ int cmd_sounds(const fs::path& cue, const fs::path& out) {
   return 0;
 }
 
-int cmd_course(const fs::path& cue, int round, int interval) {
+int cmd_course(const fs::path& cue, int round, int interval, int lead_pairs, int frame_phase) {
   DiscImage disc = DiscImage::open(cue);
   Iso9660 iso(disc);
   const Pak pak(iso.read("GAME/02_FILES.PAK"));
   const CourseScript script = parse_course_script(pak.view("SCRIPT/SYSTEM3.FSL"));
   // Round n plays the disc's n-th audio track, which is CD track n + 1.
-  const std::vector<std::int16_t> pcm = disc.read_audio_track(round + 1);
+  std::vector<std::int16_t> pcm = disc.read_audio_track(round + 1);
+  // Research aid: start the music `lead_pairs` 44.1 kHz samples before (positive) or after
+  // (negative) the round's start, to mimic where the original's capture happened to begin.
+  if (lead_pairs > 0) pcm.erase(pcm.begin(), pcm.begin() + std::min<std::ptrdiff_t>(std::ptrdiff_t(lead_pairs) * 2, std::ptrdiff_t(pcm.size())));
+  if (lead_pairs < 0) pcm.insert(pcm.begin(), std::size_t(-lead_pairs) * 2, 0);
   const std::vector<Block> blocks = make_blocks(pcm);
   CourseGenerator gen(script, interval);
+  if (frame_phase >= 0) gen.set_frame_timing(std::getenv("VIB_FRAME_Q16") ? std::atoll(std::getenv("VIB_FRAME_Q16")) : CourseGenerator::kOriginalFramePeriodQ16,
+                                           std::int64_t(frame_phase) * 65536);
   gen.start_round(round, 0);
   for (std::size_t b = 0; b < blocks.size(); ++b) gen.process(static_cast<std::int32_t>(b * kBlockSize), blocks[b]);
   static const char* types[] = {"part", "camera", "effect"};
@@ -344,7 +350,9 @@ int main(int argc, char** argv) {
     if (cmd == "audio" && argc == 4) return cmd_audio(cue, path_from_utf8(argv[3]));
     if (cmd == "formats" && argc == 3) return cmd_formats(cue);
     if (cmd == "play" && argc == 4) return cmd_play(cue, std::atoi(argv[3]));
-    if (cmd == "course" && (argc == 4 || argc == 5)) return cmd_course(cue, std::atoi(argv[3]), argc == 5 ? std::atoi(argv[4]) : 1);
+    if (cmd == "course" && argc >= 4 && argc <= 7)
+      return cmd_course(cue, std::atoi(argv[3]), argc >= 5 ? std::atoi(argv[4]) : 1, argc >= 6 ? std::atoi(argv[5]) : 0,
+                        argc == 7 ? std::atoi(argv[6]) : -1);
     if (cmd == "sounds" && argc == 4) return cmd_sounds(cue, path_from_utf8(argv[3]));
     if (cmd == "obj" && (argc == 6 || argc == 8))
       return cmd_obj(cue, argv[3], argv[4], path_from_utf8(argv[5]), argc == 8 ? argv[6] : nullptr, argc == 8 ? std::atoi(argv[7]) : 0);
