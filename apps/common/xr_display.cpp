@@ -137,6 +137,8 @@ class XrDisplay::Impl {
   const char* runtime_name() const { return runtime_name_.c_str(); }
   int height() const { return eyes_[0].height; }
   void recentre() { recentre_ = true; }
+  float zoom() const { return zoom_; }
+  void set_zoom(float z) { zoom_ = std::clamp(z, 0.25f, 4.0f); }
   float scale() const { return scale_; }
   void set_scale(float s) { scale_ = s; }
 
@@ -582,7 +584,7 @@ class XrDisplay::Impl {
                 Button{action("start", "Start", XR_ACTION_TYPE_BOOLEAN_INPUT), SDL_GAMEPAD_BUTTON_START}};
     stick_ = action("menu_stick", "Menu direction", XR_ACTION_TYPE_VECTOR2F_INPUT);
     recentre_action_ = action("recentre", "Recentre the view", XR_ACTION_TYPE_BOOLEAN_INPUT);
-    width_stick_ = action("line_width", "Line width (testing)", XR_ACTION_TYPE_VECTOR2F_INPUT);
+    zoom_stick_ = action("zoom", "Zoom (testing)", XR_ACTION_TYPE_FLOAT_INPUT);
 
     // Touch controllers (Quest), and the plainest controller any runtime offers.
     std::vector<XrActionSuggestedBinding> touch = {
@@ -595,7 +597,7 @@ class XrDisplay::Impl {
         {buttons_[5].action, path("/user/hand/left/input/menu/click")},
         {stick_, path("/user/hand/left/input/thumbstick")},
         {recentre_action_, path("/user/hand/right/input/thumbstick/click")},
-        {width_stick_, path("/user/hand/right/input/thumbstick")},
+        {zoom_stick_, path("/user/hand/right/input/thumbstick/y")},
     };
     XrInteractionProfileSuggestedBinding sb{XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING};
     sb.interactionProfile = path("/interaction_profiles/oculus/touch_controller");
@@ -652,23 +654,26 @@ class XrDisplay::Impl {
       if (XR_SUCCEEDED(xrGetActionStateBoolean(session_, &ri, &rs)) && rs.isActive && rs.changedSinceLastSync && rs.currentState)
         recentre_ = true;
     }
-    // The right stick up or down: the + or - key, once per push.
+    // The right stick held up or down: zoom in or out, smoothly (twice as close
+    // or as far for each second at full tilt), handled here rather than through
+    // the game's events.
     {
-      XrActionStateGetInfo wi{XR_TYPE_ACTION_STATE_GET_INFO};
-      wi.action = width_stick_;
-      XrActionStateVector2f ws{XR_TYPE_ACTION_STATE_VECTOR2F};
+      const std::uint64_t now = SDL_GetTicksNS();
+      const float seconds = zoom_ns_ ? float(double(now - zoom_ns_) * 1e-9) : 0.0f;
+      zoom_ns_ = now;
+      XrActionStateGetInfo zi{XR_TYPE_ACTION_STATE_GET_INFO};
+      zi.action = zoom_stick_;
+      XrActionStateFloat zs{XR_TYPE_ACTION_STATE_FLOAT};
       float y = 0;
-      if (XR_SUCCEEDED(xrGetActionStateVector2f(session_, &wi, &ws)) && ws.isActive) y = ws.currentState.y;
-      const int dir = y > 0.7f ? 1 : y < -0.7f ? -1 : (std::abs(y) < 0.4f ? 0 : width_dir_);
-      if (dir != width_dir_ && dir != 0) {
-        SDL_Event e{};
-        e.type = SDL_EVENT_KEY_DOWN;
-        e.key.key = dir > 0 ? SDLK_EQUALS : SDLK_MINUS;
-        e.key.down = true;
-        e.key.timestamp = SDL_GetTicksNS();
-        SDL_PushEvent(&e);
+      if (XR_SUCCEEDED(xrGetActionStateFloat(session_, &zi, &zs)) && zs.isActive) y = zs.currentState;
+      if (std::abs(y) > 0.2f) {
+        const float t = (std::abs(y) - 0.2f) / 0.8f * (y > 0 ? 1.0f : -1.0f);
+        zoom_ = std::clamp(zoom_ * std::exp2(t * std::min(seconds, 0.1f)), 0.25f, 4.0f);
+        zooming_ = true;
+      } else if (zooming_) {
+        zooming_ = false;
+        std::printf("Zoom %.2f\n", double(zoom_));
       }
-      width_dir_ = dir;
     }
     // The stick as the d-pad, with a little hysteresis.
     XrActionStateGetInfo gi{XR_TYPE_ACTION_STATE_GET_INFO};
@@ -813,8 +818,10 @@ class XrDisplay::Impl {
   XrSpace space_ = XR_NULL_HANDLE, head_ = XR_NULL_HANDLE;
   Mat4 scene_place_;  // the scene in the headset's starting space (identity until recentred)
   bool recentre_ = false;
-  XrAction recentre_action_ = XR_NULL_HANDLE, width_stick_ = XR_NULL_HANDLE;
-  int width_dir_ = 0;
+  XrAction recentre_action_ = XR_NULL_HANDLE, zoom_stick_ = XR_NULL_HANDLE;
+  float zoom_ = 1.0f;
+  bool zooming_ = false;
+  std::uint64_t zoom_ns_ = 0;
   XrActionSet actions_ = XR_NULL_HANDLE;
   std::vector<Button> buttons_;
   XrAction stick_ = XR_NULL_HANDLE;
@@ -847,6 +854,8 @@ const char* XrDisplay::gpu_name() const { return impl_->gpu_name(); }
 int XrDisplay::height() const { return impl_->height(); }
 void XrDisplay::draw(const std::vector<Layer>& layers, float line_width) { impl_->draw(layers, line_width); }
 void XrDisplay::recentre() { impl_->recentre(); }
+float XrDisplay::zoom() const { return impl_->zoom(); }
+void XrDisplay::set_zoom(float z) { impl_->set_zoom(z); }
 const char* XrDisplay::runtime_name() const { return impl_->runtime_name(); }
 void XrDisplay::set_scale(float metres_per_unit) { impl_->set_scale(metres_per_unit); }
 float XrDisplay::scale() const { return impl_->scale(); }

@@ -84,6 +84,9 @@ class Display {
   virtual void draw(const std::vector<Layer>& layers, float line_width) = 0;
   // A headset: put the scene in front of where the player is now looking.
   virtual void recentre() {}
+  // A headset: how close the view stands to Vibri in play (1 = as set up, larger = closer).
+  virtual float zoom() const { return 1.0f; }
+  virtual void set_zoom(float) {}
 };
 
 class Renderer : public Display {

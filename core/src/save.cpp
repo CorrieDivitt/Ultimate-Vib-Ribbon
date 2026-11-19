@@ -53,6 +53,8 @@ std::string SaveData::to_text() const {
   out << "line_width " << buf << '\n';
   std::snprintf(buf, sizeof buf, "%.3f", options.vr_line_width);
   out << "vr_line_width " << buf << '\n';
+  std::snprintf(buf, sizeof buf, "%.3f", options.vr_zoom);
+  out << "vr_zoom " << buf << '\n';
   std::snprintf(buf, sizeof buf, "%.1f", options.audio_offset_ms);
   out << "audio_offset_ms " << buf << '\n';
   std::snprintf(buf, sizeof buf, "%.2f", double(options.music_volume));
@@ -90,6 +92,7 @@ SaveData SaveData::from_text(const std::string& text) {
     else if (key == "smooth_animation") d.options.smooth_animation = parse_bool(value);
     else if (key == "line_width" && number > 0) d.options.line_width = number;
     else if (key == "vr_line_width" && number > 0) d.options.vr_line_width = number;
+    else if (key == "vr_zoom" && number > 0) d.options.vr_zoom = number;
     else if (key == "audio_offset_ms") d.options.audio_offset_ms = number;
     else if (key == "music_volume" && number >= 0) d.options.music_volume = float(number);
     else if (key == "effects_volume" && number >= 0) d.options.effects_volume = float(number);

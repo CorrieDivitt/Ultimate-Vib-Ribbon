@@ -467,6 +467,7 @@ void Scene::draw(const Frame& f, std::vector<SceneLine>& out, SceneView& view) {
 
   // The camera follows Vibri's place on the road.
   const auto vibri_z = static_cast<float>((offset_ + start_).times(600).integer());
+  vibri_z_ = vibri_z;
   view_ = camera_.update(f.seconds, {0, 0, vibri_z});
   view = view_;
   lines_.set_view(view_);

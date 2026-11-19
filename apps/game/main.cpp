@@ -232,6 +232,21 @@ struct Session {
   int final_score = 0, final_bonus = 0, final_form = 1;  // the last song cleared
 };
 
+// In a headset, play is seen from down beside Vibri instead of from the original's
+// camera (owner's decision): the road is one line in an upright plane, so seen from
+// the side, as the original mostly shows it, it has almost no depth; looking along
+// it from just behind her, it runs away in front of you. The view goes with her;
+// `zoom` brings it closer (larger) or further away. Game units, y down.
+SceneView vr_play_view(float vibri_z, float zoom) {
+  const float distance = 1200.0f / zoom;  // from Vibri, 45 degrees behind and to the right
+  const float side = distance * 0.7071f, back = distance * 0.7071f;
+  SceneView v;
+  v.eye = {side, -250.0f, vibri_z - back};  // eyes a little above her head
+  v.target = {0.0f, -200.0f, vibri_z + 2000.0f};
+  v.fov_y = 1.0f;  // (the headset shows its own field of view)
+  return v;
+}
+
 // Thicker or thinner lines, saved for the display in use. In a headset each step is
 // a quarter more or less, with the confirm click so it can be heard without a console.
 void change_line_width(Session& s, bool thicker) {
@@ -466,6 +481,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     f.stage = game.stage();
     SceneView view;
     s.scene.draw(f, scene_lines, view);
+    if (s.opt.vr) view = vr_play_view(s.scene.vibri_z(), s.renderer.zoom());
     auto convert = [](const std::vector<SceneLine>& in, std::vector<vibr::LineInstance>& dst) {
       dst.clear();
       for (const SceneLine& l : in)
@@ -522,6 +538,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
       break;
     }
   }
+  if (s.opt.vr) s.save.options.vr_zoom = s.renderer.zoom();  // kept with the save when it is next written
   return result;
 }
 
@@ -607,6 +624,7 @@ int run(int argc, char** argv) {
       display = std::make_unique<vibr::Renderer>(window);
     }
     vibr::Display& renderer = *display;
+    renderer.set_zoom(float(save.options.vr_zoom));
     vibg::Audio audio(opt.offset_ms.value_or(save.options.audio_offset_ms));
     audio.set_volumes(opt.music.value_or(save.options.music_volume), opt.sfx.value_or(save.options.effects_volume));
     Effects fx(iso, audio);
@@ -885,6 +903,7 @@ int run(int argc, char** argv) {
         renderer.draw(out, float(s.line_width * std::max(1, renderer.height()) / 288.0));
       }
     }
+    if (opt.vr) save.options.vr_zoom = renderer.zoom();
     write_save();
     for (auto& [id, pad] : s.pads) SDL_CloseGamepad(pad);
   }

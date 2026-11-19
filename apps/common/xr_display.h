@@ -7,8 +7,8 @@
 // (SDL), which the game already understands:
 //   left trigger = block, right trigger = loop, X or Y = pit, A = wave and confirm,
 //   B = back, menu button = start, left thumbstick = the d-pad in the menus.
-// For testing: the right thumbstick clicked (R3) recentres the view; pushed up or
-// down it sends the + and - keys (thicker, thinner lines).
+// For testing: the right thumbstick clicked (R3) recentres the view; held up or
+// down it zooms in or out (how close the view stands to Vibri in play).
 
 #include <memory>
 
@@ -30,6 +30,8 @@ class XrDisplay : public Display {
   // the controllers; a closed session sends SDL_EVENT_QUIT.
   void draw(const std::vector<Layer>& layers, float line_width) override;
   void recentre() override;
+  float zoom() const override;
+  void set_zoom(float z) override;
 
   const char* runtime_name() const;
   void set_scale(float metres_per_unit);

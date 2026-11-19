@@ -208,6 +208,8 @@ class Scene {
   void show_evo(int frame);
   void play_evo();
   GameCamera& camera() { return camera_; }
+  // Where Vibri stood in the last frame drawn, along the road (world z).
+  float vibri_z() const { return vibri_z_; }
 
   struct Frame {
     double seconds = 0;          // since the last frame drawn
@@ -222,6 +224,7 @@ class Scene {
   void draw(const Frame& f, std::vector<SceneLine>& lines, SceneView& view);
 
  private:
+  float vibri_z_ = 0;
   struct Model {
     TmdModel tmd;
     int jitter = 0;
