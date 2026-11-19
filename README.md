@@ -19,7 +19,7 @@ This repository contains no game code, data, music or BIOS, and never will. The 
 | `tools/vibtool/` | Developer command line for inspecting and extracting your disc. |
 | `tools/research/` | Python prototypes from the research phase. |
 | `tests/` | Unit tests. Disc tests run only when `VIB_TEST_CUE` points at your CUE file. |
-| `docs/` | Plan, handoff notes and the tracker page. |
+| `docs/` | Plan, behaviour spec (`SPEC.md`), handoff notes and the tracker page. |
 
 ## Building on Windows
 
@@ -38,6 +38,10 @@ $env:VIB_TEST_CUE = "F:\VibRibbonVR\research\Gamefiles\Vib-Ribbon (Europe) (En,F
 .\build\dev\tests\vibcore_tests.exe
 .\build\dev\tools\vibtool\vibtool.exe info $env:VIB_TEST_CUE
 ```
+
+## Licence
+
+The code in this repository is MIT licensed (see `LICENSE`). That covers only what is written here; it grants nothing over Vib-Ribbon itself.
 
 ## Credits
 

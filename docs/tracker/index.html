@@ -136,10 +136,10 @@ button.copy{font-family:var(--display);font-size:12px;background:var(--ink);colo
    status values: done | active | todo | blocked | ask (needs the owner's answer) */
 const T = {
   goal: "A version of Vib-Ribbon playable in VR on PCVR and Meta Quest 3, with responsive, consistent timing and visuals that do justice to the original. Steam Frame and levels from your own music are stretch goals.",
-  updated: "2026-11-18, session 2 (viewer working)",
+  updated: "2026-11-18, session 2 (behaviour spec v1)",
   approach: "Native VR port. Game logic from the decompilation, assets read from your own disc, emulator used as the reference to test against.",
   asks: [
-    {id:"Q4", t:"Pick a licence for the project's own code. I suggest MIT.", why:"Needed before the first public release, and before anyone else contributes. It covers only code we write: the game's data always comes from the player's disc."},
+    {id:"Q8", t:"Pull, rebuild and look at Vibri again in vibview. Both eyes should now sit on her face from the front, and each should vanish when seen from behind. M toggles that rule.", why:"The spec work showed the black triangles are facing markers, not fills. I changed the viewer to match but cannot run it."},
     {id:"Q6", t:"OK for me to draft a courtesy message to revib's author?", why:"You confirmed we write our own code (D9). The message is to stay on good terms and credit their work, not to ask for permission to copy."}
   ],
   phases: [
@@ -163,7 +163,7 @@ const T = {
       {id:"1.4", s:"done", t:"Format loaders: TMD, ANM, ANC, FSL, VH/VB", note:"Every model, animation, camera path, course script and sound bank on the disc parses. Builds on your PC. TIM dropped: the only images are the Sony and NanaOn-Sha logos (D10)."},
       {id:"1.5", s:"done", t:"Desktop asset viewer (vibview)", note:"Runs on your PC on the RTX 4090: Vibri drawn upright with limbs attached, smooth lines, animations at a sensible speed, no Vulkan errors. Open point moved to 1.6: one eye sits apart from the head from some angles; check against the original."},
       {id:"1.6", s:"todo", t:"Reference capture rig", note:"Emulator with debugger (PCSX-Redux first) plus revib's symbol addresses. Dump obstacle events and scores for the six songs. Also compare Vibri's eye placement and back-face hiding with vibview."},
-      {id:"1.7", s:"todo", t:"Read the decompilation end to end and write the behaviour spec", note:"Exact constants: analysis windows, look-ahead delay, hit windows, scoring, form changes, effects, camera."},
+      {id:"1.7", s:"active", t:"Read the decompilation and write the behaviour spec", note:"docs/SPEC.md v1 covers the clock, 8-second look-ahead, onset detection, course script, judging (hit window is 20% of a part either side), forms, scoring, courses, jitter, scene layout and camera. Still to read: game flow (Glue), menus and HUD, sound numbers and pitch, pad details, field-of-view mapping."},
       {id:"1.8", s:"todo", t:"Stereo spike: OpenXR and Vulkan test scene on PCVR and Quest 3"},
       {id:"1.9", s:"todo", t:"Ask revib's author how the decompilation may be used", note:"Depends on Q6. Default until then: write code fresh against the spec."}
      ]},
@@ -230,13 +230,14 @@ const T = {
     {id:"D6", t:"Quest 3 is the only target hardware for now. Steam Frame is a stretch goal the architecture must not rule out.", why:"Rules: vibcore stays platform-free; input goes through OpenXR interaction profiles, not vendor SDKs; Android build uses the Khronos OpenXR loader; no x86-only dependencies."},
     {id:"D7", t:"Levels from your own music are a stretch goal, not a core feature.", why:"The analysis algorithm stays core because the official songs depend on it. The custom-music features around it (picker, decoders, import) are stretch."},
     {id:"D8", t:"Free public release from github.com/CorrieDivitt/Vib-Ribbon-VR.", why:"Repo is the master copy of code, plan, handoff and tracker source."},
+    {id:"D11", t:"The project's own code is MIT licensed.", why:"Chosen by the owner 2026-11-18. Covers only code we write."},
     {id:"D10", t:"No image (TIM) loader. The startup logos are not shown.", why:"The disc's only TIM images are the Sony and NanaOn-Sha logos. An unofficial port should not present them; the credits screen names both companies in text instead."},
     {id:"D9", t:"We write our own code. Nothing is copied from revib or open-ribbon.", why:"Confirmed by the owner 2026-11-18. A decompilation reconstructs Sony's program, so permission from its author would not cover copied code. We read the decompilations to learn behaviour and test our version against the emulator."}
   ],
   risks: [
     {id:"R1", t:"Licence of the decompilation sources is unsettled.", why:"Handled by D9 and Q6. Writing our own code from the behaviour spec keeps the plan the same either way."},
     {id:"R2", t:"Our audio path may not match what the PS1 analyzed bit for bit.", why:"The original analyzes CD audio captured through the sound chip. Golden tests in 2.5 will show it."},
-    {id:"R3", t:"Look-ahead delay and hit-window constants are not confirmed yet.", why:"Task 1.7."},
+    {id:"R3", t:"The original's obstacle placement depends slightly on frame timing.", why:"It fetches the script cue once per video frame, not per audio block. Our deterministic version may differ from the reference by small amounts; Phase 2 decides whether to simulate the 50 Hz grouping."},
     {id:"R4", t:"Original camera choreography may be uncomfortable in VR.", why:"Phase 4.2 decides staging, with a comfort option."},
     {id:"R5", t:"Hybrid graphics on the dev PC (RTX 4090 plus a Radeon iGPU).", why:"PCVR runtimes must run on the 4090. If the headset view is slow or black, set the app to High performance in Windows graphics settings."},
     {id:"R6", t:"Menu and title code is the largest part of the original.", why:"Budgeted as its own task (3.5)."},
@@ -261,8 +262,10 @@ const T = {
      code:'cd F:\\VibRibbonVR\\Vib-Ribbon-VR\n.\\build\\dev\\tools\\vibtool\\vibtool.exe formats "F:\\VibRibbonVR\\research\\Gamefiles\\Vib-Ribbon (Europe) (En,Fr,De,Es,It).cue"'},
     {state:"Common", what:"Export a model from your disc as an OBJ file you can open in Blender, posed on one animation frame. Leave off the last two arguments for the unposed model. Output stays on your PC; do not share it.",
      code:'cd F:\\VibRibbonVR\\Vib-Ribbon-VR\n.\\build\\dev\\tools\\vibtool\\vibtool.exe obj "F:\\VibRibbonVR\\research\\Gamefiles\\Vib-Ribbon (Europe) (En,Fr,De,Es,It).cue" GAME/02_FILES.PAK CHARA/PEELOO/MODEL.TMD F:\\VibRibbonVR\\research\\peeloo.obj CHARA/PEELOO/N00_SKIP.ANM 0'},
-    {state:"Used in session 2", what:"Open the model viewer on Vibri. Drag with the left mouse button to orbit, wheel to zoom, Left/Right for other animations, Space to pause, comma and period to step frames, Up/Down for line width, R to reset, Esc to quit. Anything printed with [vulkan] is an error report worth sending me.",
+    {state:"Used in session 2", what:"Open the model viewer on Vibri. Drag with the left mouse button to orbit, wheel to zoom, Left/Right for other animations, Space to pause, comma and period to step frames, Up/Down for line width, R to reset, M to switch the hide-from-behind rule, Esc to quit. Anything printed with [vulkan] is an error report worth sending me.",
      code:'cd F:\\VibRibbonVR\\Vib-Ribbon-VR\n.\\build\\dev\\apps\\viewer\\vibview.exe "F:\\VibRibbonVR\\research\\Gamefiles\\Vib-Ribbon (Europe) (En,Fr,De,Es,It).cue"'},
+    {state:"Upcoming (Q8)", what:"Update, rebuild and reopen the viewer after the facing-marker fix.",
+     code:'& "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\Common7\\Tools\\Launch-VsDevShell.ps1" -Arch amd64 -HostArch amd64\ncd F:\\VibRibbonVR\\Vib-Ribbon-VR\ngit pull\ncmake --build --preset dev\n.\\build\\dev\\apps\\viewer\\vibview.exe "F:\\VibRibbonVR\\research\\Gamefiles\\Vib-Ribbon (Europe) (En,Fr,De,Es,It).cue"'},
     {state:"Common", what:"View a different model: add the PAK and the model path. This one is the road pieces.",
      code:'.\\build\\dev\\apps\\viewer\\vibview.exe "F:\\VibRibbonVR\\research\\Gamefiles\\Vib-Ribbon (Europe) (En,Fr,De,Es,It).cue" GAME/02_FILES.PAK ROAD/ROAD.TMD'},
     {state:"Common", what:"Decode the three sound-effect banks to WAV files, one per sample. Pitch is assumed (44.1 kHz at each sample's centre note).",

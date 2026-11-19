@@ -6,7 +6,8 @@
 //   Left mouse drag: orbit     Wheel: zoom        R: reset view
 //   Space: pause/resume        , and . : step one frame while paused
 //   Left/Right: previous/next animation in the model's folder
-//   Up/Down: line width        Esc: quit
+//   Up/Down: line width        M: facing markers on/off
+//   Esc: quit
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
@@ -669,13 +670,31 @@ std::string upper(std::string s) {
   return s;
 }
 
-// Model space is PlayStation-style (Y down). Flip Y so the viewer's world is Y up.
-V3 to_world(const vib::Vec3f& v) { return {v.x, -v.y, v.z}; }
+// The viewer's world uses the PlayStation's own axes (X right, Y down, Z away),
+// so nothing is mirrored; the camera simply treats -Y as up.
+V3 to_world(const vib::Vec3f& v) { return {v.x, v.y, v.z}; }
 
-void build_geometry(const vib::TmdModel& model, const std::vector<vib::PosedObject>& posed, std::vector<LineInstance>& lines,
-                    std::vector<FillVertex>& fills, V3& lo, V3& hi) {
+V3 transform(const Mat4& m, V3 v) {
+  return {m.m[0] * v.x + m.m[4] * v.y + m.m[8] * v.z + m.m[12], m.m[1] * v.x + m.m[5] * v.y + m.m[9] * v.z + m.m[13],
+          m.m[2] * v.x + m.m[6] * v.y + m.m[10] * v.z + m.m[14]};
+}
+
+// The original's rule for objects that carry a facing marker: project the marker
+// triangle and hide the object when its screen winding is negative (Y down).
+bool marker_faces_away(const Mat4& view, V3 a, V3 b, V3 c) {
+  const V3 p[3] = {transform(view, a), transform(view, b), transform(view, c)};
+  float x[3], y[3];
+  for (int i = 0; i < 3; ++i) {
+    if (p[i].z > -1.0f) return false;  // at or behind the camera: leave it drawn
+    x[i] = p[i].x / -p[i].z;
+    y[i] = -p[i].y / -p[i].z;
+  }
+  return (x[1] - x[0]) * (y[2] - y[0]) - (x[2] - x[0]) * (y[1] - y[0]) < 0.0f;
+}
+
+void build_geometry(const vib::TmdModel& model, const std::vector<vib::PosedObject>& posed, const Mat4& view, bool use_markers,
+                    std::vector<LineInstance>& lines, V3& lo, V3& hi) {
   lines.clear();
-  fills.clear();
   lo = {1e9f, 1e9f, 1e9f};
   hi = {-1e9f, -1e9f, -1e9f};
   for (const auto& p : posed) {
@@ -685,18 +704,14 @@ void build_geometry(const vib::TmdModel& model, const std::vector<vib::PosedObje
       lo = {std::min(lo.x, w.x), std::min(lo.y, w.y), std::min(lo.z, w.z)};
       hi = {std::max(hi.x, w.x), std::max(hi.y, w.y), std::max(hi.z, w.z)};
     }
+    if (use_markers && obj.marker == vib::FaceMarker::DrawOnlyWhenFacing &&
+        marker_faces_away(view, to_world(p.vertices[obj.marker_vertices[0]]), to_world(p.vertices[obj.marker_vertices[1]]),
+                          to_world(p.vertices[obj.marker_vertices[2]])))
+      continue;
     for (const auto& l : obj.lines) {
       const V3 a = to_world(p.vertices[l.a]), b = to_world(p.vertices[l.b]);
       LineInstance li{{a.x, a.y, a.z}, {b.x, b.y, b.z}, {l.colour_a.r / 255.0f, l.colour_a.g / 255.0f, l.colour_a.b / 255.0f, 1.0f}};
       lines.push_back(li);
-    }
-    for (const auto& f : obj.fills) {
-      const int order[6] = {0, 1, 2, 1, 3, 2};
-      const int n = f.count == 4 ? 6 : 3;
-      for (int i = 0; i < n; ++i) {
-        const V3 w = to_world(p.vertices[f.v[order[i]]]);
-        fills.push_back({{w.x, w.y, w.z}, {f.colour.r / 255.0f, f.colour.g / 255.0f, f.colour.b / 255.0f, 1.0f}});
-      }
     }
   }
 }
@@ -754,11 +769,11 @@ int run(int argc, char** argv) {
     load_anim();
 
     std::vector<LineInstance> lines;
-    std::vector<FillVertex> fills;
+    const std::vector<FillVertex> no_fills;
     V3 lo{}, hi{};
-    float yaw = 0.5f, pitch = 0.15f, distance = 0, line_width = 2.5f;
+    float yaw = 0.5f, pitch = 0.15f, distance = 1000.0f, line_width = 2.5f;
     V3 centre{0, 0, 0};
-    bool framed = false, paused = false, running = true;
+    bool framed = false, paused = false, running = true, use_markers = true;
     double frame_pos = 0;
     Uint64 last = SDL_GetTicksNS();
 
@@ -778,6 +793,7 @@ int run(int argc, char** argv) {
             case SDLK_ESCAPE: running = false; break;
             case SDLK_SPACE: paused = !paused; break;
             case SDLK_R: framed = false; yaw = 0.5f; pitch = 0.15f; break;
+            case SDLK_M: use_markers = !use_markers; std::printf("facing markers %s\n", use_markers ? "on" : "off"); break;
             case SDLK_UP: line_width = std::min(line_width + 0.5f, 12.0f); break;
             case SDLK_DOWN: line_width = std::max(line_width - 0.5f, 1.0f); break;
             case SDLK_PERIOD: if (paused && frames) frame_pos = double((int(frame_pos) + 1) % frames); break;
@@ -805,18 +821,24 @@ int run(int argc, char** argv) {
 
       const std::vector<vib::PosedObject> posed =
           anim.frames.empty() ? vib::rest_pose(model) : vib::pose(model, anim.frames[std::min(std::size_t(frame_pos), anim.frames.size() - 1)]);
-      build_geometry(model, posed, lines, fills, lo, hi);
-      if (!framed && !lines.empty()) {
+      // Orbit around the model. PlayStation Y points down, so "up" is -Y and yaw 0 looks along +Z.
+      const float fov = 0.8f;
+      auto camera = [&]() {
+        const V3 eye{centre.x + distance * std::cos(pitch) * std::sin(yaw), centre.y - distance * std::sin(pitch),
+                     centre.z - distance * std::cos(pitch) * std::cos(yaw)};
+        return look_at(eye, centre, {0, -1, 0});
+      };
+      Mat4 view = camera();
+      build_geometry(model, posed, view, use_markers, lines, lo, hi);
+      if (!framed && lo.x <= hi.x) {
         centre = {(lo.x + hi.x) * 0.5f, (lo.y + hi.y) * 0.5f, (lo.z + hi.z) * 0.5f};
         const float size = std::max({hi.x - lo.x, hi.y - lo.y, hi.z - lo.z, 1.0f});
         distance = size * 1.6f;
         framed = true;
+        view = camera();
+        build_geometry(model, posed, view, use_markers, lines, lo, hi);
       }
-
-      const float fov = 0.8f;
-      const V3 eye{centre.x + distance * std::cos(pitch) * std::sin(yaw), centre.y + distance * std::sin(pitch),
-                   centre.z + distance * std::cos(pitch) * std::cos(yaw)};
-      renderer.draw(lines, fills, look_at(eye, centre, {0, 1, 0}), fov, line_width);
+      renderer.draw(lines, no_fills, view, fov, line_width);
     }
   }
   SDL_DestroyWindow(window);

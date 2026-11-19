@@ -1,10 +1,15 @@
 #pragma once
 // PlayStation TMD models as used by Vib-Ribbon.
 //
-// The game's models are almost entirely line primitives (mode 0x40: flat colour,
-// two vertex indices). A few unlit flat triangles (0x21) and quads (0x29) appear
-// on the characters, always black: they are fills that hide the lines behind a
-// character, so a renderer must draw them into the depth buffer.
+// The game draws nothing but lines:
+//   0x40 flat line        drawn as is.
+//   0x29 unlit flat quad  drawn as one line from its first vertex to its last.
+//   0x21 unlit flat triangle with red = green = 0: never drawn. It is a marker.
+//        Blue 0: the object is drawn only while this triangle faces the camera
+//        (how Vibri's eyes disappear from behind). Blue 1: a second kind of
+//        marker that the game records but never uses.
+// On the supported disc every triangle is one of those two markers, and an
+// object has at most one.
 
 #include <cstdint>
 #include <vector>
@@ -27,17 +32,13 @@ struct TmdLine {
   bool semi_transparent = false;
 };
 
-struct TmdFill {
-  std::uint16_t v[4] = {0, 0, 0, 0};
-  int count = 3;  // 3 for a triangle, 4 for a quad (PlayStation order: 0,1,2 and 1,3,2)
-  Rgb colour;
-  bool semi_transparent = false;
-};
+enum class FaceMarker { None, DrawOnlyWhenFacing, Unused };
 
 struct TmdObject {
   std::vector<Vec3s> vertices;
   std::vector<TmdLine> lines;
-  std::vector<TmdFill> fills;
+  FaceMarker marker = FaceMarker::None;
+  std::uint16_t marker_vertices[3] = {0, 0, 0};
   std::int32_t scale = 0;
 };
 

@@ -68,11 +68,26 @@ F:\VibRibbonVR\
 - **Time unit [inferred, strong]:** the custom-CD control track has 774 segments and its last start time is 97,902,000. Divided by 22,050 that is exactly 4,440 seconds, 74:00, the length of a standard audio CD. Speed values such as 11,025 and 4,409 are then 0.5 s and 0.2 s. So course-script time is audio samples at 22,050 Hz.
 - Source file names recovered from assert strings in MAIN_G: AnalysisScript, AudioStream, AudioSys, CdSys, FastAllocator, FbStream, FileSys, FontHack, Forms, GameCamera, Gameplay, Glue, InputControl, InputSys, MemorySys, Message, PackedFiles, RoadSelect, SceneDraw, SignalModule, StaticQueue.h, Thread, TitleDraw, TmdLineObj, VideoSys. Build path `C:/psj/dev/locale/game/`.
 
+## 0. Read docs/SPEC.md
+
+`docs/SPEC.md` (session 2) is the behaviour spec written from reading the revib sources: clock, 8 s look-ahead, onset detection, course script semantics, judging, forms, scoring, courses, jitter, scene layout, camera. It supersedes the engine notes in section 3 below wherever they differ. Sections of the game not yet read are listed at its end; task 1.7 stays open until they are done.
+
+Corrections it forced, already applied in code:
+
+- TMD triangles are **facing markers**, not fills. Nothing in the game is filled. Quads are drawn as one line (first vertex to last). `TmdObject` now has `marker` and `marker_vertices`; `fills` is gone. The earlier note that "every fill is black" was wrong: triangles are (0,0,0) ×124 and (0,0,1) ×63, quads are white ×6.
+- vibview no longer mirrors the model (it used to flip Y, which mirrored depth). It uses PlayStation axes with −Y as up, and hides marker objects with the original's screen-winding rule. Not yet re-run by the owner (Q8). The fill pipeline is still in the renderer, unused.
+- FSL field names changed to their real meaning: `period`, `select_period`, slopes; `tempo_length`, `tempo_pattern`, `reverse_length` (dead), `screw_length`, `camera`; header lists are rounds / songs / medleys.
+- Animation rate is frames per second (confirmed). Rotation order confirmed as scale, X, Y, Z, translate.
+
+Licence: MIT for our code (owner's choice), `LICENSE` in the repo root.
+
+How the reading was done: revib cloned to a temporary folder outside the repo, read, and described in our own words. Nothing was copied.
+
 ## 2a. Format findings from the loaders (session 2) [measured]
 
 Across all 13 PAKs on the disc (every language):
 
-- 252 TMD models: 63,905 line primitives (mode 0x40, flag 1, two vertex indices), 187 unlit flat triangles (mode 0x21) and 6 unlit flat quads (mode 0x29). No other primitive types. Every fill seen so far is coloured black: they are occluders that hide lines behind a character, so the renderer must write them to depth. All TMD flags are 0 (offsets relative to the object table).
+- 252 TMD models: 63,905 line primitives (mode 0x40, flag 1, two vertex indices), 187 unlit flat triangles (mode 0x21, all facing markers, see section 0) and 6 unlit flat quads (mode 0x29, drawn as one line each). No other primitive types. All TMD flags are 0 (offsets relative to the object table).
 - Unlit flat polygon layout: colour word (R, G, B, mode), then 3 or 4 u16 vertex indices padded to 3 words.
 - 1,162 ANM files with 87,495 frames, all parsing with zero leftover bytes. Keyframe flag bits beyond 0..2 never occur.
 - 266 ANC files with 67,166 camera keys, all exactly 6 + 16 × count bytes.

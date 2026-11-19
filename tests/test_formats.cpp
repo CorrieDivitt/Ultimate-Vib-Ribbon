@@ -37,7 +37,18 @@ TEST(tmd_lines_and_fill) {
   CHECK(m.unsupported_primitives == 0);
   CHECK(m.objects[0].vertices.size() == 3 && m.objects[0].vertices[2].y == 20);
   CHECK(m.objects[0].lines.size() == 1 && m.objects[0].lines[0].b == 2 && m.objects[0].lines[0].colour_a.g == 255);
-  CHECK(m.objects[0].fills.size() == 1 && m.objects[0].fills[0].count == 3 && m.objects[0].fills[0].v[1] == 1);
+  CHECK(m.objects[0].marker == FaceMarker::DrawOnlyWhenFacing && m.objects[0].marker_vertices[1] == 1);
+}
+
+TEST(tmd_quad_becomes_one_line) {
+  // One object, 4 vertices, one white unlit quad: drawn as a line from vertex 0 to vertex 3.
+  Builder t;
+  t.u32(0x41).u32(0).u32(1).u32(28).u32(4).u32(0).u32(0).u32(28 + 32).u32(1).i32(0);
+  for (int i = 0; i < 4; ++i) t.i16(static_cast<std::int16_t>(i)).i16(0).i16(0).i16(0);
+  t.u8(5).u8(3).u8(1).u8(0x29).u8(255).u8(255).u8(255).u8(0x29).u16(0).u16(1).u16(2).u16(3);
+  const TmdModel m = parse_tmd(t.b);
+  CHECK(m.unsupported_primitives == 0 && m.objects[0].marker == FaceMarker::None);
+  CHECK(m.objects[0].lines.size() == 1 && m.objects[0].lines[0].a == 0 && m.objects[0].lines[0].b == 3);
 }
 
 TEST(tmd_rejects_bad_vertex_index) {
@@ -97,7 +108,8 @@ TEST(course_script_minimal) {
   CHECK(c.fixed.size() == 1 && c.fixed[0].sequence[1] == Obstacle::LoopWave);
   CHECK(c.distributions[0].seed == 11 && c.distributions[0].cumulative[9] == 3);
   CHECK(c.tracks.size() == 1 && c.tracks[0].control.size() == 2 && c.tracks[0].control[1].start == 22050);
-  CHECK(c.tracks[0].patterns[0].type == PatternType::Fixed && c.tracks[0].events[0].camera_event == 15);
+  CHECK(c.tracks[0].patterns[0].type == PatternType::Fixed && c.tracks[0].events[0].camera == 15);
+  CHECK(c.round_tracks.size() == 1 && c.song_tracks.empty() && c.medley_tracks.empty());
   s.b.push_back(0);
   CHECK_THROWS(parse_course_script(s.b));  // trailing bytes
 }

@@ -164,7 +164,7 @@ int cmd_formats(const fs::path& cue) {
         if (ends_with(n, ".TMD")) {
           const TmdModel m = parse_tmd(pak.view(p));
           ++models;
-          for (const auto& o : m.objects) { lines += o.lines.size(); fills += o.fills.size(); }
+          for (const auto& o : m.objects) { lines += o.lines.size(); fills += o.marker != FaceMarker::None; }
           unsupported += m.unsupported_primitives;
           if (m.unsupported_primitives) std::printf("  %s/%s: %zu unsupported primitives\n", e.path.c_str(), p.name.c_str(), m.unsupported_primitives);
         } else if (ends_with(n, ".ANM")) {
@@ -190,7 +190,7 @@ int cmd_formats(const fs::path& cue) {
       }
     }
   }
-  std::printf("Models: %zu (%zu lines, %zu fills, %zu unsupported primitives)\n", models, lines, fills, unsupported);
+  std::printf("Models: %zu (%zu lines, %zu objects with a facing marker, %zu unsupported primitives)\n", models, lines, fills, unsupported);
   std::printf("Animations: %zu (%zu frames)   Cameras: %zu (%zu keys)   Course scripts: %zu\n", anims, frames, cams, cam_keys, scripts);
   std::printf("%s\n", failures || unsupported ? "PROBLEMS FOUND" : "All files parsed.");
   return failures || unsupported ? 1 : 0;
@@ -220,11 +220,6 @@ int cmd_obj(const fs::path& cue, const std::string& pak_path, const std::string&
     for (const auto& l : model.objects[std::size_t(p.object)].lines) {
       obj += "l " + std::to_string(base + l.a) + " " + std::to_string(base + l.b) + "\n";
       ++line_count;
-    }
-    for (const auto& f : model.objects[std::size_t(p.object)].fills) {
-      obj += "f " + std::to_string(base + f.v[0]) + " " + std::to_string(base + f.v[1]) + " " + std::to_string(base + f.v[2]) + "\n";
-      if (f.count == 4)
-        obj += "f " + std::to_string(base + f.v[1]) + " " + std::to_string(base + f.v[3]) + " " + std::to_string(base + f.v[2]) + "\n";
     }
     base += p.vertices.size();
   }

@@ -41,10 +41,13 @@ CourseScript parse_course_script(ByteView b) {
           "FSL header counts are implausible");
 
   CourseScript s;
-  for (auto& u : s.header_unknown) u = r.u32();
-  const std::uint32_t list_len = s.header_unknown[0] + s.header_unknown[1] + s.header_unknown[2];
-  require(list_len < 64, "FSL header track list is implausible");
-  for (std::uint32_t i = 0; i < list_len; ++i) s.header_track_list.push_back(r.u32());
+  const std::uint32_t rounds = r.u32(), songs = r.u32(), medleys = r.u32();
+  require(rounds < 64 && songs < 64 && medleys < 64, "FSL header track lists are implausible");
+  for (std::uint32_t i = 0; i < rounds; ++i) s.round_tracks.push_back(r.u32());
+  for (std::uint32_t i = 0; i < songs; ++i) s.song_tracks.push_back(r.u32());
+  for (std::uint32_t i = 0; i < medleys; ++i) s.medley_tracks.push_back(r.u32());
+  for (const auto* list : {&s.round_tracks, &s.song_tracks, &s.medley_tracks})
+    for (std::uint32_t t : *list) require(t < track_count, "FSL header names a missing track");
 
   s.fixed.resize(fixed_count);
   for (auto& f : s.fixed) {
@@ -67,8 +70,8 @@ CourseScript parse_course_script(ByteView b) {
 
   const auto control = read_segment_tables<ControlSegment>(r, control_tables, [](Reader& x) {
     ControlSegment c;
-    c.start = x.i32(); c.base_speed = x.i32(); c.base_shadow_period = x.i32();
-    c.delta_speed = x.i32(); c.delta_shadow_period = x.i32();
+    c.start = x.i32(); c.period = x.i32(); c.select_period = x.i32();
+    c.period_slope = x.i32(); c.select_period_slope = x.i32();
     return c;
   });
   const auto patterns = read_segment_tables<PatternSegment>(r, pattern_tables, [](Reader& x) {
@@ -82,8 +85,8 @@ CourseScript parse_course_script(ByteView b) {
   });
   const auto events = read_segment_tables<EventSegment>(r, event_tables, [](Reader& x) {
     EventSegment e;
-    e.start = x.i32(); e.random_speed_duration = x.i32(); e.random_speed_mode = x.i32();
-    e.unused = x.i32(); e.flip_duration = x.i32(); e.camera_event = x.i32();
+    e.start = x.i32(); e.tempo_length = x.i32(); e.tempo_pattern = x.i32();
+    e.reverse_length = x.i32(); e.screw_length = x.i32(); e.camera = x.i32();
     return e;
   });
 

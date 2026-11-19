@@ -79,15 +79,22 @@ TmdModel parse_tmd(ByteView b) {
         }
       } else if (code_of(mode) == 1 && (flag & 1) && !gradated && !(mode & 0x04)) {
         // Unlit, flat-coloured, untextured polygon: colour word, then vertex indices.
-        TmdFill fill;
-        fill.count = (mode & 0x08) ? 4 : 3;
-        fill.colour = rgb_at(b, body);
-        fill.semi_transparent = semi;
-        if (ilen == 3) {
-          for (int i = 0; i < fill.count; ++i) fill.v[i] = vertex(body + 4 + std::size_t(i) * 2);
-          obj.fills.push_back(fill);
-        } else {
+        const Rgb colour = rgb_at(b, body);
+        const bool quad = (mode & 0x08) != 0;
+        if (ilen != 3) {
           ++model.unsupported_primitives;
+        } else if (quad) {  // drawn as a single line, first vertex to last
+          TmdLine line;
+          line.colour_a = line.colour_b = colour;
+          line.semi_transparent = semi;
+          line.a = vertex(body + 4);
+          line.b = vertex(body + 10);
+          obj.lines.push_back(line);
+        } else if (colour.r == 0 && colour.g == 0 && colour.b <= 1 && obj.marker == FaceMarker::None) {
+          obj.marker = colour.b == 0 ? FaceMarker::DrawOnlyWhenFacing : FaceMarker::Unused;
+          for (int i = 0; i < 3; ++i) obj.marker_vertices[i] = vertex(body + 4 + std::size_t(i) * 2);
+        } else {
+          ++model.unsupported_primitives;  // a triangle that is not a marker, or a second marker: not seen on the disc
         }
       } else {
         ++model.unsupported_primitives;

@@ -70,6 +70,7 @@ TEST(disc_sces02873_every_format_parses) {
 
   const CourseScript s = parse_course_script(game.view("SCRIPT/SYSTEM3.FSL"));
   CHECK(s.tracks.size() == 7 && s.fixed.size() == 11 && s.distributions.size() == 63);
+  CHECK(s.round_tracks.size() == 6 && s.song_tracks.empty() && s.medley_tracks.size() == 1 && s.medley_tracks[0] == 6);
   CHECK(s.tracks[6].control.size() == 774);
   CHECK(s.tracks[6].control.back().start == 97902000);  // 74:00 at 22,050 samples per second
 }

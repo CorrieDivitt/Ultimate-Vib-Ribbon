@@ -1,10 +1,11 @@
 #pragma once
 // Applying an animation frame to a model.
 //
-// Observed on the supported disc (session 2): each object's vertices are scaled,
-// then rotated about X, then Y, then Z, then translated: v' = Rz * Ry * Rx * S * v + p.
-// The other common order leaves Vibri's feet detached from her legs. Not yet
-// confirmed against the game's own code (task 1.7). PlayStation Y points down.
+// Each object's vertices are scaled, then rotated about X, then Y, then Z, then
+// translated: v' = Rz * Ry * Rx * S * v + p. Found by looking (the other order
+// detaches Vibri's feet) and consistent with the original building its matrix
+// with the PlayStation library's ZYX rotation followed by a column scale.
+// PlayStation axes: X right, Y down, Z away from the camera.
 
 #include <array>
 #include <vector>
