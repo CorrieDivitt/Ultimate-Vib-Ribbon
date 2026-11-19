@@ -174,6 +174,8 @@ Game over (AGAIN) and AGAIN SELECT (added the same day): Screen::Again shows the
 
 **Text is deliberately not drawn yet.** The original writes Vibri's comments and "Game Over" with the line font; those words are the game's own script, stored in MAIN_G.EXE, and the font's character-to-object table is in the program too. To keep the repo free of the game's text (D9 spirit), the plan is to read both from the player's own MAIN_G.EXE at runtime (we already read the disc; addresses would come from the PAL build's layout). Not started.
 
+Start during play (owner expected a pause): the original has no pause. Its Start ends the round and pushes AGAIN SELECT (Glue::SignalUserAbort); vibplay now does the same (Esc, Start or Back), and "again" restarts the song that was left. A pause would be our own addition; asked the owner.
+
 Owner report 2026-11-19: leaving a course with Esc left its music playing in the menus, and going back a menu then "crashed". Fixed: the song is stopped whenever a course returns to the menus. The "crash" was most likely the main menu's leave item, which closed the program (the original returns to its title executable); it now brings the main menu back, and only closing the window quits. Errors now also show a message box. Title flow re-checked under AddressSanitizer with no findings.
 
 Next for 3.5: the CLEAR sequence (DrawClear, about 375 lines: bonus and score counted, Vibri's comment by rank or the medal, NumberVoice saying the score), then text from the player's executable, then the title intro.

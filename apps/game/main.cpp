@@ -532,7 +532,7 @@ int run(int argc, char** argv) {
               opt.line_width.value_or(save.options.line_width), {}, {}};
     std::uint32_t seed = opt.seed;
     int last_rank = 0, last_score = 0, lost_song = 0, points_before_lost = 0;
-    bool last_lost = false;
+    bool last_lost = false, last_left = false;  // game over; left with Start or Esc
 
     // A course from song `first` (0 or 1) to its end, or one song as practice.
     // Returns false if the window was closed.
@@ -544,13 +544,19 @@ int run(int argc, char** argv) {
       else songs = {int(course) * 2 + 1, int(course) * 2 + 2};
       int points = carried;
       bool finished = false;  // the course ended, cleared or lost, rather than being left
-      last_lost = false;
+      last_lost = last_left = false;
       for (std::size_t i = std::size_t(first); i < songs.size(); ++i) {
         const int before = points;
         const Result r = play_song(s, songs[i], int(i), points, seed);
         seed = next_random(seed);
         if (r == Result::Quit) return false;
-        if (r == Result::Abort) break;
+        if (r == Result::Abort) {
+          // As the original: no pause; Start ends the round and asks "again?".
+          last_left = true;
+          lost_song = int(i);
+          points_before_lost = before;
+          break;
+        }
         if (r == Result::GameOver) {
           std::printf("Game over.\n");
           finished = true;
@@ -725,6 +731,7 @@ int run(int argc, char** argv) {
           title.results_rank = last_rank;
           title.results_score = std::min(last_score, Hud::kMaxScore);
           if (last_lost) title.go_to(S::Again);                // Vibri's reaction, then "again?"
+          else if (last_left) title.go_to(S::AgainSelect);     // Start during play: straight to "again?"
           else if (last_rank) title.go_to(S::Results);         // the high scores, the new place blinking
           else title.go_to(S::PsjModeSelect);
           last_ns = SDL_GetTicksNS();
