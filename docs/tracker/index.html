@@ -149,7 +149,7 @@ const T = {
   updated: "2026-11-18, session 2 (reference rig started)",
   approach: "Native VR port. Game logic from the decompilation, assets read from your own disc, emulator used as the reference to test against.",
   asks: [
-    {id:"Q10", t:"PCSX-Redux freezes at the first loading screen. Tell me which BIOS it is using and paste its log (steps in chat).", why:"Most likely cause: the emulator's built-in open BIOS. Vib-Ribbon switches threads inside an interrupt, which that BIOS may not handle; the recomp project hit the same thing."}
+    {id:"Q10", t:"Try the disc in DuckStation with your PAL BIOS and tell me how far it gets.", why:"PCSX-Redux still freezes at the first loading screen with a real PAL BIOS, so the BIOS was not the cause. DuckStation is more accurate and still has a debugger; ePSXe has none, so it cannot record the reference data."}
 
   ],
   phases: [
@@ -172,7 +172,7 @@ const T = {
       {id:"1.3", s:"done", t:"Disc ingest library and CLI", note:"C++: CUE, raw BIN sectors, ISO 9660, PAK, SHA-1 disc check. vibtool info / extract / audio. All 8 tests pass on your PC against your disc; output matches the Linux run."},
       {id:"1.4", s:"done", t:"Format loaders: TMD, ANM, ANC, FSL, VH/VB", note:"Every model, animation, camera path, course script and sound bank on the disc parses. Builds on your PC. TIM dropped: the only images are the Sony and NanaOn-Sha logos (D10)."},
       {id:"1.5", s:"done", t:"Desktop asset viewer (vibview)", note:"Runs on your PC on the RTX 4090: Vibri drawn upright with limbs attached, smooth lines, animations at a sensible speed, no Vulkan errors. Open point moved to 1.6: one eye sits apart from the head from some angles; check against the original."},
-      {id:"1.6", s:"active", t:"Reference capture rig", note:"PCSX-Redux installed. Blocked for now: the game freezes at the first loading screen (Q10). Then: dump obstacle events and scores for the six songs using revib's symbol addresses."},
+      {id:"1.6", s:"active", t:"Reference capture rig", note:"PCSX-Redux freezes at the first loading screen even with a retail PAL BIOS. Trying DuckStation next (Q10). Then: dump obstacle events and scores for the six songs using revib's symbol addresses."},
       {id:"1.7", s:"done", t:"Read the decompilation and write the behaviour spec", note:"docs/SPEC.md v2: clock, 8-second look-ahead, onset detection, course script, judging, forms, scoring, courses, jitter, scene, camera, game flow, sound effects, HUD, projection. Menu drawing internals were read at header level only and are deferred to task 3.5."},
       {id:"1.8", s:"todo", t:"Stereo spike: OpenXR and Vulkan test scene on PCVR and Quest 3"}
      ]},

@@ -74,7 +74,7 @@ F:\VibRibbonVR\
 
 Tracker notes: the tracker page has a "Your notes" box near the top for the owner. It is stored in the artifact's database (capability `db`, document `tracker/notes`, field `text`), not in the page source. Read it at the start of a session with the artifact db tools (db_get, slug above, path `tracker/notes`). Never overwrite it.
 
-Reference rig (1.6): the owner installed PCSX-Redux; the game freezes at the first loading screen. Leading suspicion: OpenBIOS not handling the game's thread switch inside an interrupt (the recomp needed a runtime patch for exactly that). Waiting for the owner's BIOS setting and log.
+Reference rig (1.6): the owner installed PCSX-Redux; the game freezes at the first loading screen. Leading suspicion: OpenBIOS not handling the game's thread switch inside an interrupt (the recomp needed a runtime patch for exactly that). Update: still freezes with a retail PAL BIOS, so OpenBIOS was not the cause (the owner had the wrong BIOS first, then a correct one). Cause unknown; no log seen yet. Next attempt: DuckStation (accurate sound chip emulation, has a debugger). ePSXe was suggested by the owner but has no debugger, so it can only confirm the disc runs.
 
 Corrections it forced, already applied in code:
 
