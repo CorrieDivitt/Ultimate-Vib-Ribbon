@@ -7,6 +7,7 @@
 #include "vib/course_script.h"
 #include "vib/motion.h"
 #include "vib/pose.h"
+#include "vib/sound_bank.h"
 #include "vib/tmd.h"
 
 using namespace vib;
@@ -99,4 +100,49 @@ TEST(course_script_minimal) {
   CHECK(c.tracks[0].patterns[0].type == PatternType::Fixed && c.tracks[0].events[0].camera_event == 15);
   s.b.push_back(0);
   CHECK_THROWS(parse_course_script(s.b));  // trailing bytes
+}
+
+TEST(spu_adpcm_decoding) {
+  // Block 1: filter 0, shift 12, every nibble 1 -> every sample 1.
+  // Block 2: filter 1, shift 12, nibbles 0 -> each sample = previous * 60/64, rounded.
+  // Block 2 also carries the end flag without repeat, so the sample does not loop.
+  Bytes b(32, 0);
+  b[0] = 0x0C;
+  for (int i = 2; i < 16; ++i) b[std::size_t(i)] = 0x11;
+  b[16] = 0x1C;
+  b[17] = 0x01;
+  const DecodedSample d = decode_spu_adpcm(b);
+  CHECK(d.pcm.size() == 56);
+  CHECK(d.pcm[0] == 1 && d.pcm[27] == 1);
+  CHECK(d.pcm[28] == 1);  // (1*60 + 32) >> 6 = 1
+  CHECK(d.loop_start == -1);
+  // A negative nibble: 0xF is -1 before shifting, so shift 12 gives -1.
+  Bytes n(16, 0);
+  n[0] = 0x0C;
+  n[2] = 0x0F;
+  CHECK(decode_spu_adpcm(n).pcm[0] == -1);
+}
+
+TEST(vh_layout_and_vb_split) {
+  // One program with one tone pointing at sample 1 of 1, 32 bytes long.
+  Bytes vh(32 + 128 * 16 + 1 * 16 * 32 + 256 * 2, 0);
+  vh[0] = 'p'; vh[1] = 'B'; vh[2] = 'A'; vh[3] = 'V';
+  vh[4] = 7;
+  vh[18] = 1;   // programs
+  vh[20] = 1;   // tones
+  vh[22] = 1;   // samples
+  vh[32] = 1;   // program 0 has one tone
+  const std::size_t tone = 32 + 128 * 16;
+  vh[tone + 4] = 60;  // centre note
+  vh[tone + 22] = 1;  // sample 1
+  const std::size_t table = tone + 16 * 32;
+  vh[table + 2] = 4;  // sample 1 is 4 * 8 = 32 bytes
+  const SoundBank bank = parse_vh(vh);
+  CHECK(bank.programs.size() == 1 && bank.programs[0].tones.size() == 1);
+  CHECK(bank.programs[0].tones[0].centre_note == 60 && bank.programs[0].tones[0].sample == 1);
+  CHECK(bank.sample_sizes.size() == 1 && bank.sample_sizes[0] == 32);
+  CHECK(split_vb(bank, Bytes(32, 0)).size() == 1);
+  CHECK_THROWS(split_vb(bank, Bytes(48, 0)));
+  vh.push_back(0);
+  CHECK_THROWS(parse_vh(vh));
 }

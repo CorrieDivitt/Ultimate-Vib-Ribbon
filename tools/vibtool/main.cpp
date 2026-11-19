@@ -4,6 +4,7 @@
 //   vibtool extract <disc.cue> <out_dir>    copy every file off the data track and unpack PAKs
 //   vibtool audio   <disc.cue> <out_dir>    write each audio track as a WAV file
 //   vibtool formats <disc.cue>              parse every model, animation, camera and course script
+//   vibtool sounds  <disc.cue> <out_dir>    decode the three sound banks to WAV files (44.1 kHz assumed)
 //   vibtool obj     <disc.cue> <pak> <model.tmd> <out.obj> [<anim.anm> <frame>]
 //                                           export a model's lines as a Wavefront OBJ (Y up)
 //
@@ -24,6 +25,7 @@
 #include "vib/motion.h"
 #include "vib/pak.h"
 #include "vib/pose.h"
+#include "vib/sound_bank.h"
 #include "vib/tmd.h"
 
 namespace fs = std::filesystem;
@@ -38,6 +40,7 @@ int usage() {
       "  vibtool extract <disc.cue> <out_dir>\n"
       "  vibtool audio   <disc.cue> <out_dir>\n"
       "  vibtool formats <disc.cue>\n"
+      "  vibtool sounds  <disc.cue> <out_dir>\n"
       "  vibtool obj     <disc.cue> <pak> <model.tmd> <out.obj> [<anim.anm> <frame>]\n"
       "                  e.g. vibtool obj disc.cue GAME/02_FILES.PAK CHARA/PEELOO/MODEL.TMD peeloo.obj\n",
       stderr);
@@ -118,6 +121,8 @@ void put16(Bytes& b, std::uint16_t v) {
   b.push_back(static_cast<std::uint8_t>(v));
   b.push_back(static_cast<std::uint8_t>(v >> 8));
 }
+
+Bytes wav_mono(const std::vector<std::int16_t>& pcm, std::uint32_t rate);
 
 int cmd_audio(const fs::path& cue, const fs::path& out) {
   DiscImage disc = DiscImage::open(cue);
@@ -227,6 +232,37 @@ int cmd_obj(const fs::path& cue, const std::string& pak_path, const std::string&
   std::printf("Wrote %s: %zu objects, %zu lines\n", out.string().c_str(), posed.size(), line_count);
   return 0;
 }
+
+Bytes wav_mono(const std::vector<std::int16_t>& pcm, std::uint32_t rate) {
+  const auto data_bytes = static_cast<std::uint32_t>(pcm.size() * 2);
+  Bytes wav;
+  put(wav, "RIFF"); put32(wav, 36 + data_bytes); put(wav, "WAVE"); put(wav, "fmt ");
+  put32(wav, 16); put16(wav, 1); put16(wav, 1); put32(wav, rate); put32(wav, rate * 2); put16(wav, 2); put16(wav, 16);
+  put(wav, "data"); put32(wav, data_bytes);
+  for (std::int16_t s : pcm) put16(wav, static_cast<std::uint16_t>(s));
+  return wav;
+}
+
+int cmd_sounds(const fs::path& cue, const fs::path& out) {
+  DiscImage disc = DiscImage::open(cue);
+  Iso9660 iso(disc);
+  for (const char* name : {"GAME/AUDIO/PSJ_SE", "TITLE/AUDIO/TITLE", "KIOSK/AUDIO/KIOSK"}) {
+    const SoundBank bank = parse_vh(iso.read(std::string(name) + ".VH"));
+    const Bytes vb = iso.read(std::string(name) + ".VB");
+    const auto samples = split_vb(bank, vb);
+    std::string folder = name;
+    folder = folder.substr(folder.rfind('/') + 1);
+    for (std::size_t i = 0; i < samples.size(); ++i) {
+      const DecodedSample d = decode_spu_adpcm(samples[i]);
+      char file[32];
+      std::snprintf(file, sizeof file, "%03zu%s.wav", i + 1, d.loop_start >= 0 ? "_loop" : "");
+      write_file(out / path_from_utf8(folder) / file, wav_mono(d.pcm, 44100));
+    }
+    std::printf("  %s: %zu programs, %zu samples\n", name, bank.programs.size(), samples.size());
+  }
+  std::printf("Pitch assumption: each sample is written at 44,100 Hz, its rate when keyed at its centre note.\n");
+  return 0;
+}
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -238,6 +274,7 @@ int main(int argc, char** argv) {
     if (cmd == "extract" && argc == 4) return cmd_extract(cue, path_from_utf8(argv[3]));
     if (cmd == "audio" && argc == 4) return cmd_audio(cue, path_from_utf8(argv[3]));
     if (cmd == "formats" && argc == 3) return cmd_formats(cue);
+    if (cmd == "sounds" && argc == 4) return cmd_sounds(cue, path_from_utf8(argv[3]));
     if (cmd == "obj" && (argc == 6 || argc == 8))
       return cmd_obj(cue, argv[3], argv[4], path_from_utf8(argv[5]), argc == 8 ? argv[6] : nullptr, argc == 8 ? std::atoi(argv[7]) : 0);
     return usage();

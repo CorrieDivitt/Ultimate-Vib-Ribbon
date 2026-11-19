@@ -11,7 +11,7 @@ Confidence labels used below: **[measured]** = computed this session from the di
 
 ## 1. Where things stand
 
-Phase 0 is signed off. Phase 1 is under way: 1.1 and 1.3 done, 1.2 waits only on the Vulkan SDK install. 1.4 is mostly done: TMD, ANM, ANC and FSL loaders plus posing are in vibcore; VH/VB sound banks and TIM images remain. Vulkan SDK 1.4.363.1 is installed at C:\VulkanSDK; the glslc check still needs a fresh shell.
+Phase 0 is signed off. Phase 1 is under way: 1.1 and 1.3 done, 1.2 waits only on the Vulkan SDK install. 1.4 is done: TMD, ANM, ANC, FSL and VH/VB loaders plus posing are in vibcore, and build on the owner's PC. TIM was dropped (D10: the only images are the Sony and NanaOn-Sha logos). Next is 1.5, the desktop viewer, which needs the Vulkan SDK. Gotcha seen in session 2: a new Developer PowerShell starts 32-bit; building from it compiles but fails at the link step. Run Launch-VsDevShell.ps1 -Arch amd64 -HostArch amd64 first. Vulkan SDK 1.4.363.1 is installed at C:\VulkanSDK; the glslc check still needs a fresh shell.
 
 Owner decisions, 2026-11-18:
 
@@ -79,6 +79,8 @@ Across all 13 PAKs on the disc (every language):
 - FSL: fixed-pattern obstacles are u32 each (the next table starts exactly at the documented 0xEC). Header track list is 0..6. The last distribution pattern's count field is 0xFFF00001. Segment counts per course (control/pattern/event): Polaroid 12/5/4, Sunny Day 35/5/4, Laugh & Peace 28/8/4, Universal Dance 5/5/4, Overflowing Emotions 36/8/4, Roll Along 44/5/4, custom CD 774/90/82.
 - **Posing [observed, not yet confirmed in code]:** vertices are scaled, rotated about X then Y then Z, then translated (v' = Rz·Ry·Rx·S·v + p), 4096 = one turn. With the other common order Vibri's feet detach from her legs. Limb objects often have scale Z = 0 (flat). PlayStation Y points down; the OBJ export flips it.
 - Assumed: a key without a rotation, scale or position group uses the identity value for it.
+- Sound banks (VAB layout, version 7): PSJ_SE 16 programs, 187 tones, 129 samples; TITLE 18 programs, 57 tones, 29 samples; KIOSK 1 program, 16 tones, 4 samples. VH size = 32 + 2048 + programs × 512 + 512 exactly, and the sample-size table adds up to each VB's size exactly. All samples decode as SPU ADPCM (37.6 s in total; 14 of 1.66 M samples at full scale, normal for loud effects). Each tone maps one key (note_min = note_max) to a sample, so effects are triggered by note number. Playback pitch is not yet known: decoded WAVs assume 44.1 kHz at the centre note.
+- TIM images exist only in TITLE/FILES.PAK under LOGOS/: Sony and NanaOn-Sha (7ON) logos. Not loaded (D10).
 
 ## 3. How the game works
 

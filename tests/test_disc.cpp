@@ -11,6 +11,7 @@
 #include "vib/pak.h"
 #include "vib/course_script.h"
 #include "vib/motion.h"
+#include "vib/sound_bank.h"
 #include "vib/tmd.h"
 
 using namespace vib;
@@ -71,4 +72,22 @@ TEST(disc_sces02873_every_format_parses) {
   CHECK(s.tracks.size() == 7 && s.fixed.size() == 11 && s.distributions.size() == 63);
   CHECK(s.tracks[6].control.size() == 774);
   CHECK(s.tracks[6].control.back().start == 97902000);  // 74:00 at 22,050 samples per second
+}
+
+TEST(disc_sces02873_sound_banks) {
+  const std::string cue = test_cue();
+  if (cue.empty()) SKIP("set VIB_TEST_CUE to your SCES-02873 .cue to run");
+  DiscImage disc = DiscImage::open(path_from_utf8(cue));
+  Iso9660 iso(disc);
+  struct Expect { const char* name; std::size_t programs, samples; };
+  for (const Expect& e : {Expect{"GAME/AUDIO/PSJ_SE", 16, 129}, Expect{"TITLE/AUDIO/TITLE", 18, 29}, Expect{"KIOSK/AUDIO/KIOSK", 1, 4}}) {
+    const SoundBank bank = parse_vh(iso.read(std::string(e.name) + ".VH"));
+    CHECK(bank.programs.size() == e.programs);
+    CHECK(bank.sample_sizes.size() == e.samples);
+    const Bytes vb = iso.read(std::string(e.name) + ".VB");
+    const auto samples = split_vb(bank, vb);
+    std::size_t decoded = 0;
+    for (const auto& s : samples) decoded += decode_spu_adpcm(s).pcm.size() > 0;
+    CHECK(decoded == e.samples);
+  }
 }
