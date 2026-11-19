@@ -146,7 +146,7 @@ button.copy{font-family:var(--display);font-size:12px;background:var(--ink);colo
    status values: done | active | todo | blocked | ask (needs the owner's answer) */
 const T = {
   goal: "A version of Vib-Ribbon playable in VR on PCVR and Meta Quest 3, with responsive, consistent timing and visuals that do justice to the original. Steam Frame and levels from your own music are stretch goals.",
-  updated: "2026-11-19, session 2 (results screens' words from your disc)",
+  updated: "2026-11-19, session 2 (--last for testing course ends)",
   approach: "Native VR port. Game logic from the decompilation, assets read from your own disc, emulator used as the reference to test against.",
   asks: [
     {id:"Q16", t:"Try smooth animation: add --smooth to the play command (or set smooth_animation 1 in save.txt) and clear a course. Say whether you want it on or off by default.", why:"The choppy end screen is how the original looks: its clear-screen clips and cameras store only 15 to 20 poses a second and show each one whole. Smooth animation blends each pose into the next. It is off by default to stay true to the original, like fixed courses."},
@@ -255,6 +255,8 @@ const T = {
     {id:"R7", t:"PAL disc. Video ran at 50 Hz on the original.", why:"Low risk because gameplay follows the audio clock."}
   ],
   commands: [
+    {state:"Common", what:"Test the end of a course quickly: every song starts 20 seconds before its end, with a perfect automatic player having played the rest (so the score and Vibri's form are a perfect run's). Pick a course from the menus as usual. Change 20 to start earlier or later. Works with --fixed and --smooth too.",
+     code:'cd F:\\VibRibbonVR\\Vib-Ribbon-VR\ngit pull\ncmake --build --preset dev\n.\\build\\dev\\apps\\game\\vibplay.exe "F:\\VibRibbonVR\\research\\Gamefiles\\Vib-Ribbon (Europe) (En,Fr,De,Es,It).cue" --last 20'},
     {state:"Common", what:"Play with fixed courses (the same course every play of a song, Q13) and smooth animation (Q16) for this run only. Drop either word to test one at a time. The console says which settings are on.",
      code:'cd F:\\VibRibbonVR\\Vib-Ribbon-VR\ngit pull\ncmake --build --preset dev\n.\\build\\dev\\apps\\game\\vibplay.exe "F:\\VibRibbonVR\\research\\Gamefiles\\Vib-Ribbon (Europe) (En,Fr,De,Es,It).cue" --fixed --smooth'},
     {state:"Common", what:"Play the game on your monitor. It opens on the original's menus: arrows or d-pad to move, Enter, Space or Cross to choose, Esc, Backspace or Circle to go back. In a course: Block = Left arrow or A, Pit = Up/Down arrow or W/S, Loop = Right arrow or D, Wave = Space or J; gamepad L1/L2, d-pad, R1/R2, Triangle/Cross. [ and ] move the audio offset, - and = change line width, Esc goes back to the menus. Add bronze, silver, gold or --song 1 to 6 to skip the menus.",
