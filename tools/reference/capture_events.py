@@ -20,6 +20,7 @@ Use:
 
 import argparse
 import json
+import os
 import socket
 import struct
 import sys
@@ -137,6 +138,9 @@ def capture(args):
     if exe[:8] != b"PS-X EXE":
         sys.exit("%s is not a PlayStation executable" % args.exe)
     guards = {a: exe_bytes(exe, a, GUARD_BYTES) for a in (ADD_EVENT, GAMEPLAY_START)}
+
+    out_dir = os.path.dirname(os.path.abspath(args.out))
+    os.makedirs(out_dir, exist_ok=True)  # before touching the emulator, so a bad path cannot leave it paused
 
     gdb = Gdb(args.host, args.port, args.verbose)
     print("Connected to DuckStation at %s:%d" % (args.host, args.port))
