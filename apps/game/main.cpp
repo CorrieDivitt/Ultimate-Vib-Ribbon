@@ -117,7 +117,7 @@ struct Options {
   bool fixed = false;
   std::uint32_t seed = 0;
   bool seed_given = false;
-  double offset_ms = 0, line_width = 1.0;
+  double offset_ms = 0, line_width = 0.75;  // owner preferred one step thinner than the original's one pixel on 288 lines
   float sfx = 1.0f, music = 1.0f;
 };
 
