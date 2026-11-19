@@ -34,3 +34,29 @@ endforeach()
 add_library(vib_render STATIC line_renderer.cpp ${shader_incs})
 target_include_directories(vib_render PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}" PRIVATE "${shader_out}")
 target_link_libraries(vib_render PUBLIC SDL3::SDL3-static PRIVATE vib_warnings Vulkan::Vulkan)
+
+# Headsets through OpenXR (the Khronos loader, built static). On by default on
+# Windows, where PC headsets run; the Quest's own build comes later.
+if(WIN32)
+  set(vib_vr_default ON)
+else()
+  set(vib_vr_default OFF)
+endif()
+option(VIB_VR "Build headset support (OpenXR)" ${vib_vr_default})
+if(VIB_VR)
+  set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
+  set(BUILD_API_LAYERS OFF CACHE BOOL "" FORCE)
+  set(BUILD_CONFORMANCE_TESTS OFF CACHE BOOL "" FORCE)
+  set(BUILD_SDK_TESTS OFF CACHE BOOL "" FORCE)
+  set(DYNAMIC_LOADER OFF CACHE BOOL "" FORCE)
+  FetchContent_Declare(OpenXR
+    GIT_REPOSITORY https://github.com/KhronosGroup/OpenXR-SDK.git
+    GIT_TAG release-1.1.65
+    GIT_SHALLOW TRUE
+    EXCLUDE_FROM_ALL)
+  FetchContent_MakeAvailable(OpenXR)
+  add_library(vib_xr STATIC xr_display.cpp ${shader_incs})
+  target_include_directories(vib_xr PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}" PRIVATE "${shader_out}")
+  target_link_libraries(vib_xr PUBLIC vib_render PRIVATE vib_warnings Vulkan::Vulkan OpenXR::openxr_loader)
+  target_compile_definitions(vib_xr PUBLIC VIB_VR=1)
+endif()

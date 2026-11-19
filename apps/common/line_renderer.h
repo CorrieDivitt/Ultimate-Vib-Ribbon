@@ -73,20 +73,31 @@ struct Layer {
   float fov_y = 0.8f;
 };
 
-class Renderer {
+// Where the game's lines are shown: a window on the monitor, or a headset.
+class Display {
+ public:
+  virtual ~Display() = default;
+  virtual const char* gpu_name() const = 0;
+  virtual void request_resize() {}
+  virtual int height() const = 0;  // pixels of the picture (an eye's, in a headset)
+  // One frame: the layers in order, each through its own camera.
+  virtual void draw(const std::vector<Layer>& layers, float line_width) = 0;
+};
+
+class Renderer : public Display {
  public:
   explicit Renderer(SDL_Window* window);
-  ~Renderer();
+  ~Renderer() override;
   Renderer(const Renderer&) = delete;
   Renderer& operator=(const Renderer&) = delete;
 
-  const char* gpu_name() const;
-  void request_resize();
+  const char* gpu_name() const override;
+  void request_resize() override;
   // Width / height of the drawable, or 0 while minimised.
   float aspect() const;
-  int height() const;  // pixels
+  int height() const override;  // pixels
   void draw(const std::vector<LineInstance>& lines, const Mat4& view, float fov_y, float line_width);
-  void draw(const std::vector<Layer>& layers, float line_width);
+  void draw(const std::vector<Layer>& layers, float line_width) override;
 
  private:
   class Impl;
