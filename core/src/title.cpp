@@ -110,7 +110,17 @@ TitleScreens::TitleScreens(const Pak& pak, const char* language) {
 
 // ---------------------------------------------------------------- flow
 
+namespace {
+// Which screens have the menu music: all but the results and the course itself.
+bool has_music(TitleScreens::Screen s) {
+  using S = TitleScreens::Screen;
+  return s == S::Main || s == S::PsjModeSelect || s == S::Option || s == S::PsjHiscore;
+}
+}  // namespace
+
 void TitleScreens::go_to(Screen s) {
+  // The music stops when the next screen has none (or another).
+  if (has_music(screen_) && !has_music(s)) sounds_.push_back({Channel::Music, {}, 0, true});
   if (s != Screen::None) {
     fade_frame_ = 0;
     fade_step_ = 1;
@@ -141,7 +151,7 @@ void TitleScreens::update_fade() {
 TitleScreens::Result TitleScreens::tick(const Input& in) {
   ++frame_count_;
   layers_.clear();
-  sounds_.clear();
+  voice_playing_ = in.voices_playing;
   lines_.seed(next_random(frame_count_ * 2654435761u));
   update_fade();
   Result r = Result::None;
@@ -153,7 +163,6 @@ TitleScreens::Result TitleScreens::tick(const Input& in) {
     case Screen::Results: r = psj_hiscore(in, ++results_frame_); break;
     default: break;
   }
-  if (voice_frames_ > 0) --voice_frames_;
   if (fade_ == kOut) r = Result::None;
   return r;
 }
@@ -257,13 +266,13 @@ void TitleScreens::draw_menu_movie(int movie, std::vector<SceneLine>& out) {
   }
 }
 
-void TitleScreens::say(int sequence, int volume, Vibri speaking) {
-  sounds_.push_back({sequence, volume, false});
-  // The original moves Vibri's mouth until the voice ends. Voices do not play yet,
-  // so each counts as about a second.
-  voice_frames_ = 50;
+void TitleScreens::say(std::vector<int> sounds, int volume, Vibri speaking) {
+  sounds_.push_back({Channel::Voice, std::move(sounds), volume, false});
+  voice_playing_ = true;  // from the moment it is asked for, as the original's sequence counts it
   if (speaking != Vibri::Hidden) vibri_ = speaking;
 }
+
+void TitleScreens::play_music() { sounds_.push_back({Channel::Music, {32}, 90, false}); }
 
 void TitleScreens::draw_vibri(int jitter, std::vector<SceneLine>& out) {
   if (vibri_ == Vibri::Hidden) return;
@@ -275,7 +284,7 @@ void TitleScreens::draw_vibri(int jitter, std::vector<SceneLine>& out) {
   const int movie_of[6] = {0, 1, 2, 3, 4, 5};
   if (vibri_ == Vibri::LyingSpeaking || vibri_ == Vibri::SittingSpeaking || vibri_ == Vibri::StandingSpeaking) {
     movies_[std::size_t(vibri_movies_[std::size_t(vibri_movie_)])].clip.set_speed(1);
-    if (voice_frames_ == 0) {
+    if (!voice_playing_) {
       vibri_ = Vibri::Paused;
       vibri_frame_ = 0;
     }
@@ -320,12 +329,14 @@ void TitleScreens::show_number(Model& m, const std::array<int, 6>& slots, int fi
 
 TitleScreens::Result TitleScreens::main_menu(const Input& in) {
   static const Result results[3] = {Result::PsjModes, Result::UnknownModes, Result::Options};
-  static const int voices[4] = {240, 125, 119, 96};  // first sound of each item's spoken name
+  // Vibri says each item's name: two or three syllables of the gameplay bank.
+  static const std::vector<int> voices[4] = {{240, 241, 126}, {125, 243, 126}, {119}, {96}};
   const bool still = fade_frame_ == 0;
   Result result = Result::None;
   if (arrived_) {
+    sounds_.push_back({Channel::Voice, {}, 0, true});
     if (main_cursor_.index == 3) main_cursor_.index = 0;
-    sounds_.push_back({32, 90, true});
+    play_music();
     vibri_ = Vibri::Lying;
     menu_movie_ = main_steps_[std::size_t(main_cursor_.index)];
     speed_ = 0;
@@ -365,7 +376,7 @@ TitleScreens::Result TitleScreens::main_menu(const Input& in) {
     }
   }
   if (r.confirm && !leaving_) {
-    sounds_.push_back({1, 90, false});
+    say({1}, 90, Vibri::Hidden);  // the confirm sound
     if (i < 3) {
       result = results[i];
       set_camera(0);
@@ -392,7 +403,7 @@ TitleScreens::Result TitleScreens::main_menu(const Input& in) {
 
 TitleScreens::Result TitleScreens::psj_mode_select(const Input& in) {
   static const Result results[5] = {Result::Bronze, Result::Silver, Result::Gold, Result::PsjHiscores, Result::PsjBack};
-  static const int voices[5] = {114, 113, 112, 128, 96};
+  static const int voices[5] = {114, 113, 112, 128, 96};  // bronze, silver, gold, high scores, back
   const bool still = fade_frame_ == 0;
   if (arrived_) {
     vibri_ = Vibri::Sitting;
@@ -409,7 +420,7 @@ TitleScreens::Result TitleScreens::psj_mode_select(const Input& in) {
     menu_movie_ = psj_steps_[std::size_t(psj_cursor_.index)];
     speed_ = 0;
     set_camera(camera_cue_);
-    sounds_.push_back({32, 90, true});
+    play_music();
   }
   const MenuRead r = read(psj_cursor_, in, true, still && !entering_ && !leaving_);
   int jitter = kMenuJitter * kGteOne;
@@ -417,7 +428,7 @@ TitleScreens::Result TitleScreens::psj_mode_select(const Input& in) {
   models_[std::size_t(m_psj_)].jitter_all(jitter / kGteOne);
   const int i = psj_cursor_.index;
   if (r.changed) {
-    if (r.up || r.down) say(voices[i], 90, Vibri::SittingSpeaking);
+    if (r.up || r.down) say({voices[i]}, 90, Vibri::SittingSpeaking);
     if (r.up) {
       menu_movie_ = psj_steps_[std::size_t(i)];
       movies_[std::size_t(menu_movie_)].clip.rewind(true);
@@ -431,7 +442,7 @@ TitleScreens::Result TitleScreens::psj_mode_select(const Input& in) {
   if (r.back) {
     menu_movie_ = psj_steps_[4];
     movies_[std::size_t(menu_movie_)].clip.rewind();
-    say(voices[i], 90, Vibri::SittingSpeaking);
+    say({voices[i]}, 90, Vibri::SittingSpeaking);
     speed_ = 0;
   }
   Hud::Layer vibri, menu;
@@ -454,7 +465,7 @@ TitleScreens::Result TitleScreens::psj_mode_select(const Input& in) {
     return results[i];
   }
   if (r.confirm) {
-    sounds_.push_back({1, 90, false});
+    say({1}, 90, Vibri::Hidden);
     if (i != 4) {
       camera_cue_ = 0;
       set_camera(0);
@@ -480,7 +491,7 @@ TitleScreens::Result TitleScreens::options(const Input& in) {
     vibri_ = Vibri::Sitting;
     leaving_ = false;
     show_switches();
-    sounds_.push_back({32, 90, true});
+    play_music();
     entering_ = true;
     menu_movie_ = option_steps_[0];
     option_cursor_.index = 0;
@@ -494,7 +505,7 @@ TitleScreens::Result TitleScreens::options(const Input& in) {
   model.jitter_all(jitter / kGteOne);
   const int i = option_cursor_.index;
   if (r.changed) {
-    if (r.up || r.down) say(voices[i], 90, Vibri::SittingSpeaking);
+    if (r.up || r.down) say({voices[i]}, 90, Vibri::SittingSpeaking);
     if (r.up) {
       menu_movie_ = option_steps_[std::size_t(i)];
       movies_[std::size_t(menu_movie_)].clip.rewind(true);
@@ -508,7 +519,7 @@ TitleScreens::Result TitleScreens::options(const Input& in) {
   if (r.back) {
     menu_movie_ = option_steps_[std::size_t(i)];
     movies_[std::size_t(menu_movie_)].clip.rewind();
-    say(voices[i], 90, Vibri::SittingSpeaking);
+    say({voices[i]}, 90, Vibri::SittingSpeaking);
     speed_ = 0;
   }
   Hud::Layer vibri, menu;
@@ -538,10 +549,10 @@ TitleScreens::Result TitleScreens::options(const Input& in) {
       if (i == 0) sound_effects = !sound_effects;
       else vibration = !vibration;
       const bool on = i == 0 ? sound_effects : vibration;
-      say(on ? 131 : 132, 90, Vibri::SittingSpeaking);
+      say({on ? 131 : 132}, 90, Vibri::SittingSpeaking);
       show_switches();
     } else {
-      sounds_.push_back({1, 90, false});
+      say({1}, 90, Vibri::Hidden);
       menu_movie_ = option_close_;
       leaving_ = true;
       speed_ = 1;
@@ -566,7 +577,7 @@ TitleScreens::Result TitleScreens::psj_hiscore(const Input& in, int frame) {
     back_cursor_.index = 0;
     menu_movie_ = hi_left_;
     speed_ = 0;
-    if (!results) sounds_.push_back({32, 90, true});
+    if (!results) play_music();
     rewind_movies();
     entering_ = true;
     leaving_ = false;
@@ -610,7 +621,7 @@ TitleScreens::Result TitleScreens::psj_hiscore(const Input& in, int frame) {
     return Result::None;
   }
 
-  if (r.back) say(voices[3], 90, Vibri::LyingSpeaking);
+  if (r.back) say({voices[3]}, 90, Vibri::LyingSpeaking);
   if (back_cursor_.index == 0 && (r.left || r.right)) {
     if (r.left) {
       menu_movie_ = hi_left_;
@@ -619,12 +630,12 @@ TitleScreens::Result TitleScreens::psj_hiscore(const Input& in, int frame) {
       menu_movie_ = hi_right_;
       hiscore_course_ = (hiscore_course_ + 1) % 3;
     }
-    say(voices[hiscore_course_], 90, Vibri::LyingSpeaking);
+    say({voices[hiscore_course_]}, 90, Vibri::LyingSpeaking);
     movies_[std::size_t(menu_movie_)].clip.rewind();
     speed_ = 1;
     model.swap(6, course_names[hiscore_course_]);
   }
-  if (r.changed && (r.up || r.down)) say(back_cursor_.index != 0 ? voices[3] : voices[hiscore_course_], 90, Vibri::LyingSpeaking);
+  if (r.changed && (r.up || r.down)) say({back_cursor_.index != 0 ? voices[3] : voices[hiscore_course_]}, 90, Vibri::LyingSpeaking);
   model.jitter_all(kMenuJitter);
   // The item under the cursor shakes harder: the course's name, or "back".
   const int under = back_cursor_.index == 0 ? course_names[hiscore_course_] : 7;
@@ -642,7 +653,7 @@ TitleScreens::Result TitleScreens::psj_hiscore(const Input& in, int frame) {
   }
   layers_.push_back(std::move(layer));
   if (r.confirm && back_cursor_.index != 0) {
-    sounds_.push_back({1, 90, false});
+    say({1}, 90, Vibri::Hidden);
     movies_[std::size_t(hi_open_)].clip.rewind(true);
     return Result::HiscoreBack;
   }

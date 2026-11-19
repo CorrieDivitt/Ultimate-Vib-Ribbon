@@ -38,10 +38,46 @@ void Audio::play_music(std::vector<std::int16_t> stereo) {
   for (Voice& v : voices_) v = {};
 }
 
-void Audio::play_effect(const std::vector<std::int16_t>* mono, double rate, float gain, int voice) {
+void Audio::play_effect(const std::vector<std::int16_t>* mono, double rate, float gain, int voice, int loop_start, int after) {
   if (!mono || mono->empty() || voice < 0 || voice >= 24) return;
   std::lock_guard<std::mutex> lock(mutex_);
-  voices_[voice] = {mono, 0.0, rate / kRate, gain};
+  const bool wait = after >= 0 && after < 24 && after != voice && (voices_[after].pcm || voices_[after].waiting);
+  voices_[voice] = {mono, 0.0, rate / kRate, gain, loop_start, wait ? after : -1, wait};
+}
+
+bool Audio::is_playing(int voice) {
+  if (voice < 0 || voice >= 24) return false;
+  std::lock_guard<std::mutex> lock(mutex_);
+  return voices_[voice].pcm != nullptr;
+}
+
+void Audio::stop(int voice) {
+  if (voice < 0 || voice >= 24) return;
+  std::lock_guard<std::mutex> lock(mutex_);
+  voices_[voice] = {};
+}
+
+int Audio::mix_voice(Voice& v, int from, int frames) {
+  const std::vector<std::int16_t>& s = *v.pcm;
+  const float g = v.gain * effect_gain_;
+  for (int i = from; i < frames; ++i) {
+    auto at = static_cast<std::size_t>(v.position);
+    if (at + 1 >= s.size()) {
+      if (v.loop_start >= 0 && std::size_t(v.loop_start) + 1 < s.size()) {
+        v.position = double(v.loop_start) + (v.position - double(at));
+        at = static_cast<std::size_t>(v.position);
+      } else {
+        v.pcm = nullptr;
+        return i;
+      }
+    }
+    const double t = v.position - double(at);
+    const float x = float(s[at] * (1.0 - t) + s[at + 1] * t) * g;  // linear interpolation
+    mix_[std::size_t(i) * 2] += x;
+    mix_[std::size_t(i) * 2 + 1] += x;
+    v.position += v.step;
+  }
+  return -1;
 }
 
 void SDLCALL Audio::callback(void* user, SDL_AudioStream* stream, int additional, int) {
@@ -60,23 +96,24 @@ void Audio::fill(SDL_AudioStream* stream, int bytes) {
       mix_[std::size_t(i) * 2 + 1] = music_[f * 2 + 1] * music_gain_;
     }
   }
-  for (Voice& v : voices_) {
-    if (!v.pcm) continue;
-    const std::vector<std::int16_t>& s = *v.pcm;
-    const float g = v.gain * effect_gain_;
-    for (int i = 0; i < frames; ++i) {
-      const auto at = static_cast<std::size_t>(v.position);
-      if (at + 1 >= s.size()) {
-        v.pcm = nullptr;
-        break;
-      }
-      const double t = v.position - double(at);
-      const float x = float(s[at] * (1.0 - t) + s[at + 1] * t) * g;  // linear interpolation
-      mix_[std::size_t(i) * 2] += x;
-      mix_[std::size_t(i) * 2 + 1] += x;
-      v.position += v.step;
-    }
+  // Voices that play now, then voices queued behind one that ended in this block.
+  int ended[24];
+  for (int v = 0; v < 24; ++v) {
+    ended[v] = -1;
+    if (voices_[v].pcm && !voices_[v].waiting) ended[v] = mix_voice(voices_[v], 0, frames);
   }
+  for (int pass = 0; pass < 2; ++pass)
+    for (int v = 0; v < 24; ++v) {
+      Voice& w = voices_[v];
+      if (!w.pcm || !w.waiting) continue;
+      const Voice& before = voices_[w.after];
+      int start = -1;
+      if (ended[w.after] >= 0) start = ended[w.after];
+      else if (!before.pcm && !before.waiting) start = 0;  // ended before this block
+      if (start < 0) continue;
+      w.waiting = false;
+      ended[v] = mix_voice(w, start, frames);
+    }
   out_.resize(mix_.size());
   for (std::size_t i = 0; i < mix_.size(); ++i) out_[i] = static_cast<std::int16_t>(std::clamp(mix_[i], -32768.0f, 32767.0f));
   SDL_PutAudioStreamData(stream, out_.data(), int(out_.size() * sizeof(std::int16_t)));

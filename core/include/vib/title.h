@@ -5,14 +5,15 @@
 // code), drawn from the TITLE models, clips and cameras on the player's disc.
 //
 // Not yet: the audio-CD and speed course menus, the track select, the CLEAR and
-// AGAIN result sequences, the menu music and Vibri's voice (requested sounds are
-// listed so the app can play them once that exists).
+// AGAIN result sequences. Sounds (the menu music and Vibri's voice) are asked of
+// the app as requests; it plays them from the gameplay sound bank.
 //
 // The original updates these screens once per video frame; tick() is one such
 // frame (1/49.759 s), and the app calls it at that rate whatever the display does.
 
 #include <array>
 #include <cstdint>
+#include <utility>
 #include <vector>
 
 #include "vib/pak.h"
@@ -36,13 +37,19 @@ class TitleScreens {
   struct Input {
     bool up = false, down = false, left = false, right = false, confirm = false, cancel = false;
     bool held_up = false, held_down = false, held_left = false, held_right = false;
+    bool voices_playing = false;  // the voice sequence is still sounding (Vibri's mouth moves until it ends)
   };
 
-  // A sound the screen asks for: a sequence of the title sound bank and its volume.
-  // Collected for later; nothing plays them yet.
+  // Sounds the screens ask for, on two sequences as in the original: the music,
+  // and Vibri's voice (with the confirm sound). Each sound is a number of the
+  // gameplay bank, program * 16 + tone, played one after another. `stop` ends
+  // that sequence instead.
+  enum class Channel { Music, Voice };
   struct SoundRequest {
-    int sequence, volume;
-    bool music;
+    Channel channel;
+    std::vector<int> sounds;
+    int volume = 0;
+    bool stop = false;
   };
 
   static constexpr double kFrameRate = 49.759;
@@ -59,7 +66,8 @@ class TitleScreens {
   Result tick(const Input& in);
   // The lines of the last tick, each layer with its own camera.
   const std::vector<Hud::Layer>& layers() const { return layers_; }
-  std::vector<SoundRequest>& sounds() { return sounds_; }
+  // The requests since the last call, in order.
+  std::vector<SoundRequest> take_sounds() { return std::exchange(sounds_, {}); }
 
   // What the screens show and change.
   bool sound_effects = true, vibration = true;
@@ -109,7 +117,8 @@ class TitleScreens {
   void draw_movie(int movie, double speed, std::vector<SceneLine>& out);
   void draw_menu_movie(int movie, std::vector<SceneLine>& out);
   void draw_vibri(int jitter, std::vector<SceneLine>& out);
-  void say(int sequence, int volume, Vibri speaking);
+  void say(std::vector<int> sounds, int volume, Vibri speaking);
+  void play_music();
   void show_number(Model& m, const std::array<int, 6>& slots, int first_digit_object, int value);
 
   Result main_menu(const Input& in);
@@ -150,7 +159,8 @@ class TitleScreens {
   double speed_ = 1.0;
   bool entering_ = false, leaving_ = false;
   Vibri vibri_ = Vibri::Hidden;
-  int vibri_movie_ = 0, vibri_frame_ = 0, voice_frames_ = 0;
+  int vibri_movie_ = 0, vibri_frame_ = 0;
+  bool voice_playing_ = false;
   // key repeat
   int repeat_state_ = 0, repeat_timer_ = 0;
   std::uint32_t frame_count_ = 0;

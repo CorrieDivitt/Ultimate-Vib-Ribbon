@@ -68,11 +68,16 @@ class Effects {
   Effects(Iso9660& iso, vibg::Audio& audio) : audio_(audio) {
     bank_ = parse_vh(iso.read("GAME/AUDIO/PSJ_SE.VH"));
     const Bytes vb = iso.read("GAME/AUDIO/PSJ_SE.VB");
-    for (const ByteView s : split_vb(bank_, vb)) samples_.push_back(decode_spu_adpcm(s).pcm);
+    for (const ByteView s : split_vb(bank_, vb)) {
+      DecodedSample d = decode_spu_adpcm(s);
+      samples_.push_back(std::move(d.pcm));
+      loops_.push_back(d.loop_start);
+    }
   }
 
   // A sound of the bank: program, tone; `volume` 0-127 as the game asks.
-  void play(int program, int tone, int volume, int voice) {
+  // `after`: start the moment that voice ends (or at once if it is silent).
+  void play(int program, int tone, int volume, int voice, int after = -1) {
     if (program >= int(bank_.programs.size())) return;
     const VabProgram& p = bank_.programs[std::size_t(program)];
     if (tone >= int(p.tones.size())) return;
@@ -86,14 +91,62 @@ class Effects {
     // Volumes multiply as on the sound chip: bank x program, then tone, then the request.
     const int level = ((bank_.master_volume * p.volume) >> 7) * t.volume;
     const float gain = float(((level * volume) >> 7) / 16383.0);
-    audio_.play_effect(&samples_[std::size_t(t.sample - 1)], rate, gain, voice);
+    audio_.play_effect(&samples_[std::size_t(t.sample - 1)], rate, gain, voice, loops_[std::size_t(t.sample - 1)], after);
   }
-  void number(int n, int volume, int voice) { play(n >> 4, n & 15, volume, voice); }
+  void number(int n, int volume, int voice, int after = -1) { play(n >> 4, n & 15, volume, voice, after); }
+  bool is_playing(int voice) { return audio_.is_playing(voice); }
+  void stop(int voice) { audio_.stop(voice); }
 
  private:
   vibg::Audio& audio_;
   SoundBank bank_;
   std::vector<std::vector<std::int16_t>> samples_;
+  std::vector<int> loops_;
+};
+
+// Sounds played one after another on two voices taken in turn (`voice` and
+// `voice` + 12), each queued to start as the one before it ends, as the
+// original's menus play Vibri's words and their music.
+class SoundSequence {
+ public:
+  SoundSequence(Effects& fx, int voice) : fx_(fx), voice_(voice), current_(voice) {}
+  void stop() {
+    if (!playing_) return;
+    fx_.stop(voice_);
+    fx_.stop(voice_ + 12);
+    playing_ = false;
+  }
+  void play(std::vector<int> sounds, int volume) {
+    stop();
+    sounds_ = std::move(sounds);
+    volume_ = volume;
+    previous_ = -1;
+    next_ = 0;
+    playing_ = !sounds_.empty();
+  }
+  // Once a frame: as soon as the next voice is free, queue the next sound behind the last.
+  void update() {
+    while (playing_) {
+      if (next_ < sounds_.size()) {
+        if (fx_.is_playing(current_)) return;
+        fx_.number(sounds_[next_++], volume_, current_, previous_);
+        previous_ = current_;
+        current_ = (current_ + 12) % 24;
+      } else {
+        playing_ = fx_.is_playing(previous_ >= 0 ? previous_ : current_);
+        return;
+      }
+    }
+  }
+  bool playing() const { return playing_; }
+
+ private:
+  Effects& fx_;
+  int voice_, current_, previous_ = -1;
+  std::vector<int> sounds_;
+  std::size_t next_ = 0;
+  int volume_ = 0;
+  bool playing_ = false;
 };
 
 // ---------------------------------------------------------------- input
@@ -192,7 +245,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   std::printf("\nSong %d: %d s, %s course (lead %d, frame phase %.0f)\n", song, total / kSampleRate,
               s.fixed ? "fixed" : "original-style", timing.lead, double(timing.frame_phase_q16) / 65536.0);
   s.audio.play_music(std::move(out));
-  s.fx.play(0, 11, 63, 4);  // the round's opening sound
+  s.fx.play(0, 11, 63, 4);  // the round's opening sound (the original plays it whatever the option)
 
   std::size_t next_block = 0, fed = 0;
   bool was_selecting = gen.selecting(), ended = false;
@@ -207,29 +260,32 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   std::vector<std::vector<vibr::LineInstance>> hud_lines;
   Result result = Result::Clear;
 
+  // The sound effects option silences gameplay's sounds only, as in the original
+  // (the menus' music and voice are not effects).
+  const bool effects_on = s.save.options.sound_effects;
   auto handle = [&](const std::vector<GameEvent>& events) {
     bool form_up = false, hit = false, miss = false;
     for (const GameEvent& e : events) {
       switch (e.type) {
         case GameEvent::Type::Hit:
-          s.fx.number(16 + e.road, 127, 3);
+          if (effects_on) s.fx.number(16 + e.road, 127, 3);
           s.scene.set_move(e.road, false);
           hit = true;
           break;
         case GameEvent::Type::Stray: {
           const int n = e.value == 1 ? 31 : e.value == 2 ? 28 : e.value == 4 ? 29 : 27;
-          s.fx.number(n, 100, 3);
+          if (effects_on) s.fx.number(n, 100, 3);
           s.scene.set_move(e.road, true);
           break;
         }
         case GameEvent::Type::Miss:
-          s.fx.play(1, 10, 127, 2);
+          if (effects_on) s.fx.play(1, 10, 127, 2);
           if (s.save.options.vibration)
             for (auto& [id, pad] : s.pads) SDL_RumbleGamepad(pad, 0x6000, 0xC000, 200);
           miss = true;
           break;
         case GameEvent::Type::FormUp:
-          s.fx.play(1, 14, 127, 4);
+          if (effects_on) s.fx.play(1, 14, 127, 4);
           s.scene.play_evo();
           form_up = true;
           break;
@@ -468,8 +524,7 @@ int run(int argc, char** argv) {
   {
     vibr::Renderer renderer(window);
     vibg::Audio audio(opt.offset_ms.value_or(save.options.audio_offset_ms));
-    const float sfx = save.options.sound_effects ? opt.sfx.value_or(save.options.effects_volume) : 0.0f;
-    audio.set_volumes(opt.music.value_or(save.options.music_volume), sfx);
+    audio.set_volumes(opt.music.value_or(save.options.music_volume), opt.sfx.value_or(save.options.effects_volume));
     Effects fx(iso, audio);
     const bool fixed = opt.fixed || save.options.fixed_courses;
     std::printf("GPU: %s\nCourses: %s\n", renderer.gpu_name(), fixed ? "fixed (the same every play)" : "vary from play to play, like the original");
@@ -531,6 +586,15 @@ int run(int argc, char** argv) {
       };
       show_scores();
       title.go_to(S::Main);
+      // The menus' two sound sequences: music on voices 0 and 12, Vibri's voice on 1 and 13.
+      SoundSequence music(fx, 0), voices(fx, 1);
+      auto play_requests = [&]() {
+        for (TitleScreens::SoundRequest& q : title.take_sounds()) {
+          SoundSequence& seq = q.channel == TitleScreens::Channel::Music ? music : voices;
+          if (q.stop) seq.stop();
+          else seq.play(std::move(q.sounds), q.volume);
+        }
+      };
       TitleScreens::Input pressed, held;
       std::vector<std::vector<vibr::LineInstance>> menu_lines;
       std::uint64_t last_ns = SDL_GetTicksNS();
@@ -600,6 +664,7 @@ int run(int argc, char** argv) {
           TitleScreens::Input in = pressed;
           in.held_up = held.up, in.held_down = held.down, in.held_left = held.left, in.held_right = held.right;
           pressed = {};
+          in.voices_playing = voices.playing();
           const R r = title.tick(in);
           switch (r) {
             case R::PsjModes: title.go_to(S::PsjModeSelect); break;
@@ -621,14 +686,17 @@ int run(int argc, char** argv) {
           if (title.sound_effects != save.options.sound_effects || title.vibration != save.options.vibration) {
             save.options.sound_effects = title.sound_effects;
             save.options.vibration = title.vibration;
-            audio.set_volumes(opt.music.value_or(save.options.music_volume),
-                              save.options.sound_effects ? opt.sfx.value_or(save.options.effects_volume) : 0.0f);
             write_save();
           }
+          play_requests();  // sounds asked for by this frame and by the go_to() calls above
+          music.update();
+          voices.update();
           if (!running) break;
         }
         if (!running) break;
         if (course_chosen && title.done()) {
+          music.stop();
+          voices.stop();
           course_chosen = false;
           if (!play_course(chosen, 0)) break;
           show_scores();

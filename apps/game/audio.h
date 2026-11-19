@@ -26,9 +26,13 @@ class Audio {
   // restarts the clock at 0. Stops whatever played before, effects included.
   void play_music(std::vector<std::int16_t> stereo);
 
-  // A one-shot effect on `voice` (a new sound on a busy voice replaces the old one).
-  // `rate`: the sample's playback rate in Hz.
-  void play_effect(const std::vector<std::int16_t>* mono, double rate, float gain, int voice);
+  // A sound on `voice` (0-23; a new sound on a busy voice replaces the old one).
+  // `rate`: the sample's playback rate in Hz. `loop_start`: sample to loop back to
+  // at the end, or -1 to play once. `after`: another voice this one waits for, and
+  // starts the moment that one ends (the sound chip's queued key-on), or -1.
+  void play_effect(const std::vector<std::int16_t>* mono, double rate, float gain, int voice, int loop_start = -1, int after = -1);
+  bool is_playing(int voice);
+  void stop(int voice);
 
   // The music frame being heard at `ticks_ns` (SDL_GetTicksNS time), smoothed so
   // it moves evenly; may be fractional. Call with non-decreasing times for the
@@ -53,7 +57,11 @@ class Audio {
     const std::vector<std::int16_t>* pcm = nullptr;
     double position = 0, step = 0;
     float gain = 0;
+    int loop_start = -1, after = -1;
+    bool waiting = false;  // queued behind `after`
   };
+  // Mixes one voice into mix_ from frame `from`; returns the frame it ended at, or -1.
+  int mix_voice(Voice& v, int from, int frames);
 
   SDL_AudioStream* stream_ = nullptr;
   int device_frames_ = 1024;
