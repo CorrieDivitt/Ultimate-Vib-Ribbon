@@ -117,7 +117,7 @@ struct Options {
   bool fixed = false;
   std::uint32_t seed = 0;
   bool seed_given = false;
-  double offset_ms = 0, line_width = 0.75;  // owner preferred one step thinner than the original's one pixel on 288 lines
+  double offset_ms = 0, line_width = 0.5;  // owner's playtests: thinner than the original's one pixel on 288 lines looks right
   float sfx = 1.0f, music = 1.0f;
 };
 
@@ -234,7 +234,8 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
             s.audio.adjust_offset(e.key.key == SDLK_LEFTBRACKET ? -5 : 5);
             std::printf("audio offset %+.0f ms (latency now %.0f ms)\n", s.audio.offset_ms(), s.audio.latency_ms());
           } else if (e.key.key == SDLK_MINUS || e.key.key == SDLK_EQUALS) {
-            s.line_width = std::clamp(s.line_width + (e.key.key == SDLK_MINUS ? -0.25 : 0.25), 0.25, 4.0);
+            s.line_width = std::clamp(s.line_width + (e.key.key == SDLK_MINUS ? -0.125 : 0.125), 0.125, 4.0);
+            std::printf("line width %.3f (start with --width %.3f to keep it)\n", s.line_width, s.line_width);
           } else if (const std::uint8_t b = key_bits(e.key.key)) {
             presses.push_back({b, e.key.timestamp});
           }
