@@ -229,6 +229,16 @@ void Gameplay::miss(Part& p) {
 
 int Gameplay::bonus() const { return points_ * kEndBonusPercent[level_ / 3] / 100; }
 
+bool Gameplay::preview(const CourseEvent& e, std::int32_t position, RoadPiece& out) const {
+  // As add_event() makes the part and update() places it.
+  if (!running_ || e.type != CourseEvent::Type::Part || !start_.over(e.time) || end_.over(e.time)) return false;
+  const std::int32_t length = speed_course_ ? e.length : static_cast<std::int32_t>((std::int64_t(e.scale) * e.length) >> 16);
+  if ((length >> 6) <= 0) return false;
+  const Fixed rate = speed_course_ ? speed_.over(kSampleRate >> 6) : Fixed::whole(1).over(length >> 6);
+  out = {e.value, rate.times((e.time - setup_.video_delay - position) >> 6) + vibri_, false, false};
+  return true;
+}
+
 std::vector<RoadPiece> Gameplay::road(bool far) const {
   std::vector<RoadPiece> out;
   if (far)

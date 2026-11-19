@@ -55,6 +55,10 @@ std::string SaveData::to_text() const {
   out << "vr_line_width " << buf << '\n';
   std::snprintf(buf, sizeof buf, "%.3f", options.vr_zoom);
   out << "vr_zoom " << buf << '\n';
+  std::snprintf(buf, sizeof buf, "%.1f", options.vr_behind_seconds);
+  out << "vr_behind_seconds " << buf << '\n';
+  std::snprintf(buf, sizeof buf, "%.1f", options.vr_ahead_seconds);
+  out << "vr_ahead_seconds " << buf << '\n';
   std::snprintf(buf, sizeof buf, "%.1f", options.vr_angle);
   out << "vr_angle " << buf << '\n';
   std::snprintf(buf, sizeof buf, "%.1f", options.audio_offset_ms);
@@ -96,6 +100,8 @@ SaveData SaveData::from_text(const std::string& text) {
     else if (key == "vr_line_width" && number > 0) d.options.vr_line_width = number;
     else if (key == "vr_zoom" && number > 0) d.options.vr_zoom = number;
     else if (key == "vr_angle") d.options.vr_angle = number;
+    else if (key == "vr_behind_seconds" && number >= 0) d.options.vr_behind_seconds = number;
+    else if (key == "vr_ahead_seconds" && number >= 0) d.options.vr_ahead_seconds = number;
     else if (key == "audio_offset_ms") d.options.audio_offset_ms = number;
     else if (key == "music_volume" && number >= 0) d.options.music_volume = float(number);
     else if (key == "effects_volume" && number >= 0) d.options.effects_volume = float(number);

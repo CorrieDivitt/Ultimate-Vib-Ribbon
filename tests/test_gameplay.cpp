@@ -288,3 +288,18 @@ TEST(far_road_keeps_passed_parts_for_drawing_only) {
   kept.run_to(44100 * 4 + 8 * 22050 + 22050);
   CHECK(kept.g.road(true).empty());  // gone once 8 s behind
 }
+
+TEST(a_part_built_further_ahead_is_drawn_where_play_will_put_it) {
+  Run r;
+  r.run_to(44100);
+  const CourseEvent e = part(44100 * 10, 2);
+  RoadPiece ahead;
+  CHECK(r.g.preview(e, r.now, ahead));
+  r.g.add_event(e);
+  r.step();  // play places it at the same position (the step's start)
+  const auto road = r.g.road(true);
+  CHECK(road.size() == 1 && road[0].road == 2 && road[0].position.raw() == ahead.position.raw());
+  CourseEvent camera;
+  camera.type = CourseEvent::Type::Camera;
+  CHECK(!r.g.preview(camera, r.now, ahead));
+}

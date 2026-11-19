@@ -361,7 +361,16 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   game.start(setup);
   // In a headset the whole line is in view: passed parts stay on it for 8 s, and
   // every part built so far (8 s ahead) shows ahead.
-  if (s.opt.vr) game.keep_passed(kLookAheadBlocks * kBlockSize);
+  if (s.opt.vr) game.keep_passed(static_cast<std::int32_t>(s.save.options.vr_behind_seconds * kSampleRate));
+  // Further ahead than play builds: a second generator on the same music and timing,
+  // running ahead, drawn only. Its course is the same course (it is checked below),
+  // so its parts become play's own as play reaches them.
+  CourseGenerator far(s.script);
+  far.set_timing(timing);
+  far.start_round(song, 0);
+  std::size_t far_block = 0;
+  const auto far_extra = static_cast<std::int32_t>(std::max(0.0, s.save.options.vr_ahead_seconds - 8.0) * kSampleRate);
+  bool far_warned = false;
   s.scene.reset(true, false);
   s.hud.start_round(track_index, !s.song);  // the "Round 1/2" sign belongs to the two-song courses
 
@@ -529,6 +538,24 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     f.jitter_seed = next_random(static_cast<std::uint32_t>(double(now_ns - start_ns) * 1e-9 * kOriginalRefresh) * 2654435761u);
     f.speed = game.speed();
     f.road = game.road(s.opt.vr);
+    if (s.opt.vr && far_extra > 0) {
+      while (far_block < blocks.size() && std::int32_t(far_block * kBlockSize) <= heard + kDelay + far_extra) {
+        far.process(static_cast<std::int32_t>(far_block * kBlockSize), blocks[far_block]);
+        ++far_block;
+      }
+      const auto& ahead = far.events();
+      if (!far_warned && fed > 0 && fed <= ahead.size()) {
+        const CourseEvent &a = ahead[fed - 1], &b = gen.events()[fed - 1];
+        if (a.type != b.type || a.time != b.time || a.value != b.value || a.length != b.length) {
+          std::printf("Warning: the course drawn ahead differs from play's own (from event %zu); report this.\n", fed - 1);
+          far_warned = true;
+        }
+      }
+      RoadPiece piece;
+      for (std::size_t i = fed; i < ahead.size(); ++i)
+        if (game.preview(ahead[i], heard, piece)) f.road.push_back(piece);
+      std::stable_sort(f.road.begin(), f.road.end(), [](const RoadPiece& a, const RoadPiece& b) { return a.position < b.position; });
+    }
     f.still = game.near_part();
     f.shake = game.shake();
     f.form = game.form();

@@ -113,6 +113,9 @@ class Gameplay {
   // keep_passed()'s time behind. Drawing only: the rules never see the passed ones.
   std::vector<RoadPiece> road(bool far = false) const;
   void keep_passed(std::int32_t samples) { keep_passed_ = samples; }
+  // A part play has not been given yet (built further ahead, for drawing), placed
+  // where play would put it at `position`; false if play would not take it.
+  bool preview(const CourseEvent& e, std::int32_t position, RoadPiece& out) const;
   int points() const { return points_; }
   int score() const { return points_ < kMaxScore ? points_ : kMaxScore; }
   int bonus() const;                 // end-of-round bonus for the current form
