@@ -146,10 +146,10 @@ button.copy{font-family:var(--display);font-size:12px;background:var(--ink);colo
    status values: done | active | todo | blocked | ask (needs the owner's answer) */
 const T = {
   goal: "A version of Vib-Ribbon playable in VR on PCVR and Meta Quest 3, with responsive, consistent timing and visuals that do justice to the original. Steam Frame and levels from your own music are stretch goals.",
-  updated: "2026-11-19, session 2 (reference recorder written)",
+  updated: "2026-11-19, session 2 (first reference recording)",
   approach: "Native VR port. Game logic from the decompilation, assets read from your own disc, emulator used as the reference to test against.",
   asks: [
-    {id:"Q10", t:"Turn on DuckStation's GDB server and run the first recording (steps in the Notes section and in chat).", why:"The recording script is written and passes its self-test against a fake emulator. It has never talked to the real DuckStation, so expect a round or two of fixes."}
+    {id:"Q10", t:"Record the six songs (bronze, silver, gold courses), plus Polaroid a second time. Commands in the Notes section.", why:"The recorder works: Polaroid gave 75 obstacles, spaced as the spec predicts. The second Polaroid run shows how repeatable the original is."}
 
   ],
   phases: [
@@ -172,7 +172,7 @@ const T = {
       {id:"1.3", s:"done", t:"Disc ingest library and CLI", note:"C++: CUE, raw BIN sectors, ISO 9660, PAK, SHA-1 disc check. vibtool info / extract / audio. All 8 tests pass on your PC against your disc; output matches the Linux run."},
       {id:"1.4", s:"done", t:"Format loaders: TMD, ANM, ANC, FSL, VH/VB", note:"Every model, animation, camera path, course script and sound bank on the disc parses. Builds on your PC. TIM dropped: the only images are the Sony and NanaOn-Sha logos (D10)."},
       {id:"1.5", s:"done", t:"Desktop asset viewer (vibview)", note:"Runs on your PC on the RTX 4090: Vibri drawn upright with limbs attached, smooth lines, animations at a sensible speed, no Vulkan errors. Open point moved to 1.6: one eye sits apart from the head from some angles; check against the original."},
-      {id:"1.6", s:"active", t:"Reference capture rig", note:"DuckStation runs the game well (PCSX-Redux froze loading the gameplay program, even with a retail BIOS). Recorder written: tools/reference/capture_events.py stops the emulator at the game's add-event function and logs each event. Awaiting first real run (Q10). Then: dump obstacle events and scores for the six songs using revib's symbol addresses."},
+      {id:"1.6", s:"active", t:"Reference capture rig", note:"DuckStation runs the game well (PCSX-Redux froze loading the gameplay program, even with a retail BIOS). Recorder written: tools/reference/capture_events.py stops the emulator at the game's add-event function and logs each event. First real run worked: Polaroid recorded, 75 obstacles, game stayed smooth. Remaining: all six songs and a repeat run (Q10). Then: dump obstacle events and scores for the six songs using revib's symbol addresses."},
       {id:"1.7", s:"done", t:"Read the decompilation and write the behaviour spec", note:"docs/SPEC.md v2: clock, 8-second look-ahead, onset detection, course script, judging, forms, scoring, courses, jitter, scene, camera, game flow, sound effects, HUD, projection. Menu drawing internals were read at header level only and are deferred to task 3.5."},
       {id:"1.8", s:"todo", t:"Stereo spike: OpenXR and Vulkan test scene on PCVR and Quest 3"}
      ]},
@@ -276,10 +276,10 @@ const T = {
      code:'cd F:\\VibRibbonVR\\Vib-Ribbon-VR\n.\\build\\dev\\apps\\viewer\\vibview.exe "F:\\VibRibbonVR\\research\\Gamefiles\\Vib-Ribbon (Europe) (En,Fr,De,Es,It).cue"'},
     {state:"Used in session 2", what:"Update, rebuild and reopen the viewer. Confirmed: eyes hide correctly from behind.",
      code:'& "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\Common7\\Tools\\Launch-VsDevShell.ps1" -Arch amd64 -HostArch amd64\ncd F:\\VibRibbonVR\\Vib-Ribbon-VR\ngit pull\ncmake --build --preset dev\n.\\build\\dev\\apps\\viewer\\vibview.exe "F:\\VibRibbonVR\\research\\Gamefiles\\Vib-Ribbon (Europe) (En,Fr,De,Es,It).cue"'},
-    {state:"Upcoming (Q10)", what:"Check the recorder script itself works on your PC (no emulator needed). Should end with: self-test passed.",
+    {state:"Used in session 2", what:"Check the recorder script itself works on your PC (no emulator needed). Should end with: self-test passed.",
      code:"cd F:\\VibRibbonVR\\Vib-Ribbon-VR\ngit pull\npython tools\\reference\\capture_events.py --selftest"},
-    {state:"Upcoming (Q10)", what:"Record the original game's obstacle events. Start DuckStation with its GDB server on and the game at the main menu, run this, then play a song. Ctrl+C when the song ends. Recordings go in research, outside the repo.",
-     code:"cd F:\\VibRibbonVR\\Vib-Ribbon-VR\npython tools\\reference\\capture_events.py --exe F:\\VibRibbonVR\\research\\extracted\\disc\\MAIN_G.EXE --out F:\\VibRibbonVR\\research\\reference\\polaroid.jsonl"},
+    {state:"Common", what:"Record the original game's obstacle events for one course (two songs). DuckStation running with its GDB server on and the game at the course menu; run this, play the course, Ctrl+C at the end. Change the file name per course: bronze, silver, gold. --keep-alive stops game over from cutting a recording short.",
+     code:"cd F:\\VibRibbonVR\\Vib-Ribbon-VR\npython tools\\reference\\capture_events.py --keep-alive --exe F:\\VibRibbonVR\\research\\extracted\\disc\\MAIN_G.EXE --out F:\\VibRibbonVR\\research\\reference\\bronze.jsonl"},
     {state:"Common", what:"View a different model: add the PAK and the model path. This one is the road pieces.",
      code:'.\\build\\dev\\apps\\viewer\\vibview.exe "F:\\VibRibbonVR\\research\\Gamefiles\\Vib-Ribbon (Europe) (En,Fr,De,Es,It).cue" GAME/02_FILES.PAK ROAD/ROAD.TMD'},
     {state:"Common", what:"Decode the three sound-effect banks to WAV files, one per sample. Pitch is assumed (44.1 kHz at each sample's centre note).",

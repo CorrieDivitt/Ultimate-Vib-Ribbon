@@ -14,6 +14,7 @@ Setup (once):
 Use:
   python capture_events.py --exe F:\\VibRibbonVR\\research\\extracted\\disc\\MAIN_G.EXE --out events.jsonl
   Then play a song in DuckStation. Press Ctrl+C here when the song is over.
+  Add --keep-alive to make game over impossible while recording.
 
   python capture_events.py --selftest     checks this script against a fake server
 """
@@ -33,6 +34,7 @@ GAMEPLAY_START = 0x8004549C   # Gameplay::Start(course, seconds, score, ...)
 SCRIPT_START_TIME = 0x80076468
 SCRIPT_OFFSET = 0x8007646C
 SCRIPT_SEED = 0x800763FC
+VIBRI_LEVEL = 0x800764CC       # Gameplay's level: 3 is the starting rabbit, 11 is one step from game over
 EXE_LOAD_ADDRESS = 0x80019000
 EXE_HEADER_SIZE = 0x800
 GUARD_BYTES = 16              # code bytes compared before a stop is trusted
@@ -113,6 +115,11 @@ class Gdb:
             raise RuntimeError("could not read %d bytes at %08X: %r" % (length, address, reply[:40]))
         return bytes.fromhex(reply)
 
+    def write(self, address, data):
+        reply = self.command("M%x,%x:%s" % (address, len(data), data.hex()))
+        if reply != "OK":
+            raise RuntimeError("could not write %d bytes at %08X: %r" % (len(data), address, reply[:40]))
+
     def read_u32(self, address):
         return struct.unpack("<I", self.read(address, 4))[0]
 
@@ -178,6 +185,8 @@ def capture(args):
                               script_offset=struct.unpack("<i", gdb.read(SCRIPT_OFFSET, 4))[0],
                               script_seed=gdb.read_u32(SCRIPT_SEED))
                 count += 1
+                if args.keep_alive:  # obstacles do not depend on how well the round is played
+                    gdb.write(VIBRI_LEVEL, struct.pack("<i", 3))
                 print("%5d  %s" % (count, describe(record)))
             out.write(json.dumps(record) + "\n")
             out.flush()
@@ -247,6 +256,11 @@ def _fake_server(listener, exe):
                 if pc[0] == GAMEPLAY_START:
                     regs[4] = 2
                 send(struct.pack("<38I", *regs).hex())
+            elif cmd.startswith("M"):
+                head, data = cmd[1:].split(":")
+                addr = int(head.split(",")[0], 16)
+                memory[addr] = bytes.fromhex(data)
+                send("OK")
             elif cmd.startswith("m"):
                 addr, length = (int(x, 16) for x in cmd[1:].split(","))
                 send(read_mem(addr, length).hex())
@@ -268,7 +282,7 @@ def selftest():
     listener.bind(("127.0.0.1", 0))
     listener.listen(1)
     threading.Thread(target=_fake_server, args=(listener, bytes(exe)), daemon=True).start()
-    capture(argparse.Namespace(exe=exe_path, out=out_path, host="127.0.0.1", port=listener.getsockname()[1], verbose=False))
+    capture(argparse.Namespace(exe=exe_path, out=out_path, host="127.0.0.1", port=listener.getsockname()[1], verbose=False, keep_alive=True))
     rows = [json.loads(line) for line in open(out_path)]
     kinds = [r["type"] for r in rows]
     assert kinds == ["part", "round_start", "part"], kinds
@@ -283,6 +297,8 @@ def main():
     p.add_argument("--out", default="events.jsonl", help="file to append events to")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=1234)
+    p.add_argument("--keep-alive", action="store_true",
+                   help="reset Vibri to her starting form at every event so a song cannot end in game over (changes the game's memory)")
     p.add_argument("--verbose", action="store_true", help="print every protocol packet")
     p.add_argument("--selftest", action="store_true")
     args = p.parse_args()
