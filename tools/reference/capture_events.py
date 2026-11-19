@@ -15,6 +15,7 @@ Use:
   python capture_events.py --exe F:\\VibRibbonVR\\research\\extracted\\disc\\MAIN_G.EXE --out events.jsonl
   Then play a song in DuckStation. Press Ctrl+C here when the song is over.
   Add --keep-alive to make game over impossible while recording.
+  Add --scores to also log every hit and stray press with the score state, for checking the scoring rules.
 
   python capture_events.py --selftest     checks this script against a fake server
 """
@@ -34,6 +35,11 @@ GAMEPLAY_START = 0x8004549C   # Gameplay::Start(course, seconds, score, ...)
 SCRIPT_START_TIME = 0x80076468
 SCRIPT_OFFSET = 0x8007646C
 SCRIPT_SEED = 0x800763FC
+SCORE_HIT = 0x8004BF54        # Score::Hit(road, times): a part was hit
+SCORE_PRESS = 0x8004BFE8      # Score::Press(road, partRoad): a press with no part to take it
+SCORE = 0x8006D800            # points, strays counted, their bonus, chain (4 ints)
+VIBRI_MISSES = 0x800764D0     # misses since the level last changed
+VIBRI_COMBO = 0x800764D4      # hits in a row toward the next form
 VIBRI_LEVEL = 0x800764CC       # Gameplay's level: 3 is the starting rabbit, 11 is one step from game over
 EXE_LOAD_ADDRESS = 0x80019000
 EXE_HEADER_SIZE = 0x800
@@ -144,7 +150,8 @@ def capture(args):
     exe = open(args.exe, "rb").read()
     if exe[:8] != b"PS-X EXE":
         sys.exit("%s is not a PlayStation executable" % args.exe)
-    guards = {a: exe_bytes(exe, a, GUARD_BYTES) for a in (ADD_EVENT, GAMEPLAY_START)}
+    addresses = (ADD_EVENT, GAMEPLAY_START) + ((SCORE_HIT, SCORE_PRESS) if args.scores else ())
+    guards = {a: exe_bytes(exe, a, GUARD_BYTES) for a in addresses}
 
     out_dir = os.path.dirname(os.path.abspath(args.out))
     os.makedirs(out_dir, exist_ok=True)  # before touching the emulator, so a bad path cannot leave it paused
@@ -175,7 +182,17 @@ def capture(args):
                 gdb.resume()
                 continue
             record = {"wall": round(time.time(), 3)}
-            if pc == GAMEPLAY_START:
+            if args.scores:  # the state as it is before this stop's function runs
+                points, strays, bonus, chain = struct.unpack("<4i", gdb.read(SCORE, 16))
+                level, misses, combo = struct.unpack("<3i", gdb.read(VIBRI_LEVEL, 12))
+                record.update(points=points, strays=strays, stray_bonus=bonus, chain=chain, level=level, misses=misses, combo=combo)
+            if pc == SCORE_HIT:
+                record.update(type="hit", road=regs["a1"], times=regs["a2"])
+                print("       hit %-10s x%d  points %d chain %d level %d" % (
+                    ROADS[regs["a1"]] if regs["a1"] < 10 else regs["a1"], regs["a2"], record["points"], record["chain"], record["level"]))
+            elif pc == SCORE_PRESS:
+                record.update(type="press", road=regs["a1"], part_road=regs["a2"])
+            elif pc == GAMEPLAY_START:
                 record.update(type="round_start", course=regs["a0"], seconds=regs["a1"], score=regs["a2"])
                 print("--- round start: course %d, %d s" % (regs["a0"], regs["a1"]))
             else:
@@ -185,8 +202,11 @@ def capture(args):
                               script_offset=struct.unpack("<i", gdb.read(SCRIPT_OFFSET, 4))[0],
                               script_seed=gdb.read_u32(SCRIPT_SEED))
                 count += 1
-                if args.keep_alive:  # obstacles do not depend on how well the round is played
-                    gdb.write(VIBRI_LEVEL, struct.pack("<i", 3))
+                if args.keep_alive:
+                    # Game over comes with the third miss at level 11. Forgetting the misses there
+                    # prevents it and leaves forms and scoring as the game made them.
+                    if struct.unpack("<i", gdb.read(VIBRI_LEVEL, 4))[0] >= 11:
+                        gdb.write(VIBRI_MISSES, struct.pack("<i", 0))
                 print("%5d  %s" % (count, describe(record)))
             out.write(json.dumps(record) + "\n")
             out.flush()
@@ -210,9 +230,9 @@ def _fake_server(listener, exe):
     conn, _ = listener.accept()
     buf = b""
     event = struct.pack("<5i", 0, 123456, 7, 11025, 65536)
-    memory = {0x80100000: event, SCRIPT_START_TIME: struct.pack("<i", 1000), SCRIPT_OFFSET: struct.pack("<i", 0),
+    memory = {SCORE: struct.pack('<4i', 10, 1, 2, 3), VIBRI_LEVEL: struct.pack('<3i', 11, 2, 5), 0x80100000: event, SCRIPT_START_TIME: struct.pack("<i", 1000), SCRIPT_OFFSET: struct.pack("<i", 0),
               SCRIPT_SEED: struct.pack("<I", 42)}
-    stops = [ADD_EVENT, 0x80030000, GAMEPLAY_START, ADD_EVENT]
+    stops = [ADD_EVENT, 0x80030000, GAMEPLAY_START, SCORE_HIT, ADD_EVENT]
     pc = [0]
 
     def send(text):
@@ -259,7 +279,13 @@ def _fake_server(listener, exe):
             elif cmd.startswith("M"):
                 head, data = cmd[1:].split(":")
                 addr = int(head.split(",")[0], 16)
-                memory[addr] = bytes.fromhex(data)
+                blob = bytes.fromhex(data)
+                for base, old in list(memory.items()):  # patch a block that already covers the address
+                    if base <= addr and addr + len(blob) <= base + len(old):
+                        memory[base] = old[:addr - base] + blob + old[addr - base + len(blob):]
+                        break
+                else:
+                    memory[addr] = blob
                 send("OK")
             elif cmd.startswith("m"):
                 addr, length = (int(x, 16) for x in cmd[1:].split(","))
@@ -272,7 +298,7 @@ def selftest():
     import os
     import tempfile
     exe = bytearray(b"PS-X EXE" + bytes(EXE_HEADER_SIZE - 8) + bytes(0x40000))
-    for a, fill in ((ADD_EVENT, 0xA1), (GAMEPLAY_START, 0xB2)):
+    for a, fill in ((ADD_EVENT, 0xA1), (GAMEPLAY_START, 0xB2), (SCORE_HIT, 0xC3), (SCORE_PRESS, 0xD4)):
         off = EXE_HEADER_SIZE + a - EXE_LOAD_ADDRESS
         exe[off:off + GUARD_BYTES] = bytes([fill]) * GUARD_BYTES
     folder = tempfile.mkdtemp()
@@ -282,10 +308,12 @@ def selftest():
     listener.bind(("127.0.0.1", 0))
     listener.listen(1)
     threading.Thread(target=_fake_server, args=(listener, bytes(exe)), daemon=True).start()
-    capture(argparse.Namespace(exe=exe_path, out=out_path, host="127.0.0.1", port=listener.getsockname()[1], verbose=False, keep_alive=True))
+    capture(argparse.Namespace(exe=exe_path, out=out_path, host="127.0.0.1", port=listener.getsockname()[1], verbose=False, keep_alive=True, scores=True))
     rows = [json.loads(line) for line in open(out_path)]
     kinds = [r["type"] for r in rows]
-    assert kinds == ["part", "round_start", "part"], kinds
+    assert kinds == ["part", "round_start", "hit", "part"], kinds
+    assert rows[2]["road"] == 150 and rows[2]["points"] == 10 and rows[2]["chain"] == 3 and rows[2]["level"] == 11
+    assert rows[3]["misses"] == 0, "keep-alive should have cleared the misses at level 11"
     assert rows[0]["time"] == 123456 and rows[0]["value"] == 7 and rows[0]["length"] == 11025 and rows[0]["script_seed"] == 42
     assert rows[1]["course"] == 2 and rows[1]["seconds"] == 150
     print("self-test passed")
@@ -299,6 +327,7 @@ def main():
     p.add_argument("--port", type=int, default=1234)
     p.add_argument("--keep-alive", action="store_true",
                    help="reset Vibri to her starting form at every event so a song cannot end in game over (changes the game's memory)")
+    p.add_argument("--scores", action="store_true", help="also log hits and stray presses with the score state")
     p.add_argument("--verbose", action="store_true", help="print every protocol packet")
     p.add_argument("--selftest", action="store_true")
     args = p.parse_args()
