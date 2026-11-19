@@ -26,7 +26,7 @@ What exists in the repo (first commit, session 2):
 - `tools/vibtool`: `info`, `extract`, `audio`.
 - `tests/`: no-dependency harness, 8 tests. The disc test runs only when `VIB_TEST_CUE` is set.
 - CI: `.github/workflows/ci.yml`, Windows (MSVC) and Ubuntu, warnings as errors.
-- Verified on Linux (GCC 13, Clang) against the real disc: all 8 tests pass; extracted MAIN_G.EXE and SCES_028.73 have the same SHA-1 as the session 1 Python extraction; WAV output is 44.1 kHz stereo with the expected lengths. **Not yet built on Windows.**
+- Verified on Linux (GCC 13, Clang) against the real disc: all 8 tests pass; extracted MAIN_G.EXE and SCES_028.73 have the same SHA-1 as the session 1 Python extraction; WAV output is 44.1 kHz stereo with the expected lengths. GitHub Actions CI also builds and tests it with MSVC on Windows and GCC on Ubuntu, warnings as errors: first run passed. Not yet built on the owner's PC.
 
 Owner's toolchain (from their output, session 2): git 2.56.0, CMake 4.4.4, Ninja 1.12.1, Python 3.15.2, adb 37.0.1 in `%LOCALAPPDATA%\Android\Sdk\platform-tools`, Vulkan 1.4.357 instance on Windows 10 19045. GPUs: NVIDIA RTX 4090 (driver 621.24) and an AMD Radeon integrated GPU. Overlay layers from RTSS and OBS print harmless loader warnings. Not yet confirmed: MSVC, Vulkan SDK, Android NDK.
 
