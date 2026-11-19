@@ -82,6 +82,8 @@ class Display {
   virtual int height() const = 0;  // pixels of the picture (an eye's, in a headset)
   // One frame: the layers in order, each through its own camera.
   virtual void draw(const std::vector<Layer>& layers, float line_width) = 0;
+  // A headset: put the scene in front of where the player is now looking.
+  virtual void recentre() {}
 };
 
 class Renderer : public Display {

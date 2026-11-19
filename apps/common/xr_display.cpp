@@ -78,10 +78,23 @@ Mat4 projection(const XrFovf& fov, float z_near, float z_far) {
   return m;
 }
 
-Mat4 scaling(float s) {
+Mat4 scaling(float x, float y, float z) {
   Mat4 m;
-  m.m[0] = m.m[5] = m.m[10] = s;
+  m.m[0] = x;
+  m.m[5] = y;
+  m.m[10] = z;
   return m;
+}
+
+// The narrowest camera of play (25 degrees). A narrower one (the intro's first
+// shot is a 3 degree telephoto from 23 m) would look tiny and far off at the
+// headset's own field of view, so its scene comes closer by the ratio of the two,
+// framed as the original framed it.
+constexpr float kNarrowestFov = 25.0f * 3.14159265f / 180.0f;
+
+float depth_for(float fov_y) {
+  const float k = std::tan(0.5f * fov_y) / std::tan(0.5f * kNarrowestFov);
+  return std::clamp(k, 0.02f, 1.0f);
 }
 
 }  // namespace
@@ -111,6 +124,7 @@ class XrDisplay::Impl {
     if (lines_memory_) vkFreeMemory(device_, lines_memory_, nullptr);
     if (fence_) vkDestroyFence(device_, fence_, nullptr);
     if (pool_) vkDestroyCommandPool(device_, pool_, nullptr);
+    if (head_) xrDestroySpace(head_);
     if (space_) xrDestroySpace(space_);
     if (actions_) xrDestroyActionSet(actions_);
     if (session_) xrDestroySession(session_);
@@ -122,6 +136,7 @@ class XrDisplay::Impl {
   const char* gpu_name() const { return gpu_name_.c_str(); }
   const char* runtime_name() const { return runtime_name_.c_str(); }
   int height() const { return eyes_[0].height; }
+  void recentre() { recentre_ = true; }
   float scale() const { return scale_; }
   void set_scale(float s) { scale_ = s; }
 
@@ -151,6 +166,7 @@ class XrDisplay::Impl {
       for (XrView& v : views) v.type = XR_TYPE_VIEW;
       std::uint32_t count = 0;
       xr_check(xrLocateViews(session_, &locate, &view_state, 2, &count, views.data()), "xrLocateViews");
+      if (recentre_) place_scene(state.predictedDisplayTime);
       if ((view_state.viewStateFlags & XR_VIEW_STATE_POSITION_VALID_BIT) &&
           (view_state.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT)) {
         render(layers, line_width, views, projected);
@@ -330,6 +346,33 @@ class XrDisplay::Impl {
     space.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_LOCAL;
     space.poseInReferenceSpace.orientation.w = 1;
     xr_check(xrCreateReferenceSpace(session_, &space, &space_), "xrCreateReferenceSpace");
+    space.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_VIEW;
+    xr_check(xrCreateReferenceSpace(session_, &space, &head_), "xrCreateReferenceSpace (view)");
+  }
+
+  // The scene's place: where the head was at the last recentre, turned only about
+  // the vertical so the scene stays upright.
+  void place_scene(XrTime time) {
+    XrSpaceLocation loc{XR_TYPE_SPACE_LOCATION};
+    if (XR_FAILED(xrLocateSpace(head_, space_, time, &loc))) return;
+    const XrSpaceLocationFlags need = XR_SPACE_LOCATION_POSITION_VALID_BIT | XR_SPACE_LOCATION_ORIENTATION_VALID_BIT;
+    if ((loc.locationFlags & need) != need) return;
+    const XrQuaternionf& q = loc.pose.orientation;
+    // Where the head looks: its -z axis.
+    const float fx = -2 * (q.x * q.z + q.y * q.w), fz = -(1 - 2 * (q.x * q.x + q.y * q.y));
+    const float yaw = std::atan2(-fx, -fz);
+    const float c = std::cos(yaw), s = std::sin(yaw);
+    Mat4 m;
+    m.m[0] = c;
+    m.m[2] = -s;
+    m.m[8] = s;
+    m.m[10] = c;
+    m.m[12] = loc.pose.position.x;
+    m.m[13] = loc.pose.position.y;
+    m.m[14] = loc.pose.position.z;
+    scene_place_ = m;
+    recentre_ = false;
+    std::printf("Recentred\n");
   }
 
   void create_swapchains() {
@@ -538,6 +581,8 @@ class XrDisplay::Impl {
                 Button{action("back", "Back", XR_ACTION_TYPE_BOOLEAN_INPUT), SDL_GAMEPAD_BUTTON_EAST},
                 Button{action("start", "Start", XR_ACTION_TYPE_BOOLEAN_INPUT), SDL_GAMEPAD_BUTTON_START}};
     stick_ = action("menu_stick", "Menu direction", XR_ACTION_TYPE_VECTOR2F_INPUT);
+    recentre_action_ = action("recentre", "Recentre the view", XR_ACTION_TYPE_BOOLEAN_INPUT);
+    width_stick_ = action("line_width", "Line width (testing)", XR_ACTION_TYPE_VECTOR2F_INPUT);
 
     // Touch controllers (Quest), and the plainest controller any runtime offers.
     std::vector<XrActionSuggestedBinding> touch = {
@@ -549,6 +594,8 @@ class XrDisplay::Impl {
         {buttons_[4].action, path("/user/hand/right/input/b/click")},
         {buttons_[5].action, path("/user/hand/left/input/menu/click")},
         {stick_, path("/user/hand/left/input/thumbstick")},
+        {recentre_action_, path("/user/hand/right/input/thumbstick/click")},
+        {width_stick_, path("/user/hand/right/input/thumbstick")},
     };
     XrInteractionProfileSuggestedBinding sb{XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING};
     sb.interactionProfile = path("/interaction_profiles/oculus/touch_controller");
@@ -596,6 +643,32 @@ class XrDisplay::Impl {
       const bool down = st.isActive && st.currentState;
       if (down != b.down) push_button(b.pad, down);
       b.down = down;
+    }
+    // R3: recentre.
+    {
+      XrActionStateGetInfo ri{XR_TYPE_ACTION_STATE_GET_INFO};
+      ri.action = recentre_action_;
+      XrActionStateBoolean rs{XR_TYPE_ACTION_STATE_BOOLEAN};
+      if (XR_SUCCEEDED(xrGetActionStateBoolean(session_, &ri, &rs)) && rs.isActive && rs.changedSinceLastSync && rs.currentState)
+        recentre_ = true;
+    }
+    // The right stick up or down: the + or - key, once per push.
+    {
+      XrActionStateGetInfo wi{XR_TYPE_ACTION_STATE_GET_INFO};
+      wi.action = width_stick_;
+      XrActionStateVector2f ws{XR_TYPE_ACTION_STATE_VECTOR2F};
+      float y = 0;
+      if (XR_SUCCEEDED(xrGetActionStateVector2f(session_, &wi, &ws)) && ws.isActive) y = ws.currentState.y;
+      const int dir = y > 0.7f ? 1 : y < -0.7f ? -1 : (std::abs(y) < 0.4f ? 0 : width_dir_);
+      if (dir != width_dir_ && dir != 0) {
+        SDL_Event e{};
+        e.type = SDL_EVENT_KEY_DOWN;
+        e.key.key = dir > 0 ? SDLK_EQUALS : SDLK_MINUS;
+        e.key.down = true;
+        e.key.timestamp = SDL_GetTicksNS();
+        SDL_PushEvent(&e);
+      }
+      width_dir_ = dir;
     }
     // The stick as the d-pad, with a little hysteresis.
     XrActionStateGetInfo gi{XR_TYPE_ACTION_STATE_GET_INFO};
@@ -683,7 +756,7 @@ class XrDisplay::Impl {
     vkResetCommandBuffer(cmd_, 0);
     VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     vk_check(vkBeginCommandBuffer(cmd_, &begin), "vkBeginCommandBuffer");
-    const Mat4 to_metres = scaling(scale_);
+
     for (std::size_t e = 0; e < 2; ++e) {
       const Eye& eye = eyes_[e];
       VkClearValue clear{};
@@ -703,11 +776,11 @@ class XrDisplay::Impl {
       const VkDeviceSize zero = 0;
       vkCmdBindVertexBuffers(cmd_, 0, 1, &lines_, &zero);
       // Each layer's camera stands at the headset's starting place, in metres; the eye looks from where it is now.
-      const Mat4 eye_view = mul(projection(views[e].fov, 0.05f, 2000.0f), view_from_pose(views[e].pose));
+      const Mat4 eye_view = mul(mul(projection(views[e].fov, 0.05f, 2000.0f), view_from_pose(views[e].pose)), scene_place_);
       for (std::size_t i = 0; i < layers.size(); ++i) {
         if (!counts[i]) continue;
         PushConstants pc;
-        pc.mvp = mul(eye_view, mul(to_metres, layers[i].view));
+        pc.mvp = mul(eye_view, mul(scaling(scale_, scale_, scale_ * depth_for(layers[i].fov_y)), layers[i].view));
         pc.viewport[0] = float(eye.width);
         pc.viewport[1] = float(eye.height);
         pc.width = line_width;
@@ -737,7 +810,11 @@ class XrDisplay::Impl {
   XrInstance instance_ = XR_NULL_HANDLE;
   XrSystemId system_ = XR_NULL_SYSTEM_ID;
   XrSession session_ = XR_NULL_HANDLE;
-  XrSpace space_ = XR_NULL_HANDLE;
+  XrSpace space_ = XR_NULL_HANDLE, head_ = XR_NULL_HANDLE;
+  Mat4 scene_place_;  // the scene in the headset's starting space (identity until recentred)
+  bool recentre_ = false;
+  XrAction recentre_action_ = XR_NULL_HANDLE, width_stick_ = XR_NULL_HANDLE;
+  int width_dir_ = 0;
   XrActionSet actions_ = XR_NULL_HANDLE;
   std::vector<Button> buttons_;
   XrAction stick_ = XR_NULL_HANDLE;
@@ -769,6 +846,7 @@ XrDisplay::~XrDisplay() = default;
 const char* XrDisplay::gpu_name() const { return impl_->gpu_name(); }
 int XrDisplay::height() const { return impl_->height(); }
 void XrDisplay::draw(const std::vector<Layer>& layers, float line_width) { impl_->draw(layers, line_width); }
+void XrDisplay::recentre() { impl_->recentre(); }
 const char* XrDisplay::runtime_name() const { return impl_->runtime_name(); }
 void XrDisplay::set_scale(float metres_per_unit) { impl_->set_scale(metres_per_unit); }
 float XrDisplay::scale() const { return impl_->scale(); }

@@ -7,6 +7,8 @@
 // (SDL), which the game already understands:
 //   left trigger = block, right trigger = loop, X or Y = pit, A = wave and confirm,
 //   B = back, menu button = start, left thumbstick = the d-pad in the menus.
+// For testing: the right thumbstick clicked (R3) recentres the view; pushed up or
+// down it sends the + and - keys (thicker, thinner lines).
 
 #include <memory>
 
@@ -27,6 +29,7 @@ class XrDisplay : public Display {
   // Waits for the headset's next frame, then draws it. Also polls the session and
   // the controllers; a closed session sends SDL_EVENT_QUIT.
   void draw(const std::vector<Layer>& layers, float line_width) override;
+  void recentre() override;
 
   const char* runtime_name() const;
   void set_scale(float metres_per_unit);

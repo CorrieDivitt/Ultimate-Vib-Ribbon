@@ -375,9 +375,11 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
             s.save.options.audio_offset_ms = s.audio.offset_ms();
             std::printf("audio offset %+.0f ms (latency now %.0f ms)\n", s.audio.offset_ms(), s.audio.latency_ms());
           } else if (e.key.key == SDLK_MINUS || e.key.key == SDLK_EQUALS) {
-            s.line_width = std::clamp(s.line_width + (e.key.key == SDLK_MINUS ? -0.125 : 0.125), 0.125, 4.0);
-            s.save.options.line_width = s.line_width;
-            std::printf("line width %.3f (saved)\n", s.line_width);
+            // Finer steps in a headset, where each is worth far more on the picture; each saved for its own display.
+            const double step = s.opt.vr ? 0.025 : 0.125;
+            s.line_width = std::clamp(s.line_width + (e.key.key == SDLK_MINUS ? -step : step), step, 4.0);
+            (s.opt.vr ? s.save.options.vr_line_width : s.save.options.line_width) = s.line_width;
+            std::printf("%sline width %.3f (saved)\n", s.opt.vr ? "headset " : "", s.line_width);
           } else if (const std::uint8_t b = key_bits(e.key.key)) {
             presses.push_back({b, e.key.timestamp});
           }
@@ -396,6 +398,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
           break;
         case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
           if (e.gbutton.button == SDL_GAMEPAD_BUTTON_BACK || e.gbutton.button == SDL_GAMEPAD_BUTTON_START) return Result::Abort;
+          if (e.gbutton.button == SDL_GAMEPAD_BUTTON_RIGHT_STICK) s.renderer.recentre();  // R3
           if (const std::uint8_t b = pad_bits(e.gbutton.button)) presses.push_back({b, e.gbutton.timestamp});
           break;
         case SDL_EVENT_GAMEPAD_AXIS_MOTION:
@@ -603,7 +606,7 @@ int run(int argc, char** argv) {
     Clip::set_smooth(opt.smooth || save.options.smooth_animation || opt.vr);
     std::printf("Animation: %s\n", Clip::smooth() ? "smooth (poses blended)" : "stepped, like the original");
     Session s{opt, save, fixed, disc, script, scene, hud, audio, fx, window, renderer,
-              opt.line_width.value_or(save.options.line_width), {}, {}};
+              opt.line_width.value_or(opt.vr ? save.options.vr_line_width : save.options.line_width), {}, {}};
     std::uint32_t seed = opt.seed;
     int last_rank = 0, last_score = 0, lost_song = 0, points_before_lost = 0;
     bool last_lost = false, last_left = false, last_cleared = false;  // game over; left with Start or Esc; cleared
@@ -757,6 +760,7 @@ int run(int argc, char** argv) {
                 case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: press(3, down); break;
                 case SDL_GAMEPAD_BUTTON_SOUTH: case SDL_GAMEPAD_BUTTON_START: press(4, down); break;
                 case SDL_GAMEPAD_BUTTON_EAST: case SDL_GAMEPAD_BUTTON_NORTH: press(5, down); break;
+                case SDL_GAMEPAD_BUTTON_RIGHT_STICK: if (down) renderer.recentre(); break;  // R3
                 default: break;
               }
               break;

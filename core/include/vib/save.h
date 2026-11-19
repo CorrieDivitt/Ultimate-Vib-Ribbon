@@ -21,6 +21,7 @@ struct Options {
   // steps through them (15 to 30 a second for most), so this is off by default.
   bool smooth_animation = false;
   double line_width = 0.3;     // relative to the original's one pixel on a 288-line picture
+  double vr_line_width = 0.15;  // the same, in a headset (an eye's picture is much taller)
   double audio_offset_ms = 0;  // added to the estimated output latency
   float music_volume = 1.0f, effects_volume = 1.0f;
 };
