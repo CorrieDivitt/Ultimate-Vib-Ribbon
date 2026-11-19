@@ -156,7 +156,9 @@ Deliberate differences from the original, to keep in mind for golden tests:
 - Ties in part position are kept in arrival order (the original's sort leaves them unspecified).
 - `move_done` (presses ignored until Vibri's move animation is half over) is an input; the animation side does not exist yet. Open design question for Phase 4: judging with the press's own timestamp instead of the frame's, for consistent timing at any refresh rate.
 
-Not wired yet: speed-course `fixed_period()` and the audio-CD select on/off events are produced by Gameplay but the CourseGenerator does not consume them (both belong to audio-CD play, the stretch goal). Recorder does not log score or level; adding that would let 2.4 be checked against the original.
+Checking the rules against the original (added 2026-11-19): `capture_events.py --scores` also breaks at Score::Hit (0x8004BF54; a1 road, a2 multiplier) and Score::Press (0x8004BFE8; a1 road, a2 the coming part's road) and adds to every record the state before the stop: points, strays counted, stray bonus, chain (4 ints at 0x8006D800), level, misses, combo (0x800764CC, D0, D4). `tools/reference/check_scores.py <file>` replays the rules over consecutive records. Not yet run on a real recording (asked as Q14, `scores.jsonl`). `--keep-alive` changed: it no longer forces the level to 3; it clears the miss count when the level is 11, which prevents game over without touching forms or scoring. Earlier recordings (bronze, silver, gold, gold2) were made with the old behaviour, which does not matter for obstacle events. More breakpoint stops per second with --scores; whether the game stays smooth is untested.
+
+Not wired yet: speed-course `fixed_period()` and the audio-CD select on/off events are produced by Gameplay but the CourseGenerator does not consume them (both belong to audio-CD play, the stretch goal).
 
 ## 2a. Format findings from the loaders (session 2) [measured]
 
