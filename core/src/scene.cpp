@@ -1,0 +1,434 @@
+#include "vib/scene.h"
+
+#include <algorithm>
+#include <cctype>
+#include <cmath>
+#include <string>
+
+#include "vib/bytes.h"
+#include "vib/course_gen.h"
+
+namespace vib {
+
+namespace {
+
+constexpr double kTau = 6.28318530717958647692;
+
+std::string upper(std::string s) {
+  for (char& c : s) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+  return s;
+}
+
+Vec3f add(Vec3f a, Vec3f b) { return {a.x + b.x, a.y + b.y, a.z + b.z}; }
+Vec3f sub(Vec3f a, Vec3f b) { return {a.x - b.x, a.y - b.y, a.z - b.z}; }
+Vec3f cross(Vec3f a, Vec3f b) { return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x}; }
+float dot(Vec3f a, Vec3f b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+Vec3f norm(Vec3f a) {
+  const float l = std::sqrt(dot(a, a));
+  return l > 0 ? Vec3f{a.x / l, a.y / l, a.z / l} : Vec3f{0, 0, 1};
+}
+
+// The original's rule for objects with a facing marker: project the marker triangle
+// and leave the object out when its screen winding (Y down) is negative.
+bool faces_away(const SceneView& v, Vec3f a, Vec3f b, Vec3f c) {
+  const Vec3f f = norm(sub(v.target, v.eye));
+  const Vec3f s = norm(cross(f, {0, -1, 0}));  // screen right
+  const Vec3f u = cross(s, f);                  // screen up
+  float x[3], y[3];
+  const Vec3f p[3] = {a, b, c};
+  for (int i = 0; i < 3; ++i) {
+    const Vec3f d = sub(p[i], v.eye);
+    const float z = dot(d, f);
+    if (z < 1.0f) return false;  // at or behind the camera: leave it drawn
+    x[i] = dot(d, s) / z;
+    y[i] = -dot(d, u) / z;  // screen Y points down
+  }
+  return (x[1] - x[0]) * (y[2] - y[0]) - (x[2] - x[0]) * (y[1] - y[0]) < 0.0f;
+}
+
+Mat3 rotation_z(int units) {
+  const double a = units * kTau / 4096.0;
+  const float c = float(std::cos(a)), s = float(std::sin(a));
+  Mat3 m;
+  m.m = {{{c, -s, 0}, {s, c, 0}, {0, 0, 1}}};
+  return m;
+}
+
+}  // namespace
+
+// ---------------------------------------------------------------- Clip
+
+void Clip::advance(double seconds) {
+  const double step = rate_ * speed_ * seconds;
+  if (step == 0 || frames_ <= 0) return;
+  if (loop_) {
+    position_ += step;
+    position_ = std::fmod(position_, double(frames_));
+    if (position_ < 0) position_ += frames_;
+    finished_ = false;
+    return;
+  }
+  double next = position_ + step;
+  if (next < 0) next = 0;
+  else if (next >= frames_) next = std::nextafter(double(frames_), 0.0);
+  if (next == position_) {  // could not move: at the end (or the start, going backwards)
+    finished_ = true;
+    return;
+  }
+  position_ = next;
+  finished_ = false;
+}
+
+int Clip::frame() const {
+  if (frames_ <= 0) return 0;
+  return std::clamp(static_cast<int>(std::floor(position_)), 0, frames_ - 1);
+}
+
+// ---------------------------------------------------------------- GameCamera
+
+namespace {
+enum Group { kBack, kSide, kFront };
+struct CameraName {
+  int id;
+  const char* name;
+  int group;
+};
+const CameraName kCameraNames[] = {
+    {1, "B01", kBack}, {2, "B02", kBack}, {3, "S01", kSide}, {4, "S02", kSide}, {5, "F01", kFront}, {6, "F02", kFront}, {7, "F03", kFront},
+};
+struct TransitionName {
+  const char* same;
+  const char* switched;
+  int from, to;
+};
+const TransitionName kTransitionNames[] = {
+    {"TV_BS", "TA_BS", kBack, kSide},  {"TV_BF", "TA_BF", kBack, kFront}, {"TV_SF", "TA_SF", kSide, kFront},
+    {"TV_BB", "TA_BB", kBack, kBack},  {"TV_SS", "TA_SS", kSide, kSide},  {"TV_FF", "TA_FF", kFront, kFront},
+};
+constexpr int kDefaultLoops = 2;
+}  // namespace
+
+GameCamera::GameCamera(const Pak& pak) {
+  auto load = [&](const char* name) { return parse_anc(pak.view(std::string("ROAD/") + name + ".ANC")); };
+  for (const auto& c : kCameraNames) {
+    Camera cam{c.id, c.group, load(c.name), {}};
+    cam.clip = Clip(int(cam.anim.keys.size()), cam.anim.rate, false);
+    cameras_.push_back(std::move(cam));
+  }
+  for (const auto& t : kTransitionNames) {
+    Transition tr{t.from, t.to, load(t.same), load(t.switched), {}, {}};
+    tr.same_clip = Clip(int(tr.same_anim.keys.size()), tr.same_anim.rate, false);
+    tr.switch_clip = Clip(int(tr.switch_anim.keys.size()), tr.switch_anim.rate, false);
+    transitions_.push_back(std::move(tr));
+  }
+  reset(false, false);
+}
+
+void GameCamera::take_next(int side) {
+  next_side_ = side;
+  next_camera_ = event_camera_;
+  next_loops_ = event_loops_;
+}
+
+void GameCamera::start_base() {
+  camera_ = next_camera_;
+  side_ = next_side_;
+  loops_done_ = 0;
+  loops_ = next_loops_;
+  Camera& c = cameras_[std::size_t(camera_)];
+  anim_ = &c.anim;
+  clip_ = &c.clip;
+  in_transition_ = false;
+  flip_ = side_ != 0;
+  clip_->rewind();
+  // However many loops a camera gets, together they last as long as two.
+  clip_->set_speed((fast_ ? 1.3 : 1.0) * next_loops_ / 2.0);
+}
+
+void GameCamera::start_transition() {
+  const int from = cameras_[std::size_t(camera_)].group, to = cameras_[std::size_t(next_camera_)].group;
+  int found = -1;
+  bool reverse = false;
+  for (std::size_t i = 0; i < transitions_.size(); ++i)
+    if (transitions_[i].from == from && transitions_[i].to == to) found = int(i);
+  if (found < 0) {
+    reverse = true;
+    for (std::size_t i = 0; i < transitions_.size(); ++i)
+      if (transitions_[i].from == to && transitions_[i].to == from) found = int(i);
+  }
+  require(found >= 0, "no camera transition between these groups");
+  const bool switch_side = side_ != next_side_;
+  Transition& t = transitions_[std::size_t(found)];
+  anim_ = switch_side ? &t.switch_anim : &t.same_anim;
+  clip_ = switch_side ? &t.switch_clip : &t.same_clip;
+  in_transition_ = true;
+  clip_->rewind(reverse);
+  clip_->set_speed(reverse ? -1.0 : 1.0);
+  flip_ = (side_ != 0) != (reverse && switch_side);
+}
+
+void GameCamera::reset(bool fast, bool hold) {
+  fast_ = fast;
+  hold_ = hold;
+  waiting_ = true;
+  event_camera_ = 2;  // the first side camera, once
+  event_loops_ = 1;
+  take_next(1);
+  start_base();
+  cut();
+}
+
+void GameCamera::event(int value) {
+  int loops = value / 10;
+  const int id = value % 10;
+  if (loops <= 0) loops = kDefaultLoops;
+  int camera = 0;
+  for (std::size_t i = 0; i < cameras_.size(); ++i)
+    if (cameras_[i].id == id) camera = int(i);
+  event_camera_ = camera;
+  event_loops_ = loops;
+  if (waiting_) {
+    waiting_ = false;
+    take_next(0);
+    start_base();
+    take_next(0);
+    start_transition();
+  }
+}
+
+void GameCamera::cut() {
+  take_next(fast_ ? 0 : side_ ^ 1);
+  start_transition();
+}
+
+SceneView GameCamera::update(double seconds, Vec3f origin) {
+  SceneView v;
+  if (anim_ && !anim_->keys.empty()) {
+    const CameraKey& k = anim_->keys[std::size_t(clip_->frame())];
+    const float m = flip_ ? -1.0f : 1.0f;
+    v.eye = add(origin, {m * k.eye.x, float(k.eye.y), float(k.eye.z)});
+    v.target = add(origin, {m * k.target.x, float(k.target.y), float(k.target.z)});
+    v.fov_y = float(k.fov * kTau / 4096.0);
+  }
+  clip_->advance(seconds);
+  if (clip_->finished()) {
+    if (!in_transition_) {
+      if (hold_ || ++loops_done_ < loops_) clip_->rewind();
+    } else {
+      start_base();
+    }
+  }
+  return v;
+}
+
+// ---------------------------------------------------------------- Scene
+
+namespace {
+const char* const kFormDirs[Scene::kForms] = {"CHARA/SUPER/", "CHARA/PEELOO/", "CHARA/FROG/", "CHARA/SNAKE/"};
+// For each road (and running), the clip and its alternate per form; "" = the same clip again.
+const char* const kMoveFiles[Scene::kMoves][Scene::kForms][2] = {
+    {{"N01_J", "N01_J_F"}, {"N01_J", "N01_J_F"}, {"N01_J", "N01_J_F"}, {"N01_J", "N01_J_F"}},
+    {{"N02_H", ""}, {"N02_H", ""}, {"N02_H", ""}, {"N02_H", "N02_H_F"}},
+    {{"N03_L", "N03_L_F"}, {"N03_L", "N03_L_F"}, {"N03_L", "N03_L_F"}, {"N03_L", "N03_L_F"}},
+    {{"N04_W", ""}, {"N04_W", ""}, {"N04_W", "N04_W_F"}, {"N04_W", "N04_W_F"}},
+    {{"N05_JH", ""}, {"N05_JH", ""}, {"N05_JH", ""}, {"N05_JH", ""}},
+    {{"N06_JL", ""}, {"N06_JL", ""}, {"N06_JL", ""}, {"N06_JL", ""}},
+    {{"N07_JW", ""}, {"N07_JW", ""}, {"N07_JW", ""}, {"N07_JW", ""}},
+    {{"N08_HL", ""}, {"N08_HL", ""}, {"N08_HL", ""}, {"N08_HL", ""}},
+    {{"N09_HW", ""}, {"N09_HW", ""}, {"N09_HW", ""}, {"N09_HW", ""}},
+    {{"N10_LW", ""}, {"N10_LW", ""}, {"N10_LW", ""}, {"N10_LW", ""}},
+    {{"N00_SKIP", ""}, {"N00_SKIP", ""}, {"N00_SKIP", ""}, {"N00_SKIP", ""}},
+};
+const int kEvoEnds[Scene::kForms] = {58, 23, 19, 0};  // last frame of the evolution clip per form
+}  // namespace
+
+Scene::Scene(const Pak& pak, float road_length, float vibri_position)
+    : length_(Fixed::from(road_length)), start_(Fixed::from(vibri_position)), camera_(pak) {
+  offset_ = -length_.over(2);
+  road_ = parse_tmd(pak.view("ROAD/ROAD.TMD"));
+  require(road_.objects.size() == 10, "ROAD.TMD should hold one object per road");
+  point_ = parse_tmd(pak.view("ROAD/POINT.TMD"));
+  evo_model_ = parse_tmd(pak.view("METERS/EVO.TMD"));
+  evo_anim_ = parse_anm(pak.view("METERS/EVO.ANM"));
+  evo_ = Clip(int(evo_anim_.frames.size()), evo_anim_.rate, false);
+  moves_.resize(kForms);
+  for (int f = 0; f < kForms; ++f) {
+    forms_.push_back(parse_tmd(pak.view(std::string(kFormDirs[f]) + "MODEL.TMD")));
+    moves_[std::size_t(f)].resize(kMoves);
+    for (int m = 0; m < kMoves; ++m)
+      for (int a = 0; a < 2; ++a) {
+        const char* file = kMoveFiles[m][f][a];
+        Move mv;
+        if (*file) {
+          mv.anim = parse_anm(pak.view(std::string(kFormDirs[f]) + upper(file) + ".ANM"));
+          mv.clip = Clip(int(mv.anim.frames.size()), mv.anim.rate, m == kRunning);
+        } else {
+          mv = moves_[std::size_t(f)][std::size_t(m)][0];
+        }
+        moves_[std::size_t(f)][std::size_t(m)].push_back(std::move(mv));
+      }
+  }
+  reset(false, false);
+}
+
+void Scene::reset(bool home_course, bool speed_course) {
+  alternate_ = false;
+  move_ = kRunning;
+  form_ = 0;
+  current().clip.rewind();
+  evo_frame_ = 0;
+  evo_.rewind();
+  evo_.set_speed(0);
+  camera_.reset(home_course, speed_course);
+}
+
+void Scene::set_move(int road, bool alternate) {
+  alternate_ = alternate;
+  move_ = road;
+  current().clip.rewind();
+}
+
+bool Scene::move_done(double fraction) const {
+  if (move_ == kRunning) return true;
+  const Clip& c = current().clip;
+  return c.position() >= fraction * c.frames();
+}
+
+void Scene::show_evo(int frame) {
+  evo_frame_ = frame;
+  if (evo_.speed() == 0 || evo_.finished()) {
+    evo_jitter_ = 10;
+    evo_.set_speed(0);
+    evo_.seek(frame);
+  }
+}
+
+void Scene::play_evo() {
+  evo_frame_ = 0;
+  evo_jitter_ = 5;
+  evo_.set_speed(1);
+}
+
+std::int32_t Scene::jitter_offset(int range) {
+  // An offset in [-range, range), from the shared generator, as the original makes it.
+  random_ = next_random(random_);
+  if (range <= 0) return 0;
+  int bits = 0;
+  for (std::uint32_t v = std::uint32_t(range) * 2; v; v >>= 1) ++bits;
+  const std::uint32_t mask = bits >= 32 ? 0xFFFFFFFFu : (1u << bits) - 1;
+  std::int32_t d = static_cast<std::int32_t>((random_ >> (32 - bits)) & mask) - range;
+  if (d >= range) d -= range * 2;
+  return d;
+}
+
+void Scene::object(const TmdObject& obj, const Xform& xf, int range, std::int32_t z_offset, Vec3f* join,
+                   std::vector<SceneLine>& out) {
+  auto world = [&](Vec3f v) { return add(xf.m.apply(v), xf.t); };
+  if (obj.marker == FaceMarker::DrawOnlyWhenFacing) {
+    auto vtx = [&](int i) {
+      const Vec3s& v = obj.vertices[obj.marker_vertices[i]];
+      return world({float(v.x), float(v.y), float(v.z)});
+    };
+    if (faces_away(view_, vtx(0), vtx(1), vtx(2))) return;
+  }
+  std::vector<Vec3f> work(obj.vertices.size());
+  for (std::size_t i = 0; i < obj.vertices.size(); ++i) {
+    const std::int32_t dx = jitter_offset(range), dy = jitter_offset(range), dz = jitter_offset(range);
+    const Vec3s& v = obj.vertices[i];
+    work[i] = {float(v.x + dx), float(v.y + dy), float(v.z + z_offset + dz)};
+  }
+  for (const TmdLine& l : obj.lines) out.push_back({world(work[l.a]), world(work[l.b]), l.colour_a});
+  if (join && !work.empty()) {
+    // A line from the previous object's last vertex (kept in its own local
+    // coordinates, as the original does) to this object's first.
+    const Rgb colour = obj.lines.empty() ? Rgb{255, 255, 255} : obj.lines.front().colour_a;
+    out.push_back({world(*join), world(work.front()), colour});
+    *join = work.back();
+  }
+}
+
+void Scene::animated(const TmdModel& model, const ModelAnimation& anim, const Clip& clip, Vec3f origin, int range,
+                     std::vector<SceneLine>& out) {
+  if (anim.frames.empty()) return;
+  for (const ModelKey& k : anim.frames[std::size_t(clip.frame())]) {
+    if (k.object >= model.objects.size()) continue;
+    Xform xf;
+    const Mat3 rot = k.has_rotation ? rotation_xyz(k.rotation) : Mat3{};
+    const Vec3f scale = k.has_scale ? Vec3f{k.scale.x / 4096.0f, k.scale.y / 4096.0f, k.scale.z / 4096.0f} : Vec3f{1, 1, 1};
+    for (int r = 0; r < 3; ++r) {
+      xf.m.m[std::size_t(r)][0] = rot.m[std::size_t(r)][0] * scale.x;
+      xf.m.m[std::size_t(r)][1] = rot.m[std::size_t(r)][1] * scale.y;
+      xf.m.m[std::size_t(r)][2] = rot.m[std::size_t(r)][2] * scale.z;
+    }
+    xf.t = add(origin, k.has_position ? Vec3f{float(k.position.x), float(k.position.y), float(k.position.z)} : Vec3f{});
+    object(model.objects[k.object], xf, range, 0, nullptr, out);
+  }
+}
+
+void Scene::draw(const Frame& f, std::vector<SceneLine>& out, SceneView& view) {
+  out.clear();
+  random_ = f.jitter_seed;
+  if (f.form != form_) {
+    // The move goes on in the new form's version.
+    const double at = current().clip.position();
+    form_ = std::clamp(f.form, 0, kForms - 1);
+    Clip& to = current().clip;
+    if (at < to.frames()) to.seek(at);
+    else to.rewind();
+  }
+  const Fixed speed_jitter = Fixed::whole(14).times(f.stage) + Fixed::whole(10);
+  const Fixed jitter = f.still ? Fixed() : speed_jitter;
+
+  // The camera follows Vibri's place on the road.
+  const auto vibri_z = static_cast<float>((offset_ + start_).times(600).integer());
+  view_ = camera_.update(f.seconds, {0, 0, vibri_z});
+  view = view_;
+
+  // The road: a far point behind, every piece, a far point ahead, all joined up.
+  const Fixed before = -length_.times(4), after = length_.times(5);
+  Vec3f join{0, 0, float(before.times(600).integer())};
+  const int side = camera_.side();
+  auto piece = [&](const TmdObject& obj, Fixed position, bool missed, int lean) {
+    Xform xf;
+    xf.m = lean ? rotation_z(lean) : Mat3{};
+    const int range = (missed ? speed_jitter.times(5) : jitter * Fixed::from(1.5)).integer();
+    object(obj, xf, range, (offset_ + position).times(600).integer(), &join, out);
+  };
+  piece(point_.objects.front(), before, false, 0);
+  for (const RoadPiece& p : f.road) {
+    int lean = 0;
+    if (p.leaning) {
+      const Fixed tenth = Fixed::from(409.6);
+      const Fixed distance = (p.position - start_ - Fixed::from(0.5)).times(512);
+      if (Fixed() < distance) {
+        const auto scaled = static_cast<std::int32_t>((std::int64_t(distance.raw()) * tenth.raw()) >> 25);
+        lean = static_cast<std::int16_t>(scaled / length_.raw()) * 8;
+      }
+      if (!side) lean = -lean;
+    }
+    piece(road_.objects[std::size_t(p.road)], p.position, p.missed, lean);
+  }
+  piece(point_.objects.front(), after, false, 0);
+
+  // Vibri, shaking harder for a while after a miss.
+  const Fixed vibri_jitter = Fixed() < f.shake ? jitter + f.shake * jitter.times(8) : jitter;
+  Move& mv = current();
+  mv.clip.set_speed((f.speed * Fixed::from(0.5)).to_double());
+  animated(forms_[std::size_t(form_)], mv.anim, mv.clip, {0, 0, vibri_z}, vibri_jitter.integer(), out);
+  mv.clip.advance(f.seconds);
+  if (mv.clip.finished()) {  // on to running
+    alternate_ = false;
+    move_ = kRunning;
+    current().clip.rewind();
+  }
+
+  // The evolution meter rides with her.
+  animated(evo_model_, evo_anim_, evo_, {0, 0, vibri_z}, evo_jitter_, out);
+  evo_.advance(f.seconds);
+  if (evo_.speed() > 0 && kEvoEnds[form_] < evo_.position()) {
+    evo_.set_speed(0);
+    evo_.seek(evo_frame_);
+  }
+}
+
+}  // namespace vib

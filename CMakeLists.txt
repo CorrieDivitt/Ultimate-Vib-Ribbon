@@ -17,7 +17,7 @@ if(WIN32)
 else()
   set(_vib_viewer_default OFF)
 endif()
-option(VIB_BUILD_VIEWER "Build vibview, the desktop model viewer (needs the Vulkan SDK)" ${_vib_viewer_default})
+option(VIB_BUILD_VIEWER "Build the desktop apps: vibview (model viewer) and vibplay (the game on a monitor). Needs the Vulkan SDK" ${_vib_viewer_default})
 option(VIB_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
 
 # Shared warning settings, applied per target.
@@ -42,7 +42,9 @@ if(VIB_BUILD_TOOLS AND NOT ANDROID)
 endif()
 
 if(VIB_BUILD_VIEWER AND NOT ANDROID)
+  add_subdirectory(apps/common)
   add_subdirectory(apps/viewer)
+  add_subdirectory(apps/game)
 endif()
 
 if(VIB_BUILD_TESTS AND NOT ANDROID)

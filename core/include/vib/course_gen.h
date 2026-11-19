@@ -83,6 +83,10 @@ class CourseGenerator {
   // Feeds the next block, whose first sample is at stream position `time`.
   void process(std::int32_t time, const Block& block);
 
+  // The script currently asks for obstacles. When this turns false the original
+  // tells gameplay that parts have stopped coming (Gameplay::quiet).
+  bool selecting() const { return current_cue_.selector != nullptr; }
+
   // Events generated so far, in the order the original would emit them.
   std::vector<CourseEvent>& events() { return events_; }
 

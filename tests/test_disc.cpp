@@ -1,6 +1,7 @@
 // Checks against the owner's real disc image. Skipped unless VIB_TEST_CUE is set,
 // so CI and anyone without the game can still run the suite.
 
+#include <cmath>
 #include <cstdlib>
 #include <string>
 
@@ -10,6 +11,7 @@
 #include "vib/known_discs.h"
 #include "vib/pak.h"
 #include "vib/course_gen.h"
+#include "vib/scene.h"
 #include "vib/course_script.h"
 #include "vib/motion.h"
 #include "vib/sound_bank.h"
@@ -116,4 +118,33 @@ TEST(disc_sces02873_first_song_course) {
     CHECK(parts[4].time == 218934 && parts[4].value == 3);
     CHECK(parts[74].time == 3409832 && parts[74].value == 2);
   }
+}
+
+TEST(disc_sces02873_scene_draws) {
+  const std::string cue = test_cue();
+  if (cue.empty()) SKIP("set VIB_TEST_CUE to your SCES-02873 .cue to run");
+  DiscImage disc = DiscImage::open(path_from_utf8(cue));
+  Iso9660 iso(disc);
+  const Pak game(iso.read("GAME/02_FILES.PAK"));
+  Scene scene(game);
+  scene.reset(true, false);
+  scene.camera().event(23);
+  std::vector<SceneLine> lines;
+  SceneView view;
+  bool moved = false;
+  for (int i = 0; i < 300; ++i) {
+    Scene::Frame f;
+    f.seconds = 0.02;
+    f.jitter_seed = std::uint32_t(i);
+    f.speed = Fixed::whole(2);
+    for (int k = 0; k < 6; ++k) f.road.push_back({k, Fixed::from(1.25 + 1.5 * k - 0.03 * (i % 50)), false, k == 3});
+    if (i == 50) scene.set_move(2, false);
+    if (i == 51) moved = !scene.move_done(0.5);
+    scene.draw(f, lines, view);
+    CHECK(lines.size() > 100);
+    CHECK(view.fov_y > 0.5f && view.fov_y < 1.6f);
+  }
+  CHECK(moved && scene.move_done(0.5));
+  // Vibri stands at road position 1.25: z = (1.25 - 5) x 600.
+  CHECK(std::abs(view.target.z - -2250.0f) < 3000.0f);
 }
