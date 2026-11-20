@@ -152,6 +152,9 @@ TEST(disc_sces02873_scene_draws) {
     scene.draw(f, lines, view);
     CHECK(lines.size() > 100);
     CHECK(view.fov_y > 0.5f && view.fov_y < 1.6f);
+    // The evolution meter comes last, a flat ring in the road's own plane (a headset moves it nearer).
+    CHECK(scene.evo_first() <= lines.size());
+    for (std::size_t k = scene.evo_first(); k < lines.size(); ++k) CHECK(std::abs(lines[k].a.x) < 50 && std::abs(lines[k].b.x) < 50);
   }
   CHECK(moved && scene.move_done(0.5));
   // Vibri stands at road position 1.25: z = (1.25 - 5) x 600.

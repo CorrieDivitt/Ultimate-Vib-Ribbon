@@ -264,6 +264,23 @@ struct Session {
   std::vector<vibr::LineInstance> perf_lines;
 };
 
+// In a headset the evolution meter (the dots around Vibri that show the run of hits)
+// is moved a little towards the viewer, level (owner, session 3): in the original
+// it is a flat ring in the road's own upright plane, about 1.3 m across and dipping
+// 0.2 m below the road, so in stereo it ran straight through the road. 300 units
+// (0.3 m) towards the eye gives it a little depth of its own, in front of the road.
+void evo_nearer(std::vector<SceneLine>& lines, std::size_t first, float vibri_z, Vec3f eye) {
+  constexpr float kNearer = 300.0f;
+  float dx = eye.x, dz = eye.z - vibri_z;  // level, from her towards the eye
+  const float len = std::sqrt(dx * dx + dz * dz);
+  if (len < 1.0f) return;
+  dx = dx / len * kNearer, dz = dz / len * kNearer;
+  for (std::size_t i = first; i < lines.size(); ++i) {
+    lines[i].a.x += dx, lines[i].a.z += dz;
+    lines[i].b.x += dx, lines[i].b.z += dz;
+  }
+}
+
 // In a headset, play is seen from down beside Vibri instead of from the original's
 // camera (owner's decision): the road is one line in an upright plane, so seen from
 // the side, as the original mostly shows it, it has almost no depth; looking along
@@ -507,7 +524,10 @@ struct PlayPreview {
       f.road.push_back({road, Fixed::from(x - now + 1.25), false, false});  // (Vibri stands 1.25 along)
     }
     s.scene.draw(f, lines, view);
-    if (s.opt.vr) view = vr_play_view(s.scene.vibri_z(), float(o.vr_zoom), o.vr_angle);
+    if (s.opt.vr) {
+      view = vr_play_view(s.scene.vibri_z(), float(o.vr_zoom), o.vr_angle);
+      evo_nearer(lines, s.scene.evo_first(), s.scene.vibri_z(), view.eye);
+    }
   }
 };
 
@@ -1117,7 +1137,10 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     f.stage = game.stage();
     SceneView view;
     s.scene.draw(f, scene_lines, view);
-    if (s.opt.vr) view = vr_play_view(s.scene.vibri_z(), float(s.save.options.vr_zoom), s.save.options.vr_angle);
+    if (s.opt.vr) {
+      view = vr_play_view(s.scene.vibri_z(), float(s.save.options.vr_zoom), s.save.options.vr_angle);
+      evo_nearer(scene_lines, s.scene.evo_first(), s.scene.vibri_z(), view.eye);
+    }
     ++display_frame;
     auto convert = [&](const std::vector<SceneLine>& in, std::vector<vibr::LineInstance>& dst) {
       dst.clear();

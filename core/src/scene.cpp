@@ -534,6 +534,7 @@ void Scene::draw(const Frame& f, std::vector<SceneLine>& out, SceneView& view) {
   }
 
   // The evolution meter rides with her.
+  evo_first_ = out.size();
   lines_.animated(evo_model_, evo_anim_, evo_.pose(), {0, 0, vibri_z}, evo_jitter_, out);
   evo_.advance(f.seconds);
   if (evo_.speed() > 0 && kEvoEnds[form_] < evo_.position()) {

@@ -226,6 +226,9 @@ class Scene {
   bool move_done(double fraction) const;
   void show_evo(int frame);
   void play_evo();
+  // After draw(): the evolution meter's lines (the dots that show the run of hits) are
+  // the drawn lines from this index on.
+  std::size_t evo_first() const { return evo_first_; }
   GameCamera& camera() { return camera_; }
   // Where Vibri stood in the last frame drawn, along the road (world z).
   float vibri_z() const { return vibri_z_; }
@@ -260,6 +263,7 @@ class Scene {
   ModelAnimation evo_anim_;
   Clip evo_;
   int evo_frame_ = 0, evo_jitter_ = 0;
+  std::size_t evo_first_ = 0;
   std::vector<TmdModel> forms_;
   std::vector<std::vector<std::vector<Move>>> moves_;  // [form][move][version]
   GameCamera camera_;
