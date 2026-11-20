@@ -146,9 +146,10 @@ button.copy{font-family:var(--display);font-size:12px;background:var(--ink);colo
    status values: done | active | todo | blocked | ask (needs the owner's answer) */
 const T = {
   goal: "A version of Vib-Ribbon playable in VR on PCVR and Meta Quest 3, with responsive, consistent timing and visuals that do justice to the original. Steam Frame and levels from your own music are stretch goals.",
-  updated: "2026-11-19, session 2 (wobble size setting; 120 Hz; jitter every 3rd frame)",
+  updated: "2026-11-19, session 2 (wobble setting approved; Virtual Desktop reports 80 Hz)",
   approach: "Native VR port. Game logic from the decompilation, assets read from your own disc, emulator used as the reference to test against.",
   asks: [
+    {id:"Q18", t:"Next time you play in the headset, copy the whole \"Headset refresh rate:\" line from the console (it lists the rates offered).", why:"Virtual Desktop set to 120 still reported 80 Hz; the line tells whether the game really runs at 80 or the runtime only says so."},
             {id:"Q13", t:"When you want to try fixed courses: open save.txt (path printed when vibplay starts), change fixed_courses 0 to 1, and play. Or add --fixed for one run.", why:"Your decision: courses vary from play to play like the original by default; the same-every-time courses are an option for you to judge by playing."},
 
   ],
