@@ -95,7 +95,7 @@ TEST(perf_rows_use_only_the_fonts_characters) {
   FrameStats::Summary s = st.summary(t);
   CHECK(perf_rows(s, 0, 40).empty());
   const auto one = perf_rows(s, 1, 40);
-  CHECK(one.size() == 1 && one[0] == "80 Hz   12.5 ms   worst 12.5   late 0");
+  CHECK(one.size() == 1 && one[0] == "80 Hz   80 fps   12.5 ms   worst 12.5   late 0");
   const auto all = perf_rows(s, 2, 40);
   CHECK(all.size() == 5);
   for (const std::string& r : all) CHECK(in_font(r));

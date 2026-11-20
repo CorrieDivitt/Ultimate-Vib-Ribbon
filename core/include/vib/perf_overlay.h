@@ -2,7 +2,8 @@
 // Ours (task 4.6): the performance overlay. How steadily frames reach the display,
 // how long the game's own work takes in each, how the sound clock runs, and how
 // early or late the last presses were, kept over the last few seconds and written
-// with the disc's line font in a corner of the view (head-locked in a headset).
+// with the disc's line font in a corner of the view (in a headset, fixed in the
+// room up and to the right of where the view was recentred, so it does not follow the head).
 //
 // FrameStats and perf_rows() are platform-free; the app measures and feeds them.
 
@@ -79,9 +80,9 @@ std::vector<std::string> perf_rows(const FrameStats::Summary& s, int level, doub
 
 class PerfOverlay {
  public:
-  // In a headset the layer's units are millimetres from the eyes, and the layer is
-  // drawn fixed in front of them (the app marks it head-locked at this scale).
-  static constexpr float kHeadMetresPerUnit = 0.001f;
+  // In a headset the layer is anchored in the room at the recentred place, at this
+  // scale: its camera's 1000 units ahead are 1.5 m (the app marks the layer anchored).
+  static constexpr float kAnchorMetresPerUnit = 0.0015f;
 
   // `pak`: the game's own archive (the font); `text`: the program's character table
   // (without it no text is drawn, the graph still is).
@@ -89,7 +90,7 @@ class PerfOverlay {
 
   // The rows and, if `graph_ms` is not empty, a frame-time graph under them (a bar
   // a frame, the target period at half height, late frames in red).
-  // `vr`: low left of the view, about 1 m away; else the monitor's top left, for a
+  // `vr`: up and to the right of the recentred view, 1.5 m away; else the monitor's top left, for a
   // picture `aspect` wide per unit of height.
   Hud::Layer draw(const std::vector<std::string>& rows, const std::vector<double>& graph_ms, double target_ms, bool vr, float aspect);
 

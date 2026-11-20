@@ -87,7 +87,8 @@ std::vector<std::string> perf_rows(const FrameStats::Summary& s, int level, doub
   if (level <= 0) return rows;
   char buf[160];
   // (The font has no colon, slash, plus or percent sign: spaces and words instead.)
-  std::snprintf(buf, sizeof buf, "%.0f Hz   %.1f ms   worst %.1f   late %d", s.rate_hz, s.average_ms, s.worst_ms, s.late);
+  // Hz: the display's rate; fps: frames the game drew in the last second.
+  std::snprintf(buf, sizeof buf, "%.0f Hz   %d fps   %.1f ms   worst %.1f   late %d", s.rate_hz, s.frames, s.average_ms, s.worst_ms, s.late);
   rows.push_back(buf);
   if (level < 2) return rows;
   std::snprintf(buf, sizeof buf, "CPU ms   game %.2f   lines %.2f   draw %.2f   wait %.2f", s.update_ms, s.build_ms, s.submit_ms, s.wait_ms);
@@ -133,11 +134,12 @@ Hud::Layer PerfOverlay::draw(const std::vector<std::string>& rows, const std::ve
   lines_.set_view(layer.view);
   lines_.seed(1);
 
-  // Where the block starts and how big it is. Headset: low left, 1 m away (about
-  // 7 to 29 degrees left and 11 to 21 degrees down), small; monitor: the top left corner.
+  // Where the block starts and how big it is. Headset: up and to the right, fixed in
+  // the room 1.5 m away (about 5 to 24 degrees right and 7 to 20 degrees up from
+  // where the view was recentred), small; monitor: the top left corner.
   float x0, y0, scale;
   if (vr) {
-    x0 = -560.0f, y0 = 200.0f, scale = 0.12f;
+    x0 = 90.0f, y0 = -360.0f, scale = 0.12f;
   } else {
     const float half_h = kDepth * std::tan(0.5f * layer.view.fov_y);
     scale = 0.14f;

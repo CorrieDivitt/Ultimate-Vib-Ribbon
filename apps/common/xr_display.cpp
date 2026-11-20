@@ -204,14 +204,6 @@ class XrDisplay::Impl {
       for (XrView& v : views) v.type = XR_TYPE_VIEW;
       std::uint32_t count = 0;
       xr_check(xrLocateViews(session_, &locate, &view_state, 2, &count, views.data()), "xrLocateViews");
-      // The same eyes seen from the head, for layers fixed in front of it.
-      std::array<XrView, 2> head_views{};
-      for (XrView& v : head_views) v.type = XR_TYPE_VIEW, v.pose.orientation.w = 1;
-      XrViewLocateInfo locate_head = locate;
-      locate_head.space = head_;
-      XrViewState head_state{XR_TYPE_VIEW_STATE};
-      if (XR_FAILED(xrLocateViews(session_, &locate_head, &head_state, 2, &count, head_views.data())))
-        for (XrView& v : head_views) v.pose = {{0, 0, 0, 1}, {0, 0, 0}};  // (then from between the eyes)
       if (recentre_at_ns_ && SDL_GetTicksNS() >= recentre_at_ns_) {
         recentre_at_ns_ = 0;
         recentre_ = true;
@@ -219,7 +211,7 @@ class XrDisplay::Impl {
       if (recentre_) place_scene(state.predictedDisplayTime);
       if ((view_state.viewStateFlags & XR_VIEW_STATE_POSITION_VALID_BIT) &&
           (view_state.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT)) {
-        render(layers, line_width, views, head_views, projected);
+        render(layers, line_width, views, projected);
         layer.space = space_;
         layer.viewCount = 2;
         layer.views = projected.data();
@@ -840,7 +832,7 @@ class XrDisplay::Impl {
   }
 
   void render(const std::vector<Layer>& layers, float line_width, const std::array<XrView, 2>& views,
-              const std::array<XrView, 2>& head_views, std::array<XrCompositionLayerProjectionView, 2>& projected) {
+              std::array<XrCompositionLayerProjectionView, 2>& projected) {
     vkWaitForFences(device_, 1, &fence_, VK_TRUE, UINT64_MAX);
     vkResetFences(device_, 1, &fence_);
     // Every layer's lines into the one buffer, the colours as the headset wants them.
@@ -894,13 +886,12 @@ class XrDisplay::Impl {
       // Each layer's camera stands at the headset's starting place, in metres; the eye looks from where it is now.
       const Mat4 eye_projection = projection(views[e].fov, 0.05f, 2000.0f);
       const Mat4 eye_view = mul(mul(eye_projection, view_from_pose(views[e].pose)), scene_place_);
-      // Layers fixed to the head (the performance overlay): from the eye's place in the head.
-      const Mat4 head_view = mul(eye_projection, view_from_pose(head_views[e].pose));
       for (std::size_t i = 0; i < layers.size(); ++i) {
         if (!counts[i]) continue;
         PushConstants pc;
-        const float hl = layers[i].head_locked;
-        pc.mvp = hl > 0 ? mul(head_view, mul(scaling(hl, hl, hl), layers[i].view))
+        // Anchored layers (the performance overlay) stand in the room at the recentred place, in metres.
+        const float an = layers[i].anchored;
+        pc.mvp = an > 0 ? mul(eye_view, mul(scaling(an, an, an), layers[i].view))
                         : mul(eye_view, mul(scaling(scale_, scale_, scale_ * depth_for(layers[i].fov_y)), layers[i].view));
         pc.viewport[0] = float(eye.width);
         pc.viewport[1] = float(eye.height);

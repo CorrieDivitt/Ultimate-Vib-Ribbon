@@ -423,8 +423,8 @@ void to_instances(const Session& s, const std::vector<SceneLine>& in, std::uint3
 }
 
 // One frame through the display, measured for the performance overlay: when it is
-// on, its layer goes over the others (in a headset fixed low left in the view, on
-// the monitor at the top left). `update_ms`, `build_ms`: the game's own work for
+// on, its layer goes over the others (in a headset fixed in the room up and to the
+// right of the recentred view, on the monitor at the top left). `update_ms`, `build_ms`: the game's own work for
 // this frame before drawing (rules, sound and input; making the lines).
 void draw_frame(Session& s, std::vector<vibr::Layer>& layers, double update_ms, double build_ms) {
   const std::uint64_t now = SDL_GetTicksNS();
@@ -450,7 +450,7 @@ void draw_frame(Session& s, std::vector<vibr::Layer>& layers, double update_ms, 
       s.perf_lines.push_back({{l.a.x, l.a.y, l.a.z}, {l.b.x, l.b.y, l.b.z}, {l.colour.r / 255.0f, l.colour.g / 255.0f, l.colour.b / 255.0f, 1.0f}});
     const SceneView& v = pl.view;
     layers.push_back({&s.perf_lines, vibr::look_at({v.eye.x, v.eye.y, v.eye.z}, {v.target.x, v.target.y, v.target.z}, {0, -1, 0}), v.fov_y,
-                      s.opt.vr ? PerfOverlay::kHeadMetresPerUnit : 0.0f});
+                      s.opt.vr ? PerfOverlay::kAnchorMetresPerUnit : 0.0f});
   }
   int lines = 0;
   for (const vibr::Layer& l : layers) lines += l.lines ? int(l.lines->size()) : 0;

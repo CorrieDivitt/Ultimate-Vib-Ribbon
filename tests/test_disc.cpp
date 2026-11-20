@@ -698,16 +698,17 @@ TEST(disc_sces02873_performance_overlay_draws_its_rows_and_graph) {
       const Hud::Layer with_graph = overlay.draw(rows, graph, 12.5, vr, 16.0f / 9.0f);
       CHECK(text_only.lines.size() > 200);  // every row written
       CHECK(with_graph.lines.size() == text_only.lines.size() + 2 + graph.size());
-      // Nothing wobbles, and it all stays on its side of the view: left of the centre,
-      // in a headset below the eyes' level too.
-      float right = -1e9f, top = 1e9f;
+      // Nothing wobbles, and it all stays in its corner: on the monitor left of the
+      // centre; in a headset right of it and above the eyes' level (y down).
+      float left = 1e9f, right = -1e9f, bottom = -1e9f;
       for (const SceneLine& l : with_graph.lines) {
         CHECK(l.shake_a == 0 && l.shake_b == 0);
+        left = std::min({left, l.a.x, l.b.x});
         right = std::max({right, l.a.x, l.b.x});
-        top = std::min({top, l.a.y, l.b.y});
+        bottom = std::max({bottom, l.a.y, l.b.y});
       }
-      CHECK(right < 0);
-      if (vr) CHECK(top > 100);  // (y down: more than 0.1 m below the eyes at 1 m)
+      if (vr) CHECK(left > 50 && bottom < -100);
+      else CHECK(right < 0);
     }
   }
 }

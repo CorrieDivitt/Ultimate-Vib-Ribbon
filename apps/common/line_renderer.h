@@ -71,10 +71,11 @@ struct Layer {
   const std::vector<LineInstance>* lines = nullptr;
   Mat4 view;
   float fov_y = 0.8f;
-  // In a headset, > 0: fixed in front of the eyes instead of placed in the world,
-  // this many metres a unit; `view` then takes the lines to the head's own space
-  // (y up, -z ahead of the face). A monitor draws the layer as any other.
-  float head_locked = 0;
+  // In a headset, > 0: fixed in the room where the view was last recentred, this
+  // many metres a unit, instead of seen through the game's own camera; `view` then
+  // takes the lines to that place's own space (y up, -z ahead, the head's height at
+  // the recentre at 0). It stays put as the head turns. A monitor draws it as any other.
+  float anchored = 0;
 };
 
 // How the last frame went, as the display measured it (the performance overlay).
