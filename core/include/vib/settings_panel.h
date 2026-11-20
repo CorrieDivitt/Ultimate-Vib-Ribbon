@@ -44,7 +44,6 @@ class SettingsPanel {
     QuitSong,      // an action: leave the song, as Start does
     ResumeStyle,   // resume_countdown: after a pause, rewind a little or count in
     Performance,   // perf_overlay: off, one line, detailed
-    TrailSpeed,    // vr_trail_min_speed (headset): off, or the least speed of passed parts
   };
   enum class Action { None, Moved, Changed, Close, Recentre, QuitSong, LeaveTop };
 
@@ -87,14 +86,20 @@ class SettingsPanel {
   // The panel as a layer of its own, with its own camera. `seed`: its jitter.
   Hud::Layer draw(const Options& o, bool vr, std::uint32_t seed);
 
-  // The label and the value as shown (font codes), for tests and the console.
-  std::string label(Item item) const;
+  // The label and the value as shown (font codes), for tests and the console. Our own
+  // settings show their default after the name, "Zoom (1.00)", so players can find
+  // their way back to it; the original's two options and the actions do not.
+  std::string label(Item item, bool vr = false) const;
   std::string value(Item item, const Options& o, bool vr) const;
 
  private:
   bool change(Item item, int direction, Options& o, bool vr);
   void write(const std::string& font_text, float x, float y, float scale, const Rgb* colour, int range, std::vector<SceneLine>& out);
-  float text_width(const std::string& font_text, float scale) const;
+
+ public:
+  float text_width(const std::string& font_text, float scale = 1.0f) const;  // across, at size 1
+
+ private:
   Hud::Layer start_layer(std::uint32_t seed);
 
   const GameText* text_;

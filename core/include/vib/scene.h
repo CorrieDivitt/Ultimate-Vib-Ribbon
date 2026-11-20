@@ -155,6 +155,7 @@ class Hud {
   struct Layer {
     std::vector<SceneLine> lines;
     SceneView view;
+    bool score = false;  // the score marks (a headset places them above Vibri instead)
   };
   void draw(const Frame& f, std::vector<Layer>& layers);
 

@@ -65,8 +65,6 @@ std::string SaveData::to_text() const {
   std::snprintf(buf, sizeof buf, "%.1f", options.vr_ahead_seconds);
   out << "vr_ahead_seconds " << buf << '\n';
   out << "vr_jitter_hold " << options.vr_jitter_hold << '\n';
-  std::snprintf(buf, sizeof buf, "%.2f", options.vr_trail_min_speed);
-  out << "vr_trail_min_speed " << buf << '\n';
   std::snprintf(buf, sizeof buf, "%.2f", options.jitter_scale);
   out << "jitter_scale " << buf << '\n';
   std::snprintf(buf, sizeof buf, "%.2f", options.vr_jitter_scale);
@@ -123,7 +121,6 @@ SaveData SaveData::from_text(const std::string& text) {
     else if (key == "vr_menu_zoom" && number > 0) d.options.vr_menu_zoom = number;
     else if (key == "vr_behind_seconds" && number >= 0) d.options.vr_behind_seconds = number;
     else if (key == "vr_ahead_seconds" && number >= 0) d.options.vr_ahead_seconds = number;
-    else if (key == "vr_trail_min_speed" && number >= 0 && number <= 10) d.options.vr_trail_min_speed = number;
     else if (key == "audio_offset_ms") d.options.audio_offset_ms = number;
     else if (key == "music_volume" && number >= 0) d.options.music_volume = float(number);
     else if (key == "effects_volume" && number >= 0) d.options.effects_volume = float(number);

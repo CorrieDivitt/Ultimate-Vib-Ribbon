@@ -631,6 +631,7 @@ void Hud::draw(const Frame& f, std::vector<Layer>& layers) {
       lines_.animated(mark_model_, score_anim_, static_cast<int>(at), {}, 4, l.lines, m[i]);
     }
     score_.advance(f.seconds);
+    l.score = true;
     layers.push_back(std::move(l));
   }
   if (f.show_time) {

@@ -586,7 +586,7 @@ TEST(disc_sces02873_settings_panel) {
   using I = SettingsPanel::Item;
   using A = SettingsPanel::Action;
   const std::vector<I> all = {I::Continue, I::WobbleSize, I::WobbleHold, I::Smooth, I::LineWidth, I::Zoom, I::ViewAngle,
-                              I::SeeAhead, I::SeeBehind, I::TrailSpeed, I::Recentre, I::SoundEffects, I::Vibration, I::SoundTiming, I::QuitSong,
+                              I::SeeAhead, I::SeeBehind, I::Recentre, I::SoundEffects, I::Vibration, I::SoundTiming, I::QuitSong,
                               I::ResumeStyle, I::Performance};
   for (int language = 0; language < 5; ++language) {
     const Pak game(iso.read("GAME/" + language_prefix(language) + "FILES.PAK"));
@@ -664,13 +664,12 @@ TEST(disc_sces02873_settings_panel) {
   for (int i = 0; i < 80; ++i) p.tick(left, 0.02, o, true);
   CHECK(o.vr_behind_seconds == 0.0);
   o.vr_ahead_seconds = o.vr_behind_seconds = 30.0;
-  // The least speed behind: steps of 0.25 down to off (the original's own motion).
-  go_to(I::TrailSpeed);
-  CHECK(p.value(I::TrailSpeed, o, true) == "1.50");
-  for (int i = 0; i < 6; ++i) p.tick(left, 0.02, o, true);
-  CHECK(o.vr_trail_min_speed == 0.0 && p.value(I::TrailSpeed, o, true) == "Off");
-  CHECK(p.tick(right, 0.02, o, true) == A::Changed && o.vr_trail_min_speed == 0.25);
-  o.vr_trail_min_speed = 1.5;
+  // Our settings show their default after the name; the original's options and the actions do not.
+  CHECK(p.label(I::Zoom, true) == "Zoom (1.00)" && p.label(I::SeeAhead, true) == "See ahead (30 s)");
+  CHECK(p.label(I::LineWidth, true) == "Line width (0.150)" && p.label(I::LineWidth, false) == "Line width (0.300)");
+  CHECK(p.label(I::ResumeStyle) == "Resume (Rewind)" && p.label(I::Performance) == "Performance (Off)");
+  CHECK(p.label(I::WobbleHold, true) == "Wobble hold (3)" && p.label(I::ViewAngle, true) == "View angle (45)");
+  CHECK(p.label(I::SoundEffects) == "Sound effects" && p.label(I::Continue) == "Continue" && p.label(I::Recentre, true) == "Recentre view");
   go_to(I::ViewAngle);
   o.vr_angle = 180;
   p.tick(right, 0.02, o, true);
@@ -771,4 +770,38 @@ TEST(disc_sces02873_whole_song_drawn_ahead_fits_and_runs_away) {
   for (const SceneLine& l : lines) far_z = std::max({far_z, l.a.z, l.b.z});
   // The last part is over two minutes ahead: far beyond the 8 s play builds (about 7 m).
   CHECK(far_z - scene.vibri_z() > 600.0f * 100);
+}
+
+TEST(disc_sces02873_settings_labels_with_defaults_fit_beside_their_values) {
+  // Each row: the label with its default on the left, the value on the right. With
+  // the longest values (the whole song, the count-in), in every language, the two
+  // must not meet: the pause's columns are 3200 apart, the menus' settings screen's 2900.
+  const std::string cue = test_cue();
+  if (cue.empty()) SKIP("set VIB_TEST_CUE to your SCES-02873 .cue to run");
+  DiscImage disc = DiscImage::open(path_from_utf8(cue));
+  Iso9660 iso(disc);
+  const GameText words = GameText::from_exe(iso.read("MAIN_G.EXE"));
+  using I = SettingsPanel::Item;
+  const std::vector<I> all = {I::WobbleSize, I::WobbleHold, I::Smooth, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead,
+                              I::SeeBehind, I::Recentre, I::SoundEffects, I::Vibration, I::SoundTiming, I::QuitSong,
+                              I::ResumeStyle, I::Performance, I::Continue};
+  Options longest;
+  longest.vr_ahead_seconds = longest.vr_behind_seconds = kWholeSongSeconds;
+  longest.resume_countdown = true;
+  longest.perf_overlay = 2;
+  longest.audio_offset_ms = -500;
+  longest.vr_angle = -165;
+  for (int language = 0; language < 5; ++language) {
+    const Pak game(iso.read("GAME/" + language_prefix(language) + "FILES.PAK"));
+    SettingsPanel p(game, language, &words);
+    for (const bool vr : {false, true})
+      for (const I item : all)
+        for (const bool at_longest : {true, false}) {
+          const Options use = at_longest ? longest : Options{};
+          const float needed = p.text_width(p.label(item, vr)) + 72.0f + p.text_width(p.value(item, use, vr));
+          if (needed > 2900.0f) std::printf("    too wide: language %d, %s | %s (%.0f)\n", language, p.label(item, vr).c_str(), p.value(item, use, vr).c_str(), double(needed));
+          CHECK(needed <= 2900.0f);
+          CHECK(p.label(item, vr).find('?') == std::string::npos);
+        }
+  }
 }

@@ -10,28 +10,28 @@ namespace vib {
 namespace {
 
 constexpr double kTau = 6.28318530717958647692;
-constexpr int kItemCount = 17;
+constexpr int kItemCount = 16;
 constexpr int kLanguages = 5;  // German, English, Spanish, French, Italian (the PAL menus)
 
 // Our own words. Order as SettingsPanel::Item.
 const char* const kLabels[kLanguages][kItemCount] = {
     // German
     {"Weiter", "Wackelgröße", "Wackeltakt", "Weiche Bewegung", "Linienstärke", "Zoom", "Blickwinkel", "Sicht nach vorn",
-     "Sicht nach hinten", "Ansicht zentrieren", "Soundeffekte", "Vibration", "Tonversatz", "Lied beenden", "Fortsetzen", "Leistung", "Mindesttempo hinten"},
+     "Sicht nach hinten", "Ansicht zentrieren", "Soundeffekte", "Vibration", "Tonversatz", "Lied beenden", "Fortsetzen", "Leistung"},
     // English
     {"Continue", "Wobble size", "Wobble hold", "Smooth motion", "Line width", "Zoom", "View angle", "See ahead", "See behind",
-     "Recentre view", "Sound effects", "Vibration", "Sound timing", "Quit song", "Resume", "Performance", "Slowest behind"},
+     "Recentre view", "Sound effects", "Vibration", "Sound timing", "Quit song", "Resume", "Performance"},
     // Spanish
     {"Continuar", "Tamaño del temblor", "Ritmo del temblor", "Movimiento suave", "Grosor de línea", "Zoom", "Ángulo de vista",
-     "Ver adelante", "Ver atrás", "Centrar vista", "Efectos de sonido", "Vibración", "Desfase de sonido", "Salir de la canción", "Reanudar", "Rendimiento", "Mínimo detrás"},
+     "Ver adelante", "Ver atrás", "Centrar vista", "Efectos de sonido", "Vibración", "Desfase de sonido", "Salir de la canción", "Reanudar", "Rendimiento"},
     // French
     {"Continuer", "Taille du tremblement", "Rythme du tremblement", "Mouvement fluide", "Épaisseur des lignes", "Zoom",
      "Angle de vue", "Voir devant", "Voir derrière", "Recentrer la vue", "Effets sonores", "Vibration", "Décalage du son",
-     "Quitter la chanson", "Reprise", "Performances", "Minimum derrière"},
+     "Quitter la chanson", "Reprise", "Performances"},
     // Italian
     {"Continua", "Ampiezza del tremolio", "Ritmo del tremolio", "Movimento fluido", "Spessore delle linee", "Zoom",
      "Angolo di vista", "Vista avanti", "Vista indietro", "Ricentra la vista", "Effetti sonori", "Vibrazione", "Ritardo audio",
-     "Esci dalla canzone", "Ripresa", "Prestazioni", "Minimo dietro"},
+     "Esci dalla canzone", "Ripresa", "Prestazioni"},
 };
 const char* const kMore[kLanguages] = {"Weitere Einstellungen (Select)", "More options (Select)", "Más ajustes (Select)", "Autres réglages (Select)",
                                        "Altre impostazioni (Select)"};
@@ -95,8 +95,17 @@ void SettingsPanel::set_items(std::vector<Item> items) {
   home();
 }
 
-std::string SettingsPanel::label(Item item) const {
-  return to_font_text(kLabels[table_language(language_)][int(item)]);
+std::string SettingsPanel::label(Item item, bool vr) const {
+  std::string text = to_font_text(kLabels[table_language(language_)][int(item)]);
+  switch (item) {
+    case Item::WobbleSize: case Item::WobbleHold: case Item::Smooth: case Item::LineWidth: case Item::Zoom:
+    case Item::ViewAngle: case Item::SeeAhead: case Item::SeeBehind: case Item::SoundTiming: case Item::ResumeStyle:
+    case Item::Performance:
+      text += " (" + value(item, Options{}, vr) + ")";  // the default
+      break;
+    default: break;
+  }
+  return text;
 }
 
 std::string SettingsPanel::value(Item item, const Options& o, bool vr) const {
@@ -121,10 +130,6 @@ std::string SettingsPanel::value(Item item, const Options& o, bool vr) const {
     case Item::SoundTiming: std::snprintf(buf, sizeof buf, "%.0f ms", o.audio_offset_ms); break;
     case Item::ResumeStyle: return to_font_text(o.resume_countdown ? kCountIn[l] : kRewind[l]);
     case Item::Performance: return to_font_text(o.perf_overlay == 0 ? kOff[l] : o.perf_overlay == 1 ? kOn[l] : kDetailed[l]);
-    case Item::TrailSpeed:
-      if (o.vr_trail_min_speed <= 0) return to_font_text(kOff[l]);
-      std::snprintf(buf, sizeof buf, "%.2f", o.vr_trail_min_speed);
-      break;
     default: return {};
   }
   return buf;
@@ -184,7 +189,6 @@ bool SettingsPanel::change(Item item, int d, Options& o, bool vr) {
     case Item::SoundTiming: return step(o.audio_offset_ms, 5.0 * d, -500.0, 500.0);
     case Item::ResumeStyle: o.resume_countdown = !o.resume_countdown; return true;
     case Item::Performance: o.perf_overlay = (o.perf_overlay + (d > 0 ? 1 : 2)) % 3; return true;  // round: off, on, detailed
-    case Item::TrailSpeed: return step(o.vr_trail_min_speed, 0.25 * d, 0.0, 5.0);  // (0: off, as the original)
     default: return false;
   }
 }
@@ -304,7 +308,7 @@ Hud::Layer SettingsPanel::draw(const Options& o, bool vr, std::uint32_t seed) {
     const bool at = active_ && i == cursor_;
     const float y = top + row_height * float(r);
     const Rgb* colour = at ? nullptr : &dim;
-    write(label(item), label_x_, y, 1.0f, colour, 4, layer.lines);
+    write(label(item, vr), label_x_, y, 1.0f, colour, 4, layer.lines);
     const std::string v = value(item, o, vr);
     if (!v.empty()) write(v, value_right_ - text_width(v, 1.0f), y, 1.0f, colour, 4, layer.lines);
     if (at) {  // our cursor: a chevron before the label

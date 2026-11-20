@@ -80,6 +80,11 @@ using namespace vib;
 
 constexpr std::int32_t kDelay = kLookAheadBlocks * kBlockSize;  // 8 s look-ahead, 22.05 kHz samples
 constexpr double kOriginalRefresh = 49.759;                       // the PAL original's frame rate
+// In a headset, passed parts slower than this (part lengths a second) speed up to it
+// once cleared, so they keep drifting away from Vibri instead of seeming to stay with
+// her. Owner's choice, fixed (not a setting): it catches the near-stationary parts of
+// songs 3, 5 and 6 (down to 0.93); songs 1, 2 and 4 never go below 1.44.
+constexpr double kTrailMinSpeed = 1.35;
 
 // ---------------------------------------------------------------- sound effects
 
@@ -391,14 +396,14 @@ std::vector<SettingsPanel::Item> pause_items(bool vr) {
   using I = SettingsPanel::Item;
   if (vr)
     return {I::Continue, I::WobbleSize, I::WobbleHold, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind,
-            I::TrailSpeed, I::Recentre, I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::QuitSong};
+            I::Recentre, I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::QuitSong};
   return {I::Continue, I::WobbleSize, I::Smooth, I::LineWidth, I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle,
           I::Performance, I::QuitSong};
 }
 std::vector<SettingsPanel::Item> menu_items(bool vr) {
   using I = SettingsPanel::Item;
   if (vr)
-    return {I::WobbleSize, I::WobbleHold, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind, I::TrailSpeed, I::Recentre,
+    return {I::WobbleSize, I::WobbleHold, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind, I::Recentre,
             I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance};
   return {I::WobbleSize, I::Smooth, I::LineWidth, I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance};
 }
@@ -558,6 +563,39 @@ std::vector<std::int16_t> rewind_sound(const std::vector<std::int16_t>& out, std
   return r;
 }
 
+// In a headset the score marks float above Vibri at a fixed height, in the world
+// with her (owner's choice, task 4.8): seen through the HUD's own camera they stood a
+// fixed distance in front of the player, so zoomed out they hung halfway between the
+// player and her. The marks' own space (the HUD camera's: x right, y down, z away) is
+// set upright above her and turned about the vertical to face `eye`, at their own
+// size. Their lowest point is 1,850 above the road: over the tallest obstacle (1,378,
+// pit and loop) and the highest Vibri reaches in any move or form (1,721, the angel's
+// block), so it never moves when she jumps and stays clear of the road seen from a
+// little below. Game units, y down.
+void score_above_vibri(const std::vector<SceneLine>& marks, float vibri_z, Vec3f eye, std::vector<SceneLine>& out) {
+  constexpr float kBottom = -1850.0f;              // its lowest point
+  constexpr float kMarksBottom = -439.0f;          // the marks' lowest point, in their own space (measured)
+  constexpr Vec3f kMarksCentre{0.0f, 0.0f, 636.0f};  // and the middle of their depth
+  float fx = 0.0f - eye.x, fz = vibri_z - eye.z;   // facing: from the eye to her, level
+  const float len = std::sqrt(fx * fx + fz * fz);
+  if (len < 1.0f) fx = 0.0f, fz = 1.0f;
+  else fx /= len, fz /= len;
+  auto place = [&](Vec3f p) {  // marks' space to the world
+    const float x = p.x - kMarksCentre.x, z = p.z - kMarksCentre.z;
+    return Vec3f{fz * x + fx * z, kBottom + (p.y - kMarksBottom), vibri_z - fx * x + fz * z};
+  };
+  auto turn = [&](Vec3f v) { return Vec3f{fz * v.x + fx * v.z, v.y, -fx * v.x + fz * v.z}; };  // (a jitter: no move)
+  out.clear();
+  for (const SceneLine& l : marks) {
+    SceneLine w = l;
+    w.a = place(l.a), w.b = place(l.b);
+    w.jitter_a = turn(l.jitter_a), w.jitter_b = turn(l.jitter_b);
+    if (w.vertex_a) w.vertex_a += 0x40000000u;  // (its own vertices, apart from the scene's)
+    if (w.vertex_b) w.vertex_b += 0x40000000u;
+    out.push_back(w);
+  }
+}
+
 Result play_song(Session& s, int song, int track_index, int& points, std::uint32_t seed) {
   // Timing: like the original, a little different on every play, unless --fixed.
   const CourseTiming timing = s.fixed ? CourseTiming::consistent() : CourseTiming::like_original(seed);
@@ -614,7 +652,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   // In a headset the whole line is in view: passed parts stay on it for 8 s, and
   // every part built so far (8 s ahead) shows ahead.
   if (s.opt.vr) game.keep_passed(static_cast<std::int32_t>(std::min(s.save.options.vr_behind_seconds, kWholeSongSeconds) * kSampleRate));
-  if (s.opt.vr) game.set_trail_min_speed(s.save.options.vr_trail_min_speed);
+  if (s.opt.vr) game.set_trail_min_speed(kTrailMinSpeed);
   // Further ahead than play builds: a second generator on the same music and timing,
   // running ahead, drawn only. Its course is the same course (it is checked below),
   // so its parts become play's own as play reaches them.
@@ -926,7 +964,6 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     const std::int32_t view_at = frozen ? std::min(raw, pause_at) : heard;  // where the road is drawn
     if (frozen) presses.clear();
     if (s.opt.vr) game.keep_passed(static_cast<std::int32_t>(std::min(s.save.options.vr_behind_seconds, kWholeSongSeconds) * kSampleRate));
-    if (s.opt.vr) game.set_trail_min_speed(s.save.options.vr_trail_min_speed);  // (every frame: the pause can change it)
 
     if (!frozen) analyse_up_to(heard);
 
@@ -1031,6 +1068,15 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     s.hud.draw(h, hud_layers);
     hud_lines.resize(hud_layers.size());
     for (std::size_t i = 0; i < hud_layers.size(); ++i) {
+      if (s.opt.vr && hud_layers[i].score) {
+        // In a headset the score floats above Vibri in the world (task 4.8), not in
+        // front of the player: at a fixed height, turned to face the view.
+        std::vector<SceneLine> above;
+        score_above_vibri(hud_layers[i].lines, s.scene.vibri_z(), view.eye, above);
+        convert(above, hud_lines[i]);
+        layers.push_back({&hud_lines[i], matrix(view), view.fov_y});
+        continue;
+      }
       convert(hud_layers[i].lines, hud_lines[i]);
       layers.push_back({&hud_lines[i], matrix(hud_layers[i].view), hud_layers[i].view.fov_y});
     }
@@ -1657,9 +1703,10 @@ int run(int argc, char** argv) {
           // right, so the settings go left; in a headset she is on the side the view is
           // not (seen from her right she is to the left), so they go on the other.
           panel.set_place(0.6f, 14, opt.vr ? 0.25f : 1.0f);
-          if (opt.vr && save.options.vr_angle >= 0) panel.set_columns(600.0f, 3000.0f);
-          else if (opt.vr) panel.set_columns(-3000.0f, -600.0f);
-          else panel.set_columns(-2900.0f, -500.0f);
+          // (Wide enough for the longest label with its default and the longest value.)
+          if (opt.vr && save.options.vr_angle >= 0) panel.set_columns(150.0f, 3050.0f);
+          else if (opt.vr) panel.set_columns(-3050.0f, -150.0f);
+          else panel.set_columns(-3000.0f, -100.0f);
           const Hud::Layer pl = panel.draw(save.options, opt.vr, next_random(jitter_seed));
           to_instances(s, preview_lines, menu_display_frame, settings_lines[0]);
           to_instances(s, pl.lines, menu_display_frame, settings_lines[1]);

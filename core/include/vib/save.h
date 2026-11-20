@@ -31,7 +31,6 @@ struct Options {
   double vr_line_width = 0.15;  // the same, in a headset (an eye's picture is much taller)
   double vr_zoom = 1.0;         // in a headset, how close the view stands to Vibri in play (larger: closer)
   double vr_behind_seconds = 30.0;  // in a headset, how long passed parts stay on the line (kWholeSongSeconds: all of them)
-  double vr_trail_min_speed = 1.5;  // in a headset, passed parts slower than this (lengths a second) speed up to it; 0 off
   double vr_ahead_seconds = 30.0;   // and how far ahead it is drawn (play itself builds 8 s ahead; kWholeSongSeconds: to the end)
   double vr_menu_zoom = 1.0;    // in a headset, the menus' cameras moved towards what they look at (larger: closer)
   int vr_jitter_hold = 3;       // in a headset the jitter changes every this many of its frames (1-3; the owner's choice)
