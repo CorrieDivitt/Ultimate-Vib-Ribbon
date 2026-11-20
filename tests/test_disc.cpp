@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <string>
 
@@ -326,7 +327,8 @@ TEST(disc_sces02873_title_intro) {
   };
   // The intro starts with its first sound and lines.
   t.tick(false);
-  CHECK(t.take_sounds() == std::vector<int>{0x110});
+  auto sounds = t.take_sounds();
+  CHECK(sounds.size() == 1 && sounds[0].number == 0x110);
   CHECK(!t.intro_over());
   // Played through: lines from the first few frames on (it opens on nothing), the
   // second and third sounds at their times, then the title.
@@ -346,7 +348,8 @@ TEST(disc_sces02873_title_intro) {
   for (int i = 0; i < 100; ++i) t.tick(false);
   (void)t.take_sounds();
   t.tick(true);
-  CHECK(t.take_sounds() == std::vector<int>{0x111});
+  sounds = t.take_sounds();
+  CHECK(sounds.size() == 1 && sounds[0].number == 0x111);
   t.tick(true);  // no longer skippable
   CHECK(t.intro_over());
   // Coming back from a course: straight to the title, its lines gathering in.
@@ -392,4 +395,78 @@ TEST(disc_sces02873_audio_cd_tracks_laid_out_in_the_medley) {
   d.prepare_disc(lengths, disc_key(150000, 5));
   const std::size_t n = run(c);
   CHECK(n > 20 && n == run(d));
+}
+
+TEST(disc_sces02873_title_language_and_mode_menus) {
+  const std::string cue = test_cue();
+  if (cue.empty()) SKIP("set VIB_TEST_CUE to your SCES-02873 .cue to run");
+  DiscImage disc = DiscImage::open(path_from_utf8(cue));
+  Iso9660 iso(disc);
+  const Pak title_pak(iso.read("TITLE/FILES.PAK"));
+  for (const char* lang : {"01_", "02_", "04_", "08_", "10_"}) TitleIntro check(title_pak, lang);  // each language's menu loads
+  TitleIntro t(title_pak, "02_");
+  using C = TitleIntro::Choice;
+  using M = TitleIntro::Menu;
+  TitleIntro::Input none, right, down, confirm, cancel;
+  right.right = true;
+  down.down = true;
+  confirm.confirm = true;
+  cancel.cancel = true;
+  t.start(true);
+  for (int i = 0; i < 5; ++i) t.tick(none);
+  t.show(M::Language);
+  for (int i = 0; i < 3; ++i) t.tick(none);
+  t.tick(right);  // English to Spanish, with the cursor sound
+  auto sounds = t.take_sounds();
+  CHECK(!sounds.empty() && sounds.back().number == 0x06 && sounds.back().voice == 5);
+  t.tick(down);   // Spanish to Italian (below it)
+  t.tick(confirm);
+  CHECK(t.choice() == C::Italian);
+  t.set_language_cursor(1);
+  t.tick(confirm);
+  CHECK(t.choice() == C::English);
+  // To the mode menu: the language menu zooms away and the mode menu in.
+  t.show(M::Mode);
+  int frames = 0;
+  while (t.choice() == C::None && frames < 200) {
+    t.tick(frames % 2 ? none : confirm);
+    ++frames;
+  }
+  CHECK(t.choice() == C::Play);
+  t.show(M::Mode);
+  for (int i = 0; i < 100; ++i) t.tick(none);
+  t.tick(cancel);  // the cursor to "back"
+  t.tick(confirm);
+  CHECK(t.choice() == C::Back);
+  // Play: the menu flies apart while the confirm sound lasts, then it has started.
+  t.show(M::Start);
+  TitleIntro::Input playing;
+  playing.confirm_sound_playing = true;
+  for (int i = 0; i < 10; ++i) t.tick(playing);
+  CHECK(t.choice() == C::None);
+  t.tick(none);
+  CHECK(t.choice() == C::Started);
+}
+
+TEST(disc_sces02873_every_language_loads) {
+  const std::string cue = test_cue();
+  if (cue.empty()) SKIP("set VIB_TEST_CUE to your SCES-02873 .cue to run");
+  DiscImage disc = DiscImage::open(path_from_utf8(cue));
+  Iso9660 iso(disc);
+  const GameText words = GameText::from_exe(iso.read("MAIN_G.EXE"));
+  for (int language = 0; language < 5; ++language) {
+    char prefix[4];
+    std::snprintf(prefix, sizeof prefix, "%02X_", 1u << language);
+    const Pak pak(iso.read(std::string("GAME/") + prefix + "FILES.PAK"));
+    TitleScreens t(pak, prefix);
+    t.set_text(&words, language);
+    Hud hud(pak, prefix);
+    Scene scene(pak);
+    t.go_to(TitleScreens::Screen::Main);
+    for (int i = 0; i < 40; ++i) t.tick({});
+    std::size_t lines = 0;
+    for (const auto& l : t.layers()) lines += l.lines.size();
+    CHECK(lines > 0);
+    CHECK(!words.get(GameText::List::Comments, 0, language).empty());
+  }
 }

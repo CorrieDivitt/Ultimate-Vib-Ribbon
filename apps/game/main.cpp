@@ -649,6 +649,10 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   return result;
 }
 
+// After the language changes the game starts again in it, at the title's mode menu.
+constexpr int kRestart = -100;
+bool g_restart_at_title = false;
+
 int run(int argc, char** argv) {
   Args opt;
   for (int i = 1; i < argc; ++i) {
@@ -685,11 +689,6 @@ int run(int argc, char** argv) {
 
   DiscImage disc = DiscImage::open(path_from_utf8(opt.cue));
   Iso9660 iso(disc);
-  const Pak pak(iso.read("GAME/02_FILES.PAK"));
-  const CourseScript script = parse_course_script(pak.view("SCRIPT/SYSTEM3.FSL"));
-  Scene scene(pak);
-  Hud hud(pak);
-
   if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD)) throw std::runtime_error(std::string("SDL_Init: ") + SDL_GetError());
   // In a headset the window only takes the keyboard (keep it in front) and shows nothing.
   SDL_Window* window = opt.vr ? SDL_CreateWindow("Vib-Ribbon VR: look in the headset (keep this window in front for the keyboard)", 640, 120, 0)
@@ -711,6 +710,15 @@ int run(int argc, char** argv) {
     }
     std::printf("Save file: %s\n", save_path.c_str());
   }
+  // The language's own archive: GAME/<bit of the language, two hex digits>_FILES.PAK
+  // (01 German, 02 English, 04 Spanish, 08 French, 10 Italian), as the original names them.
+  const int language = save.options.language < 0 ? GameText::kEnglish : save.options.language;
+  char prefix[4];
+  std::snprintf(prefix, sizeof prefix, "%02X_", 1u << language);
+  const Pak pak(iso.read(std::string("GAME/") + prefix + "FILES.PAK"));
+  const CourseScript script = parse_course_script(pak.view("SCRIPT/SYSTEM3.FSL"));
+  Scene scene(pak);
+  Hud hud(pak, prefix);
   auto write_save = [&]() {
     if (save_path.empty()) return;
     std::ofstream out(path_from_utf8(save_path), std::ios::binary);
@@ -718,6 +726,7 @@ int run(int argc, char** argv) {
   };
 
   int code = 0;
+  bool restart = false;
   {
     std::unique_ptr<vibr::Display> display;
     if (opt.vr) {
@@ -825,12 +834,12 @@ int run(int argc, char** argv) {
       play_course(opt.course, opt.song);  // straight into play, as before
     } else {
       // The menus, run at the original's 50 frames a second whatever the display does.
-      TitleScreens title(pak);
+      TitleScreens title(pak, prefix);
       // The screens' words come from the game's own program on the disc.
       std::optional<GameText> words;
       try {
         words = GameText::from_exe(iso.read("MAIN_G.EXE"));
-        title.set_text(&*words);
+        title.set_text(&*words, language);
       } catch (const std::exception& e) {
         std::printf("The results screens' words could not be read (%s); they are left out.\n", e.what());
       }
@@ -845,10 +854,14 @@ int run(int argc, char** argv) {
       // First the title (the original's MAIN_T): its intro, then the title waiting for a
       // button, which leads to the main menu.
       const Pak title_pak(iso.read("TITLE/FILES.PAK"));
-      TitleIntro intro(title_pak);
+      TitleIntro intro(title_pak, prefix);
       Effects title_fx(iso, audio, "TITLE/AUDIO/TITLE");
-      constexpr int kTitleVoice = 2;
-      bool at_title = true;
+      constexpr int kTitleVoice = 2;  // the title's voices 0, 1 and 5 play on 2, 3 and 7
+      bool at_title = true, menus_shown = false;
+      if (g_restart_at_title) {  // back after a change of language: straight to the title's mode menu
+        g_restart_at_title = false;
+        intro.start(true);
+      }
       // The menus' two sound sequences: music on voices 0 and 12, Vibri's voice on 1 and 13.
       SoundSequence music(fx, 0), voices(fx, 1);
       auto play_requests = [&]() {
@@ -945,16 +958,52 @@ int run(int argc, char** argv) {
           in.voices_playing = voices.playing();
           in.music_playing = music.playing();
           if (at_title) {
-            const bool button = in.confirm || in.cancel;
-            const bool was_intro = !intro.intro_over();
-            intro.tick(button);
-            for (const int n : intro.take_sounds()) title_fx.number(n, 64, kTitleVoice);
-            if (!was_intro && button && !intro.leaving()) intro.leave();  // the title: a button starts
-            if (intro.over()) {
-              at_title = false;
-              title_fx.stop(kTitleVoice);
-              title.go_to(S::Main);  // its lines scatter in, as the original's first screen
+            TitleIntro::Input ti;
+            ti.up = in.up, ti.down = in.down, ti.left = in.left, ti.right = in.right;
+            ti.confirm = in.confirm, ti.cancel = in.cancel;
+            ti.confirm_sound_playing = title_fx.is_playing(kTitleVoice + 1);
+            intro.tick(ti);
+            for (const TitleIntro::Sound& snd : intro.take_sounds()) title_fx.number(snd.number, 64, kTitleVoice + snd.voice);
+            using C = TitleIntro::Choice;
+            using M = TitleIntro::Menu;
+            if (!menus_shown && intro.intro_over()) {
+              // The language menu the first time (nothing chosen yet), else play / demo / back.
+              menus_shown = true;
+              intro.set_language_cursor(language);
+              intro.show(save.options.language < 0 ? M::Language : M::Mode);
             }
+            switch (intro.choice()) {
+              case C::German: case C::English: case C::Spanish: case C::French: case C::Italian: {
+                const int chosen_language = int(intro.choice()) - int(C::German);
+                save.options.language = chosen_language;
+                write_save();
+                if (chosen_language != language) {
+                  // Everything in the new language: start again at the title's mode menu.
+                  g_restart_at_title = true;
+                  restart = true;
+                  running = false;
+                } else {
+                  intro.show(M::Mode);
+                }
+                break;
+              }
+              case C::Back: intro.show(M::Language); break;
+              case C::Demo:
+                std::printf("The demo comes later.\n");
+                intro.show(M::Mode);
+                break;
+              case C::Play:
+                intro.show(M::Start);
+                intro.leave();
+                break;
+              case C::Started:
+                at_title = false;
+                for (int v : {0, 1, 5}) title_fx.stop(kTitleVoice + v);
+                title.go_to(S::Main);  // its lines scatter in, as the original's first screen
+                break;
+              default: break;
+            }
+            if (!running) break;
             continue;
           }
           const R r = title.tick(in);
@@ -968,6 +1017,7 @@ int run(int argc, char** argv) {
               voices.stop();
               title.go_to(S::None);
               intro.start(true);
+              intro.close_menus();  // the mode menu again, gathering in
               at_title = true;
               break;
             case R::Bronze: case R::Silver: case R::Gold:
@@ -1044,14 +1094,17 @@ int run(int argc, char** argv) {
   }
   SDL_DestroyWindow(window);
   SDL_Quit();
-  return code;
+  return restart ? kRestart : code;
 }
 
 }  // namespace
 
 int main(int argc, char** argv) {
   try {
-    return run(argc, argv);
+    int code;
+    do code = run(argc, argv);
+    while (code == kRestart);
+    return code;
   } catch (const std::exception& e) {
     std::fprintf(stderr, "vibplay: %s\n", e.what());
     SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "vibplay", e.what(), nullptr);  // so a failure is never just a closed window

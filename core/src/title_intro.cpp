@@ -1,4 +1,5 @@
 #include "vib/title_intro.h"
+#include <algorithm>
 #include <iterator>
 #include <tuple>
 
@@ -29,7 +30,22 @@ int TitleIntro::game_frames(int thirtieths) {
   return frames < 0 ? 0 : frames;
 }
 
-TitleIntro::TitleIntro(const Pak& pak) {
+TitleIntro::Movie TitleIntro::load_menu_movie(const Pak& pak, const std::string& name) {
+  Movie m{parse_anm(pak.view(name)), {}};
+  m.clip = Clip(int(m.anim.frames.size()), m.anim.rate, false);
+  return m;
+}
+
+TitleIntro::TitleIntro(const Pak& pak, const char* language) {
+  // The menus: the language grid (one model for all languages) and "play / demo /
+  // back" in the language in use; each with a clip per item and one zooming it.
+  menu_models_[0] = parse_tmd(pak.view("MENU/LANG/LANG.TMD"));
+  menu_models_[1] = parse_tmd(pak.view(std::string("MENU/MODE/") + language + "MODE.TMD"));
+  select_[0] = load_menu_movie(pak, "MENU/LANG/SELECT.ANM");
+  select_[1] = load_menu_movie(pak, "MENU/MODE/SELECT.ANM");
+  scale_[0] = load_menu_movie(pak, "MENU/LANG/SCALE.ANM");
+  scale_[1] = load_menu_movie(pak, "MENU/MODE/SCALE.ANM");
+
   // The intro's lines: three models, seven clips one after the other, the last looping.
   struct Cue {
     const char* file;
@@ -146,9 +162,18 @@ void TitleIntro::update_element(Element& e, std::vector<SceneLine>& out) {
 }
 
 void TitleIntro::tick(bool confirm) {
+  Input in;
+  in.confirm = confirm;
+  tick(in);
+}
+
+void TitleIntro::tick(const Input& in) {
   layers_.clear();
   if (time_ >= game_frames(kTitleTime)) skippable_ = false;
-  if (skippable_ && confirm) seek_title();
+  if (skippable_ && (in.confirm || in.cancel)) {
+    seek_title();
+    skipped_ = true;  // (that press is not also the menus')
+  }
   if (leaving_) ++leave_frames_;
 
   lines_.seed(seed_);
@@ -167,6 +192,7 @@ void TitleIntro::tick(bool confirm) {
 
   update_element(lines_element_, layer.lines);
   update_element(vibri_, layer.lines);
+  update_menus(in, layer.lines);
 
   // The logo: still, from the title on, hidden while the lines scatter.
   if (logo_frame_ == 0) {
@@ -183,7 +209,7 @@ void TitleIntro::tick(bool confirm) {
 
   // The sounds, each at its frame.
   if (sound_cue_ < int(sound_cues_.size()) && sound_cues_[std::size_t(sound_cue_)].frame == sound_frame_)
-    sounds_.push_back(sound_cues_[std::size_t(sound_cue_++)].sound);
+    sounds_.push_back({sound_cues_[std::size_t(sound_cue_++)].sound, 0});
   ++sound_frame_;
 
   if (time_ < kTimeLimit) ++time_;
@@ -196,10 +222,126 @@ bool TitleIntro::intro_over() const { return time_ > game_frames(kTitleTime); }
 
 bool TitleIntro::over() const { return leaving_ && leave_frames_ >= kLeaveFrames; }
 
-std::vector<int> TitleIntro::take_sounds() {
-  std::vector<int> s;
+std::vector<TitleIntro::Sound> TitleIntro::take_sounds() {
+  std::vector<Sound> s;
   s.swap(sounds_);
   return s;
+}
+
+// ---------------------------------------------------------------- the menus
+
+namespace {
+// The language grid: three across, two down; the fourth language is twice as wide.
+constexpr int kLangColumns = 3, kLangRows = 2;
+constexpr int kLangCells[kLangRows][kLangColumns] = {{0, 1, 2}, {3, 3, 4}};
+constexpr int kLangPlace[5][2] = {{0, 0}, {1, 0}, {2, 0}, {0, 1}, {2, 1}};  // column, row of each language
+}  // namespace
+
+void TitleIntro::set_language_cursor(int language) {
+  language = std::clamp(language, 0, 4);
+  lang_x_ = kLangPlace[language][0];
+  lang_y_ = kLangPlace[language][1];
+}
+
+void TitleIntro::show(Menu m) {
+  next_ = m;
+  busy_ = true;
+  if (m == Menu::Start) transition_frame_ = 0;
+  choice_ = Choice::None;
+  chosen_ = false;
+}
+
+void TitleIntro::close_menus() {
+  // The mode menu, its lines settling from scattered.
+  busy_ = true;
+  closing_ = true;
+  transition_frame_ = 20;
+  current_ = Menu::Mode;
+  next_ = Menu::Mode;
+  choice_ = Choice::None;
+  chosen_ = false;
+}
+
+void TitleIntro::mode_jitter(int frame) {
+  const int t = frame * 120 / 50;
+  menu_jitter_[1] = t * t * 7 + 10;
+}
+
+void TitleIntro::update_menus(const Input& in, std::vector<SceneLine>& out) {
+  const bool skipped = skipped_;
+  skipped_ = false;
+  auto draw = [&](int which, Movie& m) {
+    lines_.animated(menu_models_[which], m.anim, m.clip.pose(), {}, menu_jitter_[which], out);
+  };
+  // Between menus: the one going zooms away, then the next zooms in (its clip backwards).
+  if (busy_) {
+    if (next_ == Menu::Start) {
+      mode_jitter(transition_frame_++);  // the menu flies apart until the confirm sound ends
+      if (!in.confirm_sound_playing) {
+        busy_ = false;
+        choice_ = Choice::Started;
+        current_ = next_;
+      }
+    } else if (closing_) {
+      mode_jitter(transition_frame_--);
+      if (transition_frame_ == 0) {
+        menu_jitter_[1] = 10;
+        busy_ = closing_ = false;
+      }
+    } else if (current_ == Menu::None) {
+      current_ = next_;
+      busy_ = false;
+    } else {
+      drawn_ = true;
+      Movie& s = scale_[current_ == Menu::Language ? 0 : 1];
+      draw(current_ == Menu::Language ? 0 : 1, s);
+      s.clip.advance(1.0 / TitleScreens::kFrameRate);
+      if (s.clip.finished()) {
+        reversed_ = !reversed_;
+        current_ = next_;
+        Movie& n = scale_[current_ == Menu::Language ? 0 : 1];
+        n.clip.rewind(reversed_);
+        n.clip.set_speed(reversed_ ? -1 : 1);
+        busy_ = reversed_;
+      }
+    }
+  } else {
+    drawn_ = false;
+  }
+
+  const bool active = !busy_ && !chosen_ && !skipped;
+  auto sounds = [&](bool moved) {
+    if (moved) sounds_.push_back({0x06, 5});  // the cursor
+    if (in.confirm) sounds_.push_back({0x00, 1});  // confirm
+  };
+  if (current_ == Menu::Language) {
+    if (active) {
+      const int from = kLangCells[lang_y_][lang_x_];
+      const int dx = in.right ? 1 : in.left ? -1 : 0, dy = in.down ? 1 : in.up ? -1 : 0;
+      lang_x_ = std::clamp(lang_x_ + dx, 0, kLangColumns - 1);
+      lang_y_ = std::clamp(lang_y_ + dy, 0, kLangRows - 1);
+      // Across the wide item: on to the next cell.
+      if (dx && kLangCells[lang_y_][lang_x_] == from) lang_x_ = std::clamp(lang_x_ + dx, 0, kLangColumns - 1);
+      const int item = kLangCells[lang_y_][lang_x_];
+      sounds(item != from && (dx || dy));
+      if (in.confirm) choice_ = Choice(int(Choice::German) + item);
+      select_[0].clip.seek(item + 0.5);  // its pose for the item
+      draw(0, select_[0]);
+    }
+  } else if (current_ == Menu::Mode) {
+    if (active) {
+      const int from = mode_index_;
+      if (in.cancel) mode_index_ = 2;  // to "back"
+      if (in.down) mode_index_ = std::min(mode_index_ + 1, 2);
+      if (in.up) mode_index_ = std::max(mode_index_ - 1, 0);
+      sounds(mode_index_ != from && (in.up || in.down));
+      if (in.confirm) choice_ = Choice(int(Choice::Play) + mode_index_);
+      select_[1].clip.seek(mode_index_ + 0.5);
+    }
+    if (!drawn_) draw(1, select_[1]);
+  } else if (current_ == Menu::Start && !drawn_) {
+    draw(1, select_[1]);
+  }
 }
 
 }  // namespace vib

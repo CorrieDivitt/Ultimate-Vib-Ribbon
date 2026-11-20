@@ -74,7 +74,11 @@ int TitleScreens::load_camera(const Pak& pak, const char* name, bool loop) {
 }
 
 TitleScreens::TitleScreens(const Pak& pak, const char* language) {
-  font_ = parse_tmd(pak.view("FONT/FE_FONT.TMD"));
+  // The line font: German has its own (FONT/01_FONT.TMD), the others share FE_FONT.
+  const std::string own_font = std::string("FONT/") + language + "FONT.TMD";
+  bool has_own_font = false;
+  for (const auto& e : pak.entries()) has_own_font |= e.name == own_font;
+  font_ = parse_tmd(pak.view(has_own_font ? own_font : std::string("FONT/FE_FONT.TMD")));
   m_vibri_ = load_model(pak, language, "VIBRI/VIBRI.TMD");
   m_main_ = load_model(pak, language, "MA/MA.TMD");
   m_psj_ = load_model(pak, language, "MODE/MDV.TMD");
@@ -304,7 +308,7 @@ void TitleScreens::play_music() { sounds_.push_back({Channel::Music, {32}, 90, f
 
 const std::string& TitleScreens::words(GameText::List list, int index) const {
   static const std::string none;
-  return text_ ? text_->get(list, index) : none;
+  return text_ ? text_->get(list, index, text_language_) : none;
 }
 
 void TitleScreens::draw_text(const std::string& text, int jitter) {

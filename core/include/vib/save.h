@@ -12,6 +12,9 @@
 namespace vib {
 
 struct Options {
+  // The language of the menus and words: 0 German, 1 English, 2 Spanish, 3 French,
+  // 4 Italian; -1 until the player has chosen one (the title then asks first).
+  int language = -1;
   // The original's two options.
   bool sound_effects = true;
   bool vibration = true;

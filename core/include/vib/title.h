@@ -69,7 +69,10 @@ class TitleScreens {
 
   // The game's words, read from the player's own MAIN_G.EXE. Without them the
   // screens are drawn without their text.
-  void set_text(const GameText* text) { text_ = text; }
+  void set_text(const GameText* text, int language = GameText::kEnglish) {
+    text_ = text;
+    text_language_ = language;
+  }
 
   // Fades to `screen`; Screen::None switches at once with no fade.
   void go_to(Screen screen);
@@ -156,6 +159,7 @@ class TitleScreens {
 
   LineBuilder lines_;
   const GameText* text_ = nullptr;
+  int text_language_ = GameText::kEnglish;
   TmdModel font_;
   std::vector<Model> models_;
   std::vector<Movie> movies_;
