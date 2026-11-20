@@ -266,20 +266,17 @@ struct Session {
 };
 
 // In a headset the evolution meter (the dots around Vibri that show the run of hits)
-// is moved a little away from the road, level (owner, session 3): in the original it
-// is a flat ring in the road's own upright plane, about 1.3 m across and dipping
-// 0.2 m below the road, so in stereo it ran straight through the road. The owner
-// tried it 0.3 m in front (towards the eye), then 0.3 m behind, then chose 0.5 m behind.
-void evo_behind_road(std::vector<SceneLine>& lines, std::size_t first, float vibri_z, Vec3f eye) {
-  constexpr float kNearer = -500.0f;  // towards the eye; negative: behind the road, seen from the eye
-  float dx = eye.x, dz = eye.z - vibri_z;  // level, from her towards the eye
-  const float len = std::sqrt(dx * dx + dz * dz);
-  if (len < 1.0f) return;
-  dx = dx / len * kNearer, dz = dz / len * kNearer;
-  for (std::size_t i = first; i < lines.size(); ++i) {
-    lines[i].a.x += dx, lines[i].a.z += dz;
-    lines[i].b.x += dx, lines[i].b.z += dz;
-  }
+// is moved off the road's plane (owner, session 3): in the original it is a flat ring
+// in the road's own upright plane, about 1.3 m across and dipping 0.2 m below the
+// road, so in stereo it ran straight through the road. The owner tried it 0.3 m in
+// front of the road, then 0.3 m and 0.5 m behind it along the view's line of sight
+// (which kept it lined up with everything from any angle), and chose a fixed place in
+// the world: 0.5 m to the side of the road away from the default view (the default
+// view stands on +x, 45 degrees round from behind her), so swinging the view round
+// shows it as a layer of its own. Seen from the -x side it is in front of the road.
+void evo_behind_road(std::vector<SceneLine>& lines, std::size_t first) {
+  constexpr float kSide = -500.0f;  // x: away from the default view's side
+  for (std::size_t i = first; i < lines.size(); ++i) lines[i].a.x += kSide, lines[i].b.x += kSide;
 }
 
 // In a headset, play is seen from down beside Vibri instead of from the original's
@@ -527,7 +524,7 @@ struct PlayPreview {
     s.scene.draw(f, lines, view);
     if (s.opt.vr) {
       view = vr_play_view(s.scene.vibri_z(), float(o.vr_zoom), o.vr_angle);
-      evo_behind_road(lines, s.scene.evo_first(), s.scene.vibri_z(), view.eye);
+      evo_behind_road(lines, s.scene.evo_first());
     }
   }
 };
@@ -1163,7 +1160,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     s.scene.draw(f, scene_lines, view);
     if (s.opt.vr) {
       view = vr_play_view(s.scene.vibri_z(), float(s.save.options.vr_zoom), s.save.options.vr_angle);
-      evo_behind_road(scene_lines, s.scene.evo_first(), s.scene.vibri_z(), view.eye);
+      evo_behind_road(scene_lines, s.scene.evo_first());
     }
     ++display_frame;
     auto convert = [&](const std::vector<SceneLine>& in, std::vector<vibr::LineInstance>& dst) {
