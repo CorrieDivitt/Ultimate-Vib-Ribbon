@@ -248,6 +248,8 @@ Owner: no more crashes on changing language. Asked for L3 to toggle smoothing mi
 
 Owner's L3 test: the doubling stays with smoothing off, so it is the per-frame jitter; smoothing itself is "a huge improvement" (confirmed keeper in VR). Now the headset jitter's frame number is display_frame / vr_jitter_hold (save.txt, 1-3, default 2), in play and the menus; in VR L3 cycles the hold 1, 2, 3 (click, saved), on the monitor it still toggles smoothing. To be judged by the owner.
 
+Owner's result: holding the headset jitter for more than one frame removed most of the ghosting ("looks much better"); he left L3 on the best setting (2 or 3, not yet reported) to be made the default once he says which. Remaining ghosting likely sample-and-hold persistence of the original's jitter range at headset size; candidates: a headset-only jitter scale (e.g. 0.7-0.8, testable from the d-pad), a higher refresh rate (120 Hz on Quest 3).
+
 ## 2c. Gameplay rules (session 2, 2026-11-19)
 
 `core/include/vib/gameplay.h`, `core/src/gameplay.cpp`, `core/include/vib/fixed.h` (16.16 arithmetic with the original's rounding, including its 8-bit-precision divide). Written after re-reading revib's Gameplay and Score sources for behaviour; nothing copied. `tests/test_gameplay.cpp` has 12 tests on hand-made courses. `vibtool play <cue> <round>` runs a perfect player through the real pipeline (generator 1,379 blocks ahead of the heard position, gameplay updated once per block).
