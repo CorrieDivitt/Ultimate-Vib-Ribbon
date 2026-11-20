@@ -24,6 +24,9 @@ namespace vib {
 struct SceneLine {
   Vec3f a, b;
   Rgb colour;
+  // How much of a and b is this frame's jitter (world space), so a display can
+  // blend the lines' places between the original's 50 Hz frames and keep the jitter.
+  Vec3f jitter_a{}, jitter_b{};
 };
 
 struct SceneView {

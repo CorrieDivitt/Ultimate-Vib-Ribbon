@@ -873,6 +873,7 @@ int run(int argc, char** argv) {
       };
       TitleScreens::Input pressed, held;
       std::vector<std::vector<vibr::LineInstance>> menu_lines;
+      std::vector<Hud::Layer> prev_layers;
       std::uint64_t last_ns = SDL_GetTicksNS();
       double behind = 0;
       bool course_chosen = false, running = true, replay = false;
@@ -952,6 +953,7 @@ int run(int argc, char** argv) {
         last_ns = now_ns;
         while (behind >= 1.0 / TitleScreens::kFrameRate) {
           behind -= 1.0 / TitleScreens::kFrameRate;
+          prev_layers = at_title ? intro.layers() : title.layers();  // for blending between this frame and the next
           TitleScreens::Input in = pressed;
           in.held_up = held.up, in.held_down = held.down, in.held_left = held.left, in.held_right = held.right;
           pressed = {};
@@ -1074,11 +1076,39 @@ int run(int argc, char** argv) {
         const auto& layers = at_title ? intro.layers() : title.layers();
         menu_lines.resize(layers.size());
         std::vector<vibr::Layer> out;
+        // With smooth animation the menus move at the display's rate, not only the
+        // original's 50 Hz: each line's place is blended from the previous frame's to
+        // this one's (shown a frame late), its jitter still this frame's, as play's is.
+        // A layer whose lines changed (another model, another screen) is shown as it is.
+        const bool blend = Clip::smooth() && prev_layers.size() == layers.size();
+        const float alpha = float(std::clamp(behind * TitleScreens::kFrameRate, 0.0, 1.0));
+        auto mix = [&](Vec3f now, Vec3f now_jitter, Vec3f before, Vec3f before_jitter) {
+          const Vec3f n{now.x - now_jitter.x, now.y - now_jitter.y, now.z - now_jitter.z};
+          const Vec3f b{before.x - before_jitter.x, before.y - before_jitter.y, before.z - before_jitter.z};
+          if (std::abs(n.x - b.x) + std::abs(n.y - b.y) + std::abs(n.z - b.z) > 600.0f) return now;  // a jump, not a move
+          return Vec3f{b.x + (n.x - b.x) * alpha + now_jitter.x, b.y + (n.y - b.y) * alpha + now_jitter.y,
+                       b.z + (n.z - b.z) * alpha + now_jitter.z};
+        };
         for (std::size_t i = 0; i < layers.size(); ++i) {
           menu_lines[i].clear();
-          for (const SceneLine& l : layers[i].lines)
-            menu_lines[i].push_back({{l.a.x, l.a.y, l.a.z}, {l.b.x, l.b.y, l.b.z}, {l.colour.r / 255.0f, l.colour.g / 255.0f, l.colour.b / 255.0f, 1.0f}});
+          const Hud::Layer* before = blend && prev_layers[i].lines.size() == layers[i].lines.size() ? &prev_layers[i] : nullptr;
+          for (std::size_t k = 0; k < layers[i].lines.size(); ++k) {
+            const SceneLine& l = layers[i].lines[k];
+            Vec3f a = l.a, b = l.b;
+            if (before) {
+              const SceneLine& p = before->lines[k];
+              a = mix(l.a, l.jitter_a, p.a, p.jitter_a);
+              b = mix(l.b, l.jitter_b, p.b, p.jitter_b);
+            }
+            menu_lines[i].push_back({{a.x, a.y, a.z}, {b.x, b.y, b.z}, {l.colour.r / 255.0f, l.colour.g / 255.0f, l.colour.b / 255.0f, 1.0f}});
+          }
           SceneView v = layers[i].view;
+          if (blend) {  // the camera too
+            const SceneView& p = prev_layers[i].view;
+            v.eye = mix(v.eye, {}, p.eye, {});
+            v.target = mix(v.target, {}, p.target, {});
+            v.fov_y = p.fov_y + (v.fov_y - p.fov_y) * alpha;
+          }
           if (opt.vr) {  // zoom: each camera moved along its line of sight towards what it looks at
             const float k = 1.0f / float(save.options.vr_menu_zoom);
             v.eye = {v.target.x + (v.eye.x - v.target.x) * k, v.target.y + (v.eye.y - v.target.y) * k,
