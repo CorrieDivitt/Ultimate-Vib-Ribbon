@@ -1,9 +1,6 @@
 #include "vib/gameplay.h"
 
 #include <algorithm>
-#include <cmath>
-#include <functional>
-#include <memory>
 
 #include "vib/bytes.h"
 
@@ -242,100 +239,14 @@ bool Gameplay::preview(const CourseEvent& e, std::int32_t position, RoadPiece& o
   return true;
 }
 
-namespace {
-
-// The headset's long trail behind Vibri (ours). A passed part moves back at its own
-// speed, exactly as in the original, until it is as far behind as the original ever
-// keeps parts (`zone`, 4.25 lengths); there it joins the trail. The trail moves back
-// as one, at the speed of the part that joined it last, easing to each new speed
-// over a second, so nothing in it passes through anything else and its speed never
-// jumps. Display only; worked out from the parts alone, so any moment can be drawn.
-class Trail {
- public:
-  static constexpr double kEase = kSampleRate;  // samples to reach a new speed
-
-  Trail(const std::vector<const Part*>& parts, Fixed zone) : zone_(double(zone.raw())) {
-    for (const Part* p : parts) {
-      if (p->rate.raw() <= 0) continue;
-      const double speed = double(p->rate.raw()) / 64.0;  // raw units a sample
-      joins_.push_back({double(p->time) + zone_ / speed, speed, speed, 0.0});
-    }
-    std::stable_sort(joins_.begin(), joins_.end(), [](const Join& x, const Join& y) { return x.time < y.time; });
-    for (std::size_t i = 1; i < joins_.size(); ++i) {
-      const Join& before = joins_[i - 1];
-      const double d = joins_[i].time - before.time;
-      joins_[i].start_speed = before.start_speed + (before.speed - before.start_speed) * std::min(1.0, d / kEase);
-      joins_[i].distance = before.distance + covered(before, d);
-    }
-  }
-
-  // How far the trail has moved by time `t` (raw 16.16 units, from the first join).
-  double distance(double t) const {
-    if (joins_.empty()) return 0;
-    auto it = std::upper_bound(joins_.begin(), joins_.end(), t, [](double v, const Join& j) { return v < j.time; });
-    if (it == joins_.begin()) return (t - it->time) * it->speed;
-    const Join& j = *(it - 1);
-    return j.distance + covered(j, t - j.time);
-  }
-
-  // Where a part is behind Vibri at `now` (relative to her), or nullopt-like false
-  // when it is not behind her yet. `own`: its own place, the original's formula.
-  Fixed place(const Part& p, Fixed own, std::int32_t now) const {
-    if (p.time >= now || p.rate.raw() <= 0) return own;
-    const double join = double(p.time) + zone_ / (double(p.rate.raw()) / 64.0);
-    if (double(now) <= join) return own;  // still near her: as the original
-    const double raw = -zone_ - (distance(double(now)) - distance(join));
-    return Fixed::raw(static_cast<std::int32_t>(std::clamp(raw, -2147483647.0, 2147483647.0)));
-  }
-
- private:
-  struct Join {
-    double time, speed, start_speed, distance;
-  };
-  // Distance covered `d` samples after a join, easing from its start speed to its own.
-  static double covered(const Join& j, double d) {
-    if (d <= kEase) return j.start_speed * d + (j.speed - j.start_speed) * d * d / (2.0 * kEase);
-    return (j.start_speed + j.speed) * kEase / 2.0 + j.speed * (d - kEase);
-  }
-  double zone_;
-  std::vector<Join> joins_;
-};
-
-}  // namespace
-
-std::function<Fixed(const Part&)> Gameplay::far_place(std::int32_t now) const {
-  const Fixed common = speed_course_ ? speed_.over(kSampleRate >> 6) : Fixed();
-  auto own = [common, now](const Part& p) { return (common.raw() != 0 ? common : p.rate).times((p.time - now) >> 6); };
-  if (speed_course_) return own;  // one speed for all: nothing can pass through anything
-  std::vector<const Part*> all;
-  for (const auto* list : {&passed_, &parts_})
-    for (const Part& p : *list) all.push_back(&p);
-  auto trail = std::make_shared<const Trail>(all, Fixed::whole(3) + vibri_);
-  return [trail, own, now](const Part& p) { return trail->place(p, own(p), now); };
-}
-
-Fixed Gameplay::trail(std::int32_t from, std::int32_t to) const {
-  std::vector<const Part*> all;
-  for (const auto* list : {&passed_, &parts_})
-    for (const Part& p : *list) all.push_back(&p);
-  const Trail t(all, Fixed::whole(3) + vibri_);
-  return Fixed::raw(static_cast<std::int32_t>(std::lround(t.distance(to) - t.distance(from))));
-}
-
 std::vector<RoadPiece> Gameplay::road(bool far) const {
   std::vector<RoadPiece> out;
-  if (far) {
-    // Everything known, behind her as the trail has it (see far_place), ahead as play places it.
-    const auto place = far_place(position_);
+  if (far)
     for (const Part& p : passed_)
-      if (position_ - p.time <= keep_passed_) out.push_back({p.road, place(p) + vibri_, p.missed, p.screw});
-    for (const Part& p : parts_) out.push_back({p.road, p.time < position_ ? place(p) + vibri_ : p.position + vibri_, p.missed, p.screw});
-    std::stable_sort(out.begin(), out.end(), [](const RoadPiece& a, const RoadPiece& b) { return a.position < b.position; });
-    return out;
-  }
+      if (position_ - p.time <= keep_passed_) out.push_back({p.road, p.position + vibri_, p.missed, p.screw});
   const Fixed limit = distance_ - vibri_ + Fixed::from(3.0);
   for (const Part& p : parts_) {
-    if (p.position >= limit) break;  // parts_ is sorted by position
+    if (!far && p.position >= limit) break;  // parts_ is sorted by position
     out.push_back({p.road, p.position + vibri_, p.missed, p.screw});
   }
   return out;
@@ -346,10 +257,8 @@ std::vector<RoadPiece> Gameplay::road_at(std::int32_t position, bool far) const 
   const Fixed behind = Fixed::whole(-3) - vibri_;
   const Fixed limit = distance_ - vibri_ + Fixed::from(3.0);
   std::vector<RoadPiece> out;
-  const auto place = far_place(position);
   auto add = [&](const Part& p) {
-    // (With `far`, behind her as the trail has it, as road() draws it.)
-    const Fixed at = far ? place(p) : (common.raw() != 0 ? common : p.rate).times((p.time - position) >> 6);
+    const Fixed at = (common.raw() != 0 ? common : p.rate).times((p.time - position) >> 6);
     if (!far && (at < behind || !(at < limit))) return;
     if (far && at < behind && position - p.time > keep_passed_) return;
     out.push_back({p.road, at + vibri_, p.missed, p.screw});
