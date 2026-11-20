@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <vector>
 
 #include "vib/course_gen.h"
@@ -113,6 +114,10 @@ class Gameplay {
   // horizon. `far` (for a headset, to look along the line): every part built so far
   // ahead (the course is made eight seconds ahead), and the ones passed within
   // keep_passed()'s time behind. Drawing only: the rules never see the passed ones.
+  // With `far`, everything behind Vibri moves back together, at the speed of the
+  // part she is passing at each moment (ours: in the original each moves back at its
+  // own speed, but it is gone 4.25 lengths behind; on a long trail a slow part would
+  // trail her while faster ones passed later slid back through it).
   std::vector<RoadPiece> road(bool far = false) const;
   void keep_passed(std::int32_t samples) { keep_passed_ = samples; }
   // The same road as it was (or will be) at an earlier `position`, from the parts
@@ -128,6 +133,9 @@ class Gameplay {
   // A part play has not been given yet (built further ahead, for drawing), placed
   // where play would put it at `position`; false if play would not take it.
   bool preview(const CourseEvent& e, std::int32_t position, RoadPiece& out) const;
+  // How far the trail behind Vibri moved from `from` to `to` (samples, from <= to):
+  // the road's distance at the speed of the part last passed at each moment.
+  Fixed trail(std::int32_t from, std::int32_t to) const;
   int points() const { return points_; }
   int score() const { return points_ < kMaxScore ? points_ : kMaxScore; }
   int bonus() const;                 // end-of-round bonus for the current form
@@ -146,6 +154,8 @@ class Gameplay {
   std::int32_t fixed_period() const { return fixed_period_; }
 
  private:
+  // trail() from each time to `now`, with the speeds looked up once (for a whole road).
+  std::function<Fixed(std::int32_t)> trail_of(std::int32_t now) const;
   void hit(Part& p);
   void miss(Part& p);
   int stray(int road, int part_road);

@@ -1,6 +1,8 @@
 #include "vib/gameplay.h"
 
 #include <algorithm>
+#include <functional>
+#include <memory>
 
 #include "vib/bytes.h"
 
@@ -239,16 +241,76 @@ bool Gameplay::preview(const CourseEvent& e, std::int32_t position, RoadPiece& o
   return true;
 }
 
+namespace {
+
+// The trail's distance as a function of time: from each known part's time to the
+// next one's it grows at that part's speed (road units per 64 samples).
+class TrailTable {
+ public:
+  explicit TrailTable(const std::vector<const Part*>& parts) {
+    for (const Part* p : parts) points_.push_back({p->time, p->rate.raw(), 0});
+    std::stable_sort(points_.begin(), points_.end(), [](const Point& x, const Point& y) { return x.time < y.time; });
+    for (std::size_t i = 1; i < points_.size(); ++i)
+      points_[i].distance = points_[i - 1].distance + std::int64_t(points_[i - 1].rate) * ((points_[i].time - points_[i - 1].time) >> 6);
+  }
+  // Raw 16.16 distance at time `t` (before the first part, at its speed).
+  std::int64_t at(std::int32_t t) const {
+    if (points_.empty()) return 0;
+    auto it = std::upper_bound(points_.begin(), points_.end(), t, [](std::int32_t v, const Point& q) { return v < q.time; });
+    const Point& q = it == points_.begin() ? *it : *(it - 1);
+    return q.distance + std::int64_t(q.rate) * ((t - q.time) >> 6);  // (>> floors, so before the first part too)
+  }
+  Fixed between(std::int32_t from, std::int32_t to) const {
+    return Fixed::raw(static_cast<std::int32_t>(std::clamp<std::int64_t>(at(to) - at(from), -0x7FFFFFFF, 0x7FFFFFFF)));
+  }
+
+ private:
+  struct Point {
+    std::int32_t time, rate;
+    std::int64_t distance;
+  };
+  std::vector<Point> points_;
+};
+
+}  // namespace
+
+std::function<Fixed(std::int32_t)> Gameplay::trail_of(std::int32_t now) const {
+  if (speed_course_) {
+    const Fixed common = speed_.over(kSampleRate >> 6);
+    return [common, now](std::int32_t t) { return t < now ? common.times((now - t) >> 6) : Fixed(); };
+  }
+  std::vector<const Part*> all;
+  for (const auto* list : {&passed_, &parts_})
+    for (const Part& p : *list) all.push_back(&p);
+  auto table = std::make_shared<const TrailTable>(all);
+  return [table, now](std::int32_t t) { return t < now ? table->between(t, now) : Fixed(); };
+}
+
+Fixed Gameplay::trail(std::int32_t from, std::int32_t to) const {
+  if (to <= from) return Fixed();
+  if (speed_course_) return speed_.over(kSampleRate >> 6).times((to - from) >> 6);  // one speed for all
+  std::vector<const Part*> all;
+  for (const auto* list : {&passed_, &parts_})
+    for (const Part& p : *list) all.push_back(&p);
+  return TrailTable(all).between(from, to);
+}
+
 std::vector<RoadPiece> Gameplay::road(bool far) const {
   std::vector<RoadPiece> out;
-  if (far)
+  if (far) {  // the trail, moving back as one (passed parts, then those not yet erased behind her)
+    const auto back = trail_of(position_);
     for (const Part& p : passed_)
-      if (position_ - p.time <= keep_passed_) out.push_back({p.road, p.position + vibri_, p.missed, p.screw});
+      if (position_ - p.time <= keep_passed_) out.push_back({p.road, vibri_ - back(p.time), p.missed, p.screw});
+    for (const Part& p : parts_)
+      if (p.time <= position_) out.push_back({p.road, vibri_ - back(p.time), p.missed, p.screw});
+  }
   const Fixed limit = distance_ - vibri_ + Fixed::from(3.0);
   for (const Part& p : parts_) {
+    if (far && p.time <= position_) continue;  // (in the trail above)
     if (!far && p.position >= limit) break;  // parts_ is sorted by position
     out.push_back({p.road, p.position + vibri_, p.missed, p.screw});
   }
+  if (far) std::stable_sort(out.begin(), out.end(), [](const RoadPiece& a, const RoadPiece& b) { return a.position < b.position; });
   return out;
 }
 
@@ -257,8 +319,11 @@ std::vector<RoadPiece> Gameplay::road_at(std::int32_t position, bool far) const 
   const Fixed behind = Fixed::whole(-3) - vibri_;
   const Fixed limit = distance_ - vibri_ + Fixed::from(3.0);
   std::vector<RoadPiece> out;
+  const auto back = trail_of(position);
   auto add = [&](const Part& p) {
-    const Fixed at = (common.raw() != 0 ? common : p.rate).times((p.time - position) >> 6);
+    // (With `far`, behind her the trail moves back as one, as road() draws it.)
+    const Fixed at = far && p.time <= position ? Fixed() - back(p.time)
+                                               : (common.raw() != 0 ? common : p.rate).times((p.time - position) >> 6);
     if (!far && (at < behind || !(at < limit))) return;
     if (far && at < behind && position - p.time > keep_passed_) return;
     out.push_back({p.road, at + vibri_, p.missed, p.screw});
