@@ -651,6 +651,19 @@ TEST(disc_sces02873_settings_panel) {
   held.held_right = true;
   for (int i = 0; i < 50; ++i) p.tick(held, 0.02, o, true);  // 1 s
   CHECK(o.vr_ahead_seconds > 34 && o.vr_ahead_seconds < 60);
+  // Past a minute in longer steps, then the whole song (the line runs to the horizon).
+  for (int i = 0; i < 40; ++i) p.tick(right, 0.02, o, true);
+  CHECK(o.vr_ahead_seconds == kWholeSongSeconds && p.value(I::SeeAhead, o, true) == "Whole song");
+  CHECK(p.tick(right, 0.02, o, true) == A::None);
+  CHECK(p.tick(left, 0.02, o, true) == A::Changed && o.vr_ahead_seconds == 300.0 && p.value(I::SeeAhead, o, true) == "300 s");
+  for (int i = 0; i < 7; ++i) p.tick(left, 0.02, o, true);
+  CHECK(o.vr_ahead_seconds == 60.0);
+  go_to(I::SeeBehind);
+  for (int i = 0; i < 60; ++i) p.tick(right, 0.02, o, true);
+  CHECK(o.vr_behind_seconds == kWholeSongSeconds);
+  for (int i = 0; i < 80; ++i) p.tick(left, 0.02, o, true);
+  CHECK(o.vr_behind_seconds == 0.0);
+  o.vr_ahead_seconds = o.vr_behind_seconds = 30.0;
   go_to(I::ViewAngle);
   o.vr_angle = 180;
   p.tick(right, 0.02, o, true);
@@ -711,4 +724,44 @@ TEST(disc_sces02873_performance_overlay_draws_its_rows_and_graph) {
       else CHECK(right < 0);
     }
   }
+}
+
+TEST(disc_sces02873_whole_song_drawn_ahead_fits_and_runs_away) {
+  // The headset's "whole song" line: every part of song 4 (the longest course) built
+  // ahead and drawn at once from the song's start. It must fit the renderers' line
+  // buffers (131,072) and run on away from Vibri without wrapping back.
+  const std::string cue = test_cue();
+  if (cue.empty()) SKIP("set VIB_TEST_CUE to your SCES-02873 .cue to run");
+  DiscImage disc = DiscImage::open(path_from_utf8(cue));
+  Iso9660 iso(disc);
+  const Pak game(iso.read("GAME/02_FILES.PAK"));
+  const CourseScript script = parse_course_script(game.view("SCRIPT/SYSTEM3.FSL"));
+  const std::vector<Block> blocks = make_blocks(disc.read_audio_track(5));
+  CourseGenerator gen(script);
+  gen.start_round(4, 0);
+  for (std::size_t i = 0; i < blocks.size(); ++i) gen.process(static_cast<std::int32_t>(i * kBlockSize), blocks[i]);
+  Gameplay play;
+  RoundSetup setup;
+  setup.course = Course::Silver;
+  setup.course_seconds = static_cast<int>(blocks.size() * kBlockSize / kSampleRate);
+  setup.track_index = 1;
+  play.start(setup);
+  Scene::Frame f;
+  f.seconds = 0.02;
+  f.speed = Fixed::whole(1);
+  RoadPiece piece;
+  for (const CourseEvent& e : gen.events())
+    if (play.preview(e, 0, piece)) f.road.push_back(piece);
+  CHECK(f.road.size() >= 150);
+  for (std::size_t i = 1; i < f.road.size(); ++i) CHECK(f.road[i - 1].position < f.road[i].position);
+  Scene scene(game);
+  scene.reset(true, false);
+  std::vector<SceneLine> lines;
+  SceneView view;
+  scene.draw(f, lines, view);
+  CHECK(lines.size() > 154 * 4 && lines.size() < 131072);  // (about 1,000: a road piece is a few lines)
+  float far_z = -1e30f;
+  for (const SceneLine& l : lines) far_z = std::max({far_z, l.a.z, l.b.z});
+  // The last part is over two minutes ahead: far beyond the 8 s play builds (about 7 m).
+  CHECK(far_z - scene.vibri_z() > 600.0f * 100);
 }

@@ -483,7 +483,9 @@ struct PlayPreview {
     t += std::min(dt, 0.1);
     const double now = t * kSpeed;
     const Options& o = s.save.options;
-    const double ahead = s.opt.vr ? o.vr_ahead_seconds * kSpeed : 14.0, behind = s.opt.vr ? o.vr_behind_seconds * kSpeed : 3.0;
+    // (Its endless road shows at most 2 minutes each way, enough to reach the horizon.)
+    const double ahead = s.opt.vr ? std::min(o.vr_ahead_seconds, 120.0) * kSpeed : 14.0;
+    const double behind = s.opt.vr ? std::min(o.vr_behind_seconds, 120.0) * kSpeed : 3.0;
     Scene::Frame f;
     f.seconds = dt;
     f.jitter_seed = jitter_seed;
@@ -611,7 +613,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   if (s.demo) game.seed_demo(seed);
   // In a headset the whole line is in view: passed parts stay on it for 8 s, and
   // every part built so far (8 s ahead) shows ahead.
-  if (s.opt.vr) game.keep_passed(static_cast<std::int32_t>(s.save.options.vr_behind_seconds * kSampleRate));
+  if (s.opt.vr) game.keep_passed(static_cast<std::int32_t>(std::min(s.save.options.vr_behind_seconds, kWholeSongSeconds) * kSampleRate));
   // Further ahead than play builds: a second generator on the same music and timing,
   // running ahead, drawn only. Its course is the same course (it is checked below),
   // so its parts become play's own as play reaches them.
@@ -620,7 +622,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   start(far);
   std::size_t far_block = 0;
   // (Read every frame: the pause's settings can change it mid-song.)
-  auto far_extra = [&s] { return static_cast<std::int32_t>(std::max(0.0, s.save.options.vr_ahead_seconds - 8.0) * kSampleRate); };
+  auto far_extra = [&s] { return static_cast<std::int32_t>(std::clamp(s.save.options.vr_ahead_seconds - 8.0, 0.0, kWholeSongSeconds) * kSampleRate); };
   bool far_warned = false;
   s.scene.reset(true, false);
   s.hud.start_round(track_index, !s.song && !s.music && !s.demo);  // the "Round 1/2" sign belongs to the two-song courses
@@ -922,7 +924,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     const std::int32_t heard = frozen ? last_position : std::max(raw, last_position);
     const std::int32_t view_at = frozen ? std::min(raw, pause_at) : heard;  // where the road is drawn
     if (frozen) presses.clear();
-    if (s.opt.vr) game.keep_passed(static_cast<std::int32_t>(s.save.options.vr_behind_seconds * kSampleRate));
+    if (s.opt.vr) game.keep_passed(static_cast<std::int32_t>(std::min(s.save.options.vr_behind_seconds, kWholeSongSeconds) * kSampleRate));
 
     if (!frozen) analyse_up_to(heard);
 
@@ -957,7 +959,12 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     f.speed = game.speed();
     f.road = frozen ? game.road_at(view_at, s.opt.vr) : game.road(s.opt.vr);
     if (s.opt.vr && far_extra() > 0) {
+      // At most about 2 ms of analysis a frame: with the whole song asked for, the far
+      // course fills in over the first second or so instead of in one long frame.
+      const std::uint64_t far_budget_end = SDL_GetTicksNS() + 2'000'000;
+      int far_count = 0;
       while (far_block < blocks.size() && std::int32_t(far_block * kBlockSize) <= heard + kDelay + far_extra()) {
+        if ((++far_count & 31) == 0 && SDL_GetTicksNS() > far_budget_end) break;
         const auto t = static_cast<std::int32_t>(far_block * kBlockSize);
         if (s.music) {
           // The break as play will have it when this block is heard (play switches it as the music is heard).

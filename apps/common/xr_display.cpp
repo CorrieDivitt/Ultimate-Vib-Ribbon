@@ -35,7 +35,7 @@ struct PushConstants {  // as line.vert and line.frag declare it
   float feather;
 };
 
-constexpr std::uint32_t kMaxLines = 32768;
+constexpr std::uint32_t kMaxLines = 131072;  // (room for the whole-song line of a long file of your own music: a 3-minute song is about 1,000 lines)
 
 void vk_check(VkResult r, const char* what) {
   if (r != VK_SUCCESS) throw std::runtime_error(std::string(what) + " failed with VkResult " + std::to_string(int(r)));

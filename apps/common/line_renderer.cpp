@@ -33,7 +33,7 @@ struct PushConstants {
   float feather;
 };
 
-constexpr std::uint32_t kMaxLines = 32768;
+constexpr std::uint32_t kMaxLines = 131072;  // (the headset's line can run the whole song)
 
 void check(VkResult r, const char* what) {
   if (r != VK_SUCCESS) throw std::runtime_error(std::string(what) + " failed with VkResult " + std::to_string(int(r)));

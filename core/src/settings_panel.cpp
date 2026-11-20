@@ -39,6 +39,7 @@ const char* const kRewind[kLanguages] = {"Zurückspulen", "Rewind", "Rebobinar",
 const char* const kCountIn[kLanguages] = {"Countdown", "Countdown", "Cuenta atrás", "Compte à rebours", "Conto alla rovescia"};
 const char* const kOn[kLanguages] = {"An", "On", "Sí", "Oui", "Sì"};
 const char* const kOff[kLanguages] = {"Aus", "Off", "No", "Non", "No"};
+const char* const kWholeSong[kLanguages] = {"Ganzes Lied", "Whole song", "Toda la canción", "Toute la chanson", "Tutta la canzone"};
 const char* const kDetailed[kLanguages] = {"Ausführlich", "Detailed", "Detallado", "Détaillé", "Dettagliato"};
 
 int table_language(int language) { return language >= 0 && language < kLanguages ? language : 1; }  // Japanese: English
@@ -109,8 +110,12 @@ std::string SettingsPanel::value(Item item, const Options& o, bool vr) const {
     case Item::LineWidth: std::snprintf(buf, sizeof buf, "%.3f", vr ? o.vr_line_width : o.line_width); break;
     case Item::Zoom: std::snprintf(buf, sizeof buf, "%.2f", o.vr_zoom); break;
     case Item::ViewAngle: std::snprintf(buf, sizeof buf, "%.0f", o.vr_angle); break;
-    case Item::SeeAhead: std::snprintf(buf, sizeof buf, "%.0f s", o.vr_ahead_seconds); break;
-    case Item::SeeBehind: std::snprintf(buf, sizeof buf, "%.0f s", o.vr_behind_seconds); break;
+    case Item::SeeAhead: case Item::SeeBehind: {
+      const double v = item == Item::SeeAhead ? o.vr_ahead_seconds : o.vr_behind_seconds;
+      if (v >= kWholeSongSeconds) return to_font_text(kWholeSong[l]);
+      std::snprintf(buf, sizeof buf, "%.0f s", v);
+      break;
+    }
     case Item::SoundEffects: return on_off(o.sound_effects);
     case Item::Vibration: return on_off(o.vibration);
     case Item::SoundTiming: std::snprintf(buf, sizeof buf, "%.0f ms", o.audio_offset_ms); break;
@@ -120,6 +125,27 @@ std::string SettingsPanel::value(Item item, const Options& o, bool vr) const {
   }
   return buf;
 }
+
+namespace {
+
+// How far the headset's line reaches: every 2 s up to a minute, then longer steps,
+// then the whole song. Moves `v` to the next stop in direction `d`.
+bool step_seconds(double& v, int d, double lowest) {
+  std::vector<double> stops;
+  for (double s = lowest; s <= 60.0; s += 2.0) stops.push_back(s);
+  for (const double s : {75.0, 90.0, 120.0, 150.0, 180.0, 240.0, 300.0, kWholeSongSeconds}) stops.push_back(s);
+  const double before = v;
+  if (d > 0) {
+    const auto it = std::upper_bound(stops.begin(), stops.end(), v + 1e-6);
+    if (it != stops.end()) v = *it;
+  } else {
+    const auto it = std::lower_bound(stops.begin(), stops.end(), v - 1e-6);
+    if (it != stops.begin()) v = *(it - 1);
+  }
+  return v != before;
+}
+
+}  // namespace
 
 bool SettingsPanel::change(Item item, int d, Options& o, bool vr) {
   auto step = [](double& v, double by, double lo, double hi) {
@@ -147,8 +173,8 @@ bool SettingsPanel::change(Item item, int d, Options& o, bool vr) {
       return o.vr_zoom != before;
     }
     case Item::ViewAngle: o.vr_angle = std::remainder(std::round(o.vr_angle / 15.0) * 15.0 + 15.0 * d, 360.0); return true;
-    case Item::SeeAhead: return step(o.vr_ahead_seconds, 2.0 * d, 8.0, 60.0);
-    case Item::SeeBehind: return step(o.vr_behind_seconds, 2.0 * d, 0.0, 60.0);
+    case Item::SeeAhead: return step_seconds(o.vr_ahead_seconds, d, 8.0);
+    case Item::SeeBehind: return step_seconds(o.vr_behind_seconds, d, 0.0);
     case Item::SoundEffects: o.sound_effects = !o.sound_effects; return true;
     case Item::Vibration: o.vibration = !o.vibration; return true;
     case Item::SoundTiming: return step(o.audio_offset_ms, 5.0 * d, -500.0, 500.0);
