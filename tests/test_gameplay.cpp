@@ -371,28 +371,38 @@ TEST(after_a_pause_vibri_starts_clear_of_parts_and_replays_what_was_judged) {
 
 TEST(the_trail_behind_vibri_keeps_its_order_with_mixed_speeds) {
   // A slow part (four times the length: a quarter of the speed), then two at the
-  // normal speed. Once all three are passed, each moving back at its own speed would
-  // leave the slow one just behind Vibri with the fast ones sliding back through it
-  // (the owner saw this on the gold course). The far road moves the trail back as one.
+  // normal speed. Each moving back at its own speed for ever would leave the slow
+  // one trailing Vibri with the fast ones sliding back through it (the owner saw
+  // this on the gold course). Near her they move as in the original; 4.25 lengths
+  // back they join a trail that moves as one.
   Run r;
   r.g.keep_passed(44100 * 60);
+  const Fixed vibri = Fixed::from(1.25), zone = Fixed::from(4.25);
   r.g.add_event(part(44100 * 2, 0, kLen * 4));  // slow
   r.g.add_event(part(44100 * 6, 1));
   r.g.add_event(part(44100 * 8, 2));
-  r.run_to(44100 * 12);
+  // Just after the last one passes: it is where the original would draw it.
+  r.run_to(44100 * 8 + 441 * 10);
+  for (const RoadPiece& p : r.g.road(true))
+    if (p.road == 2) CHECK(p.position == Fixed::whole(1).over(kLen >> 6).times((44100 * 8 - (r.now - kStep)) >> 6) + vibri);
+  r.run_to(44100 * 14);
   const auto road = r.g.road(true);
   CHECK(road.size() == 3);
   // By position, furthest behind first: the first passed is furthest back.
   CHECK(road[0].road == 0 && road[1].road == 1 && road[2].road == 2);
-  for (const RoadPiece& p : road) CHECK(p.position < Fixed::from(1.25));  // all behind her
-  // Between the last two (88,200 samples apart, 4 s at 22.05 kHz, at the normal speed: 8 lengths).
-  CHECK(std::abs((road[2].position - road[1].position).to_double() - 8.0) < 0.05);
-  // The same, drawn for an earlier moment (a pause's run-up), and the trail's own measure.
-  const auto earlier = r.g.road_at(44100 * 10, true);
-  CHECK(earlier.size() == 3 && earlier[0].road == 0 && earlier[1].road == 1 && earlier[2].road == 2);
-  CHECK(std::abs(r.g.trail(44100 * 6, 44100 * 8).to_double() - 8.0) < 0.05);
-  // Before the second part the trail moves at the slow one's speed: a quarter.
-  CHECK(std::abs(r.g.trail(44100 * 2, 44100 * 4).to_double() - 2.0) < 0.05);
+  for (const RoadPiece& p : road) CHECK(p.position < vibri - zone);  // all in the trail by now
+  // A part joining the trail does not jump: drawn a moment before and after it joins.
+  const std::int32_t joins = 44100 * 8 + 4 * kLen + 4 * kLen / 4;  // 4.25 lengths at its speed
+  auto place_of_last = [&](std::int32_t at) {
+    for (const RoadPiece& p : r.g.road_at(at, true))
+      if (p.road == 2) return p.position.to_double();
+    return 1e9;
+  };
+  const double step = 1.0 / (kLen >> 6) * (441 >> 6);  // a normal part's move in one update
+  CHECK(std::abs(place_of_last(joins - 441) - place_of_last(joins + 441)) < 3 * step);
+  // The trail eases to each new speed: a second after the last joined it moves at its
+  // speed (the normal one: a length every 11,025 samples).
+  CHECK(std::abs(r.g.trail(joins + 44100, joins + 44100 + kLen).to_double() - 1.0) < 0.02);
   // The monitor's road (not far) is unchanged: passed parts are not in it.
   CHECK(r.g.road(false).empty());
 }
