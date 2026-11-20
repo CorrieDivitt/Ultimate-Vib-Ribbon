@@ -64,6 +64,10 @@ Layout is implemented in `core/src/course_script.cpp`. Meaning of the fields:
 - Game's own disc: round `n` uses track `n - 1`, script time starts at 0.
 - Audio CD: every CD track uses the medley track, starting at an **offset** into its 74-minute script. The disc's tracks are put in a shuffled order seeded by the disc's ID (XOR 0xCBF633B1); each track's script span is as long as the track; the leftover script time is shared out as random gaps between them. This is why the same CD always gives the same courses.
 - Script time `now` = clamp(position − track start, 0 …) + offset, capped at the last entry's time.
+- Disc key: `((lead-out sector << 7) | last track number) ^ 0xCBF633B1`, from the CD's table of contents (the game disc uses 0). It is the shuffle's seed and also the distributions' script seed; the round passed to the distributions is the CD track number (capped at 100).
+- Order and offsets: `order = random_picks(0, n−1, n, key)`; track `t` (from 1) takes slot `order[t−1]`, of length `whole seconds of the track × 22,050` (sectors / 75, truncated). The medley's end minus all lengths (at least 0) is shared out as `gaps = random_picks(0, rest, n, key)`, sorted; slot `s` starts at the sum of the earlier slots' lengths plus `gaps[s]`. Up to 100 tracks.
+- `random_picks(lo, hi, count, seed)`: the seed is stepped 7 times first; then rounds of up to `hi − lo + 1` picks, each `lo + ((numbers left × next seed) >> 32)` counted over the numbers not yet taken in this round, so each round takes every number once. Implemented as `vib::random_picks` (course_gen.h).
+- The player's own files (vibplay --music): taken as a one-track CD, the track from sector 150 and its length rounded up to whole sectors (588 frames each), so the key and offset depend only on the file's length.
 
 ### 3.2 Speed list (control segments)
 
@@ -90,7 +94,7 @@ When a round starts partway into a script (audio CDs), effects still running at 
 
 ### 3.5 Audio CD extras
 
-For audio CDs in the normal courses, obstacles stop during seconds 52 to 59 of every minute of analyzed audio, and the camera changes when the heard audio reaches second 52. This is what creates the regular breaks on custom music.
+For audio CDs in the normal courses, obstacles stop during seconds 52 to 59 of every minute of analyzed audio, and the camera changes when the heard audio reaches second 52. Mechanism: gameplay turns the analysis's selection off and on (the script hands out no selector while off), and the lost selector makes the analysis report quiet, as it does at the end of a song. This is what creates the regular breaks on custom music.
 
 ## 4. Gameplay (read)
 
