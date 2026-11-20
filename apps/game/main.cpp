@@ -391,14 +391,14 @@ std::vector<SettingsPanel::Item> pause_items(bool vr) {
   using I = SettingsPanel::Item;
   if (vr)
     return {I::Continue, I::WobbleSize, I::WobbleHold, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind,
-            I::Recentre, I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::QuitSong};
+            I::TrailSpeed, I::Recentre, I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::QuitSong};
   return {I::Continue, I::WobbleSize, I::Smooth, I::LineWidth, I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle,
           I::Performance, I::QuitSong};
 }
 std::vector<SettingsPanel::Item> menu_items(bool vr) {
   using I = SettingsPanel::Item;
   if (vr)
-    return {I::WobbleSize, I::WobbleHold, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind, I::Recentre,
+    return {I::WobbleSize, I::WobbleHold, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind, I::TrailSpeed, I::Recentre,
             I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance};
   return {I::WobbleSize, I::Smooth, I::LineWidth, I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance};
 }
@@ -614,6 +614,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   // In a headset the whole line is in view: passed parts stay on it for 8 s, and
   // every part built so far (8 s ahead) shows ahead.
   if (s.opt.vr) game.keep_passed(static_cast<std::int32_t>(std::min(s.save.options.vr_behind_seconds, kWholeSongSeconds) * kSampleRate));
+  if (s.opt.vr) game.set_trail_min_speed(s.save.options.vr_trail_min_speed);
   // Further ahead than play builds: a second generator on the same music and timing,
   // running ahead, drawn only. Its course is the same course (it is checked below),
   // so its parts become play's own as play reaches them.
@@ -925,6 +926,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     const std::int32_t view_at = frozen ? std::min(raw, pause_at) : heard;  // where the road is drawn
     if (frozen) presses.clear();
     if (s.opt.vr) game.keep_passed(static_cast<std::int32_t>(std::min(s.save.options.vr_behind_seconds, kWholeSongSeconds) * kSampleRate));
+    if (s.opt.vr) game.set_trail_min_speed(s.save.options.vr_trail_min_speed);  // (every frame: the pause can change it)
 
     if (!frozen) analyse_up_to(heard);
 

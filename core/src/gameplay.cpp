@@ -239,14 +239,34 @@ bool Gameplay::preview(const CourseEvent& e, std::int32_t position, RoadPiece& o
   return true;
 }
 
+Fixed Gameplay::far_behind(const Part& p, std::int32_t now) const {
+  const Fixed common = speed_course_ ? speed_.over(kSampleRate >> 6) : Fixed();
+  const Fixed own = (common.raw() != 0 ? common : p.rate).times((p.time - now) >> 6);
+  if (trail_min_speed_ <= 0 || p.time >= now || common.raw() != 0) return own;
+  const double rate = double(p.rate.raw());                                   // raw units per 64 samples
+  const double least = trail_min_speed_ * 64.0 / kSampleRate * 65536.0;      // the same, for the setting
+  if (rate >= least) return own;
+  // From Vibri's passing, its speed rises in a straight line to the least over a second.
+  constexpr double kRamp = kSampleRate / 64.0;  // in 64-sample steps
+  const double d = double(now - p.time) / 64.0;
+  const double gone = d <= kRamp ? rate * d + (least - rate) * d * d / (2.0 * kRamp)
+                                 : (rate + least) * kRamp / 2.0 + least * (d - kRamp);
+  return Fixed::raw(static_cast<std::int32_t>(-std::min(gone, 2147483647.0)));
+}
+
 std::vector<RoadPiece> Gameplay::road(bool far) const {
   std::vector<RoadPiece> out;
-  if (far)
+  if (far) {
     for (const Part& p : passed_)
-      if (position_ - p.time <= keep_passed_) out.push_back({p.road, p.position + vibri_, p.missed, p.screw});
+      if (position_ - p.time <= keep_passed_) out.push_back({p.road, far_behind(p, position_) + vibri_, p.missed, p.screw});
+    for (const Part& p : parts_) out.push_back({p.road, (p.time < position_ ? far_behind(p, position_) : p.position) + vibri_, p.missed, p.screw});
+    if (trail_min_speed_ > 0)
+      std::stable_sort(out.begin(), out.end(), [](const RoadPiece& a, const RoadPiece& b) { return a.position < b.position; });
+    return out;
+  }
   const Fixed limit = distance_ - vibri_ + Fixed::from(3.0);
   for (const Part& p : parts_) {
-    if (!far && p.position >= limit) break;  // parts_ is sorted by position
+    if (p.position >= limit) break;  // parts_ is sorted by position
     out.push_back({p.road, p.position + vibri_, p.missed, p.screw});
   }
   return out;
@@ -258,7 +278,7 @@ std::vector<RoadPiece> Gameplay::road_at(std::int32_t position, bool far) const 
   const Fixed limit = distance_ - vibri_ + Fixed::from(3.0);
   std::vector<RoadPiece> out;
   auto add = [&](const Part& p) {
-    const Fixed at = (common.raw() != 0 ? common : p.rate).times((p.time - position) >> 6);
+    const Fixed at = far && p.time < position ? far_behind(p, position) : (common.raw() != 0 ? common : p.rate).times((p.time - position) >> 6);
     if (!far && (at < behind || !(at < limit))) return;
     if (far && at < behind && position - p.time > keep_passed_) return;
     out.push_back({p.road, at + vibri_, p.missed, p.screw});

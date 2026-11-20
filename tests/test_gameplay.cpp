@@ -368,3 +368,37 @@ TEST(after_a_pause_vibri_starts_clear_of_parts_and_replays_what_was_judged) {
   CHECK(done.size() == 5);  // 1 to 5 s, every one judged (the first hit, the rest missed)
   CHECK(!done.empty() && !done[0].missed && done.back().missed && done[0].time < done.back().time);
 }
+
+TEST(slow_passed_parts_speed_up_to_the_least_trail_speed) {
+  // On the far road a passed part slower than the least speed (here 2 lengths a
+  // second, the normal part's: 11,025 samples a length) speeds up to it over a second
+  // from Vibri's passing, instead of seeming to stay with her. Faster parts, and the
+  // setting off, move as in the original.
+  Run r;
+  r.g.keep_passed(22050 * 60);
+  r.g.add_event(part(22050 * 4, 0, kLen * 4));  // a quarter of the normal speed: 0.5 a second
+  r.g.add_event(part(22050 * 6, 1));            // normal: 2 a second
+  r.run_to(22050 * 12);
+  auto place = [&](int road) {
+    for (const RoadPiece& p : r.g.road(true))
+      if (p.road == road) return (p.position - Fixed::from(1.25)).to_double();
+    return 1e9;
+  };
+  const double slow_original = place(0), fast_original = place(1);
+  const auto monitor_before = r.g.road(false);
+  // Off: the original's own speeds (8 s after passing at 0.5 a second: 4 lengths back).
+  CHECK(std::abs(slow_original + 4.0) < 0.1 && std::abs(fast_original + 12.0) < 0.1);
+  r.g.set_trail_min_speed(2.0);
+  // On: a second's ramp from 0.5 to 2 (1.25 lengths), then 7 s at 2 (14): 15.25 back.
+  CHECK(std::abs(place(0) + 15.25) < 0.1);
+  CHECK(place(1) == fast_original);  // already at the least speed: untouched
+  // Continuous where Vibri passes it: a moment after, still right beside her.
+  Part slow;
+  slow.time = 22050 * 4;
+  slow.rate = Fixed::whole(1).over((kLen * 4) >> 6);
+  CHECK(std::abs(r.g.far_behind(slow, slow.time + 64).to_double()) < 0.01);
+  // The monitor's road (not far) is the original's whatever the setting.
+  const auto monitor_after = r.g.road(false);
+  CHECK(monitor_after.size() == monitor_before.size());
+  for (std::size_t i = 0; i < monitor_after.size(); ++i) CHECK(monitor_after[i].position == monitor_before[i].position);
+}

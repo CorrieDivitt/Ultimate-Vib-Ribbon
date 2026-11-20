@@ -115,6 +115,13 @@ class Gameplay {
   // keep_passed()'s time behind. Drawing only: the rules never see the passed ones.
   std::vector<RoadPiece> road(bool far = false) const;
   void keep_passed(std::int32_t samples) { keep_passed_ = samples; }
+  // Ours, for the far road: a passed part slower than this (part lengths a second;
+  // 0 off) speeds up to it, smoothly over a second from the moment Vibri passes it,
+  // so a slow one keeps moving away instead of seeming to stay with her. Parts at
+  // this speed or faster move as in the original.
+  void set_trail_min_speed(double lengths_per_second) { trail_min_speed_ = lengths_per_second; }
+  // Where the far road draws a part behind Vibri at `now` (relative to her).
+  Fixed far_behind(const Part& p, std::int32_t now) const;
   // The same road as it was (or will be) at an earlier `position`, from the parts
   // still known: for drawing a pause's run-up, while the rules stand still. Parts
   // passed in the last few seconds are kept for this whatever keep_passed() says.
@@ -163,6 +170,7 @@ class Gameplay {
   std::vector<Part> parts_;
   std::vector<Part> passed_;     // gone from parts_, kept for drawing (oldest first)
   std::int32_t keep_passed_ = 0;
+  double trail_min_speed_ = 0;
   std::int32_t position_ = 0;  // of the last update
   std::vector<GameEvent> events_, incoming_;
   Interval start_, end_, quiet_, fade_;

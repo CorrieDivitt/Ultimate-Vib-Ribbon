@@ -586,7 +586,7 @@ TEST(disc_sces02873_settings_panel) {
   using I = SettingsPanel::Item;
   using A = SettingsPanel::Action;
   const std::vector<I> all = {I::Continue, I::WobbleSize, I::WobbleHold, I::Smooth, I::LineWidth, I::Zoom, I::ViewAngle,
-                              I::SeeAhead, I::SeeBehind, I::Recentre, I::SoundEffects, I::Vibration, I::SoundTiming, I::QuitSong,
+                              I::SeeAhead, I::SeeBehind, I::TrailSpeed, I::Recentre, I::SoundEffects, I::Vibration, I::SoundTiming, I::QuitSong,
                               I::ResumeStyle, I::Performance};
   for (int language = 0; language < 5; ++language) {
     const Pak game(iso.read("GAME/" + language_prefix(language) + "FILES.PAK"));
@@ -664,6 +664,13 @@ TEST(disc_sces02873_settings_panel) {
   for (int i = 0; i < 80; ++i) p.tick(left, 0.02, o, true);
   CHECK(o.vr_behind_seconds == 0.0);
   o.vr_ahead_seconds = o.vr_behind_seconds = 30.0;
+  // The least speed behind: steps of 0.25 down to off (the original's own motion).
+  go_to(I::TrailSpeed);
+  CHECK(p.value(I::TrailSpeed, o, true) == "1.50");
+  for (int i = 0; i < 6; ++i) p.tick(left, 0.02, o, true);
+  CHECK(o.vr_trail_min_speed == 0.0 && p.value(I::TrailSpeed, o, true) == "Off");
+  CHECK(p.tick(right, 0.02, o, true) == A::Changed && o.vr_trail_min_speed == 0.25);
+  o.vr_trail_min_speed = 1.5;
   go_to(I::ViewAngle);
   o.vr_angle = 180;
   p.tick(right, 0.02, o, true);
