@@ -1,9 +1,9 @@
 #pragma once
 // Our settings panel (not the original's): a list of the player's settings written
-// with the line font from the player's disc, used in two places. In play, the View
-// button freezes the song and shows it over the frozen course (the original has no
-// pause; its Start still asks "again?"). On the original's Options screen, down from
-// its last item moves on to ours, shown below it a few at a time.
+// with the line font from the player's disc. The View button opens it anywhere: in
+// play it freezes the song and shows it over the frozen course (the original has no
+// pause; its Start still asks "again?"); in the menus it shows beside a preview of
+// play, Vibri on a stretch of road, so every setting can be seen working.
 //
 // The labels are our own words, in the five languages of the PAL menus. The font's
 // accented letters are reached as the game's own text reaches them ("~" and a
@@ -42,6 +42,7 @@ class SettingsPanel {
     Vibration,
     SoundTiming,   // audio_offset_ms
     QuitSong,      // an action: leave the song, as Start does
+    ResumeStyle,   // resume_countdown: after a pause, rewind a little or count in
   };
   enum class Action { None, Moved, Changed, Close, Recentre, QuitSong, LeaveTop };
 
@@ -76,9 +77,11 @@ class SettingsPanel {
   // Where the labels start and the values end, across (at size 1, the screen's
   // edges are about -3080 and 3080).
   void set_columns(float label_x, float value_right) { label_x_ = label_x, value_right_ = value_right; }
-  // Just a dimmed "more settings" and a mark pointing down, at the first row's place:
-  // the Options screen's hint that ours are below its last item.
+  // Just a dimmed "More settings (View)" at the first row's place: the Options
+  // screen's hint that View opens ours.
   Hud::Layer draw_hint(std::uint32_t seed);
+  // `text` (font codes) large in the middle of the screen: the count-in's numbers.
+  Hud::Layer draw_big(const std::string& text, std::uint32_t seed);
   // The panel as a layer of its own, with its own camera. `seed`: its jitter.
   Hud::Layer draw(const Options& o, bool vr, std::uint32_t seed);
 

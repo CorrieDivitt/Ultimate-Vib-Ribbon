@@ -50,6 +50,7 @@ std::string SaveData::to_text() const {
   out << "language " << options.language << '\n';
   out << "fixed_courses " << (options.fixed_courses ? 1 : 0) << '\n';
   out << "smooth_animation " << (options.smooth_animation ? 1 : 0) << '\n';
+  out << "resume_countdown " << (options.resume_countdown ? 1 : 0) << '\n';
   std::snprintf(buf, sizeof buf, "%.3f", options.line_width);
   out << "line_width " << buf << '\n';
   std::snprintf(buf, sizeof buf, "%.3f", options.vr_line_width);
@@ -106,6 +107,7 @@ SaveData SaveData::from_text(const std::string& text) {
     else if (key == "fixed_courses") d.options.fixed_courses = parse_bool(value);
     else if (key == "language" && number >= -1 && number <= 4) d.options.language = int(number);
     else if (key == "smooth_animation") d.options.smooth_animation = parse_bool(value);
+    else if (key == "resume_countdown") d.options.resume_countdown = parse_bool(value);
     else if (key == "line_width" && number > 0) d.options.line_width = number;
     else if (key == "vr_line_width" && number > 0) d.options.vr_line_width = number;
     else if (key == "vr_zoom" && number > 0) d.options.vr_zoom = number;

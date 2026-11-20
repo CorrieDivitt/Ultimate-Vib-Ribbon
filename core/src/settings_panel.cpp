@@ -10,30 +10,33 @@ namespace vib {
 namespace {
 
 constexpr double kTau = 6.28318530717958647692;
-constexpr int kItemCount = 14;
+constexpr int kItemCount = 15;
 constexpr int kLanguages = 5;  // German, English, Spanish, French, Italian (the PAL menus)
 
 // Our own words. Order as SettingsPanel::Item.
 const char* const kLabels[kLanguages][kItemCount] = {
     // German
     {"Weiter", "Wackelgröße", "Wackeltakt", "Weiche Bewegung", "Linienstärke", "Zoom", "Blickwinkel", "Sicht nach vorn",
-     "Sicht nach hinten", "Ansicht zentrieren", "Soundeffekte", "Vibration", "Tonversatz", "Lied beenden"},
+     "Sicht nach hinten", "Ansicht zentrieren", "Soundeffekte", "Vibration", "Tonversatz", "Lied beenden", "Fortsetzen"},
     // English
     {"Continue", "Wobble size", "Wobble hold", "Smooth motion", "Line width", "Zoom", "View angle", "See ahead", "See behind",
-     "Recentre view", "Sound effects", "Vibration", "Sound timing", "Quit song"},
+     "Recentre view", "Sound effects", "Vibration", "Sound timing", "Quit song", "Resume"},
     // Spanish
     {"Continuar", "Tamaño del temblor", "Ritmo del temblor", "Movimiento suave", "Grosor de línea", "Zoom", "Ángulo de vista",
-     "Ver adelante", "Ver atrás", "Centrar vista", "Efectos de sonido", "Vibración", "Desfase de sonido", "Salir de la canción"},
+     "Ver adelante", "Ver atrás", "Centrar vista", "Efectos de sonido", "Vibración", "Desfase de sonido", "Salir de la canción", "Reanudar"},
     // French
     {"Continuer", "Taille du tremblement", "Rythme du tremblement", "Mouvement fluide", "Épaisseur des lignes", "Zoom",
      "Angle de vue", "Voir devant", "Voir derrière", "Recentrer la vue", "Effets sonores", "Vibration", "Décalage du son",
-     "Quitter la chanson"},
+     "Quitter la chanson", "Reprise"},
     // Italian
     {"Continua", "Ampiezza del tremolio", "Ritmo del tremolio", "Movimento fluido", "Spessore delle linee", "Zoom",
      "Angolo di vista", "Vista avanti", "Vista indietro", "Ricentra la vista", "Effetti sonori", "Vibrazione", "Ritardo audio",
-     "Esci dalla canzone"},
+     "Esci dalla canzone", "Ripresa"},
 };
-const char* const kMore[kLanguages] = {"Weitere Einstellungen", "More settings", "Más ajustes", "Autres réglages", "Altre impostazioni"};
+const char* const kMore[kLanguages] = {"Weitere Einstellungen (View)", "More settings (View)", "Más ajustes (View)", "Autres réglages (View)",
+                                       "Altre impostazioni (View)"};
+const char* const kRewind[kLanguages] = {"Zurückspulen", "Rewind", "Rebobinar", "Rembobiner", "Riavvolgi"};
+const char* const kCountIn[kLanguages] = {"Countdown", "Countdown", "Cuenta atrás", "Compte à rebours", "Conto alla rovescia"};
 const char* const kOn[kLanguages] = {"An", "On", "Sí", "Oui", "Sì"};
 const char* const kOff[kLanguages] = {"Aus", "Off", "No", "Non", "No"};
 
@@ -110,6 +113,7 @@ std::string SettingsPanel::value(Item item, const Options& o, bool vr) const {
     case Item::SoundEffects: return on_off(o.sound_effects);
     case Item::Vibration: return on_off(o.vibration);
     case Item::SoundTiming: std::snprintf(buf, sizeof buf, "%.0f ms", o.audio_offset_ms); break;
+    case Item::ResumeStyle: return to_font_text(o.resume_countdown ? kCountIn[l] : kRewind[l]);
     default: return {};
   }
   return buf;
@@ -146,6 +150,7 @@ bool SettingsPanel::change(Item item, int d, Options& o, bool vr) {
     case Item::SoundEffects: o.sound_effects = !o.sound_effects; return true;
     case Item::Vibration: o.vibration = !o.vibration; return true;
     case Item::SoundTiming: return step(o.audio_offset_ms, 5.0 * d, -500.0, 500.0);
+    case Item::ResumeStyle: o.resume_countdown = !o.resume_countdown; return true;
     default: return false;
   }
 }
@@ -167,7 +172,7 @@ SettingsPanel::Action SettingsPanel::tick(const Input& in, double seconds, Optio
       case Item::Continue: return Action::Close;
       case Item::Recentre: return Action::Recentre;
       case Item::QuitSong: return Action::QuitSong;
-      case Item::Smooth: case Item::SoundEffects: case Item::Vibration:
+      case Item::Smooth: case Item::SoundEffects: case Item::Vibration: case Item::ResumeStyle:
         change(item, 1, o, vr);
         return Action::Changed;
       default: return Action::None;
@@ -240,13 +245,13 @@ Hud::Layer SettingsPanel::draw_hint(std::uint32_t seed) {
   const float y = -top_ * half_height + 100.0f;
   const Rgb dim{110, 110, 110};
   write(to_font_text(kMore[table_language(language_)]), label_x_, y, 1.0f, &dim, 4, layer.lines);
-  const float x = label_x_ - 130.0f;  // a mark pointing down, before it
-  SceneLine a, b;
-  a.a = {(x - 50.0f) * size_, (y - 30.0f) * size_, 4000.0f * size_}, a.b = {x * size_, (y + 30.0f) * size_, 4000.0f * size_};
-  b.a = a.b, b.b = {(x + 50.0f) * size_, (y - 30.0f) * size_, 4000.0f * size_};
-  a.colour = b.colour = dim;
-  layer.lines.push_back(a);
-  layer.lines.push_back(b);
+  return layer;
+}
+
+Hud::Layer SettingsPanel::draw_big(const std::string& text, std::uint32_t seed) {
+  Hud::Layer layer = start_layer(seed);
+  constexpr float kScale = 4.0f;
+  write(text, -0.5f * text_width(text, kScale) + 36.0f * kScale, 0.0f, kScale, nullptr, 6, layer.lines);
   return layer;
 }
 

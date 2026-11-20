@@ -269,6 +269,29 @@ std::vector<RoadPiece> Gameplay::road_at(std::int32_t position, bool far) const 
   return out;
 }
 
+std::vector<Part> Gameplay::judged(std::int32_t from, std::int32_t to) const {
+  std::vector<Part> out;
+  for (const auto* list : {&passed_, &parts_})
+    for (const Part& p : *list)
+      if (p.done && p.time >= from && p.time < to) out.push_back(p);
+  std::stable_sort(out.begin(), out.end(), [](const Part& a, const Part& b) { return a.time < b.time; });
+  return out;
+}
+
+std::int32_t Gameplay::clear_before(std::int32_t at, std::int32_t margin, std::int32_t earliest) const {
+  std::int32_t t = at;
+  for (bool moved = true; moved && t > earliest;) {
+    moved = false;
+    for (const auto* list : {&passed_, &parts_})
+      for (const Part& p : *list)
+        if (p.time - t < margin && t - p.time < margin) {
+          t = p.time - margin;
+          moved = true;
+        }
+  }
+  return std::max(t, earliest);
+}
+
 Outcome Gameplay::update(std::int32_t position, std::uint8_t pressed, bool move_done) {
   events_ = std::move(incoming_);  // camera changes that arrived since the last update
   incoming_.clear();

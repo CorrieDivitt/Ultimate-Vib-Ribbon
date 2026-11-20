@@ -228,15 +228,6 @@ TEST(disc_sces02873_menus_flow) {
   CHECK(t.sound_effects);
   run(5, confirm);
   CHECK(!t.sound_effects);
-  // Ours: down from its last item moves on to our settings, and the screen stands still.
-  run(10, down);
-  run(10, down);
-  CHECK(!t.option_extra());
-  CHECK(run(5, down) == R::OptionMore);
-  CHECK(t.option_extra());
-  CHECK(run(5, confirm) == R::None);  // the screen takes no input meanwhile
-  t.set_option_extra(false);
-  CHECK(run(40, confirm) == R::OptionBack);  // still on its last item
   t.results_course = 1;
   t.results_rank = 2;
   t.go_to(S::Results);
@@ -594,7 +585,8 @@ TEST(disc_sces02873_settings_panel) {
   using I = SettingsPanel::Item;
   using A = SettingsPanel::Action;
   const std::vector<I> all = {I::Continue, I::WobbleSize, I::WobbleHold, I::Smooth, I::LineWidth, I::Zoom, I::ViewAngle,
-                              I::SeeAhead, I::SeeBehind, I::Recentre, I::SoundEffects, I::Vibration, I::SoundTiming, I::QuitSong};
+                              I::SeeAhead, I::SeeBehind, I::Recentre, I::SoundEffects, I::Vibration, I::SoundTiming, I::QuitSong,
+                              I::ResumeStyle};
   for (int language = 0; language < 5; ++language) {
     const Pak game(iso.read("GAME/" + language_prefix(language) + "FILES.PAK"));
     SettingsPanel p(game, language, &words);
@@ -603,6 +595,10 @@ TEST(disc_sces02873_settings_panel) {
     for (const I item : all) {
       const std::string l = p.label(item);
       CHECK(!l.empty() && l.find('?') == std::string::npos);  // every letter is in the font
+    }
+    for (const bool countdown : {false, true}) {
+      o.resume_countdown = countdown;
+      CHECK(p.value(I::ResumeStyle, o, true).find('?') == std::string::npos);
     }
     for (const bool vr : {false, true}) {
       const Hud::Layer layer = p.draw(o, vr, 1234);
@@ -620,8 +616,12 @@ TEST(disc_sces02873_settings_panel) {
     while (p.current() != item) p.tick(down, 0.02, o, true);
   };
   CHECK(p.tick(confirm, 0.02, o, true) == A::Close);  // Continue
-  CHECK(p.tick(up, 0.02, o, true) == A::Moved && p.current() == I::QuitSong);  // wraps in play
+  CHECK(p.tick(up, 0.02, o, true) == A::Moved && p.current() == I::ResumeStyle);  // wraps in play
+  CHECK(!o.resume_countdown && p.tick(confirm, 0.02, o, true) == A::Changed && o.resume_countdown);
+  CHECK(p.value(I::ResumeStyle, o, true) == "Countdown");
+  p.tick(up, 0.02, o, true);
   CHECK(p.tick(confirm, 0.02, o, true) == A::QuitSong);
+  CHECK(!p.draw_big("3", 1).lines.empty() && !p.draw_hint(1).lines.empty());
   go_to(I::WobbleSize);
   CHECK(p.tick(right, 0.02, o, true) == A::Changed && std::abs(o.vr_jitter_scale - 1.1) < 1e-9);
   CHECK(o.jitter_scale == 1.0);  // the monitor's own is left alone

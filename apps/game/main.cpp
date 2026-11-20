@@ -387,14 +387,74 @@ std::vector<SettingsPanel::Item> pause_items(bool vr) {
   using I = SettingsPanel::Item;
   if (vr)
     return {I::Continue, I::WobbleSize, I::WobbleHold, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind,
-            I::Recentre, I::SoundEffects, I::Vibration, I::SoundTiming, I::QuitSong};
-  return {I::Continue, I::WobbleSize, I::Smooth, I::LineWidth, I::SoundEffects, I::Vibration, I::SoundTiming, I::QuitSong};
+            I::Recentre, I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle, I::QuitSong};
+  return {I::Continue, I::WobbleSize, I::Smooth, I::LineWidth, I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle, I::QuitSong};
 }
-std::vector<SettingsPanel::Item> option_items(bool vr) {
+std::vector<SettingsPanel::Item> menu_items(bool vr) {
   using I = SettingsPanel::Item;
-  if (vr) return {I::WobbleSize, I::WobbleHold, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind, I::Recentre, I::SoundTiming};
-  return {I::WobbleSize, I::Smooth, I::LineWidth, I::SoundTiming};
+  if (vr)
+    return {I::WobbleSize, I::WobbleHold, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind, I::Recentre,
+            I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle};
+  return {I::WobbleSize, I::Smooth, I::LineWidth, I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle};
 }
+
+// Scene lines to the renderer's, jittered as play does: in a headset afresh every
+// `hold` of its frames, on the monitor the original's 50 Hz jitter scaled.
+void to_instances(const Session& s, const std::vector<SceneLine>& in, std::uint32_t display_frame, std::vector<vibr::LineInstance>& out) {
+  out.clear();
+  const Options& o = s.save.options;
+  for (const SceneLine& l : in) {
+    Vec3f a, b;
+    if (s.opt.vr) {
+      const auto frame = display_frame / std::uint32_t(o.vr_jitter_hold);
+      a = headset_jitter(l.a, l.jitter_a, l.vertex_a, l.shake_a * float(o.vr_jitter_scale), frame);
+      b = headset_jitter(l.b, l.jitter_b, l.vertex_b, l.shake_b * float(o.vr_jitter_scale), frame);
+    } else {
+      a = scaled_jitter(l.a, l.jitter_a, o.jitter_scale);
+      b = scaled_jitter(l.b, l.jitter_b, o.jitter_scale);
+    }
+    out.push_back({{a.x, a.y, a.z}, {b.x, b.y, b.z}, {l.colour.r / 255.0f, l.colour.g / 255.0f, l.colour.b / 255.0f, 1.0f}});
+  }
+}
+
+// The menus' settings screen shows play beside the settings: Vibri walking a road of
+// obstacles that never ends, seen as in play (in a headset from beside her, with the
+// zoom and angle set, the road as far ahead and behind as set), clearing each piece as
+// it reaches her, so every setting can be seen at work. Ours: the pieces come round in
+// a fixed made-up order.
+struct PlayPreview {
+  double t = 0;
+  void start(Session& s) {
+    t = 0;
+    s.scene.reset(true, false);
+  }
+  void draw(Session& s, double dt, std::uint32_t jitter_seed, std::vector<SceneLine>& lines, SceneView& view) {
+    constexpr double kSpeed = 2.0;    // part lengths a second
+    constexpr double kSpacing = 2.5;  // part lengths between pieces
+    const double before = t * kSpeed;
+    t += std::min(dt, 0.1);
+    const double now = t * kSpeed;
+    const Options& o = s.save.options;
+    const double ahead = s.opt.vr ? o.vr_ahead_seconds * kSpeed : 14.0, behind = s.opt.vr ? o.vr_behind_seconds * kSpeed : 3.0;
+    Scene::Frame f;
+    f.seconds = dt;
+    f.jitter_seed = jitter_seed;
+    f.speed = Fixed::from(kSpeed);
+    const auto first = std::max<long long>(1, (long long)std::ceil((now - behind) / kSpacing));
+    const auto last = (long long)std::floor((now + ahead) / kSpacing);
+    for (long long k = first; k <= last; ++k) {
+      const double x = double(k) * kSpacing;
+      const int road = int((std::uint32_t(k) * 2654435761u >> 13) % 4);
+      if (x > before && x <= now) {  // it reaches her: she clears it
+        s.scene.set_move(road, false);
+        if (o.sound_effects) s.fx.number(16 + road, 100, 3);
+      }
+      f.road.push_back({road, Fixed::from(x - now + 1.25), false, false});  // (Vibri stands 1.25 along)
+    }
+    s.scene.draw(f, lines, view);
+    if (s.opt.vr) view = vr_play_view(s.scene.vibri_z(), float(o.vr_zoom), o.vr_angle);
+  }
+};
 
 // Left or right held now, on the keyboard or any gamepad's d-pad (for the panel's repeat).
 void held_directions(Session& s, SettingsPanel::Input& in) {
@@ -427,6 +487,25 @@ std::uint8_t trigger_pulled(Session& s, const SDL_GamepadAxisEvent& a) {
   }
   if (a.value < 8000) held = std::uint8_t(held & ~bit);
   return 0;
+}
+
+// After a pause, the tape-rewind sound: the music from `to` back to `from` (heard
+// samples; `out` starts at `start`, 2 stereo frames at 44.1 kHz per heard sample),
+// backwards and fast, quieter, faded in and out.
+std::vector<std::int16_t> rewind_sound(const std::vector<std::int16_t>& out, std::int32_t start, std::int32_t from, std::int32_t to,
+                                       double seconds) {
+  const std::int64_t first = std::int64_t(from - start) * 2, last = std::int64_t(to - start) * 2;
+  const std::int64_t frames = std::int64_t(seconds * 44100.0), total = std::int64_t(out.size() / 2);
+  const std::int64_t fade = 441;  // 10 ms
+  std::vector<std::int16_t> r;
+  r.reserve(std::size_t(frames) * 2);
+  for (std::int64_t i = 0; i < frames; ++i) {
+    const std::int64_t f = last - (last - first) * i / std::max<std::int64_t>(1, frames);
+    const double gain = 0.4 * double(std::min({i, frames - 1 - i, fade})) / double(fade);
+    for (int c = 0; c < 2; ++c)
+      r.push_back(f >= 0 && f < total ? std::int16_t(double(out[std::size_t(f * 2 + c)]) * gain) : std::int16_t(0));
+  }
+  return r;
 }
 
 Result play_song(Session& s, int song, int track_index, int& points, std::uint32_t seed) {
@@ -588,11 +667,20 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   };
 
   // Ours, not the original's (it has no pause): View (or P / Tab) freezes the song and
-  // shows the settings over the frozen course. Going on, the music starts 2 s before
-  // where it stopped and the road runs back up to there, the rules standing still
-  // and presses ignored until the music reaches it again.
-  bool paused = false, running_up = false, pause = false, resume = false;
-  std::int32_t pause_at = 0;
+  // shows the settings over the frozen course. Going on, as the Resume setting says:
+  // Rewind runs the road back about 2 s, to where no part is at Vibri, with a
+  // tape-rewind sound, then plays from there with Vibri clearing again what she had
+  // cleared, the rules standing still and presses ignored until the music is back
+  // where it stopped; Countdown counts 3, 2, 1 over the frozen course and goes on
+  // from the same place.
+  enum class Going { No, Rewinding, Counting, RunUp };
+  bool paused = false, pause = false, resume = false;
+  Going going = Going::No;
+  double going_t = 0, rewind_seconds = 0;
+  std::int32_t pause_at = 0, run_from = 0;
+  std::vector<Part> replay;
+  std::size_t replayed = 0;
+  constexpr double kCountStep = 0.5;  // seconds per number of the count-in
   SettingsPanel::Input pin;
   Hud::Layer panel_layer;
   std::vector<vibr::LineInstance> panel_lines;
@@ -690,7 +778,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     zoom_with_stick(s, dt, s.save.options.vr_zoom);
     last_ns = now_ns;
 
-    if (pause && !paused && s.panel) {
+    if (pause && !paused && going == Going::No && s.panel) {
       paused = true;
       pause_at = last_position;
       s.audio.play_music({});
@@ -720,24 +808,62 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
       }
       if (resume) {
         paused = false;
-        running_up = true;
-        const std::int32_t from = std::max(music_start, pause_at - 2 * kSampleRate);
-        const std::size_t first = std::min(out.size(), std::size_t(from - music_start) * 4);  // 2 stereo frames per heard sample
-        s.audio.play_music(std::vector<std::int16_t>(out.begin() + std::ptrdiff_t(first), out.end()));
-        buffer_start = from;
+        going_t = 0;
+        if (s.save.options.resume_countdown) {
+          going = Going::Counting;
+          s.fx.number(1, 90, 5);
+        } else {
+          going = Going::Rewinding;
+          const std::int32_t earliest = std::max(music_start, pause_at - 6 * kSampleRate);
+          run_from = game.clear_before(std::max(earliest, pause_at - 2 * kSampleRate), kSampleRate * 2 / 5, earliest);
+          rewind_seconds = std::clamp(double(pause_at - run_from) / kSampleRate * 0.35, 0.5, 1.5);
+          s.audio.play_music(rewind_sound(out, music_start, run_from, pause_at, rewind_seconds));
+          replay = game.judged(run_from, pause_at);
+          replayed = 0;
+          std::printf("Going on from %.1f s earlier\n", double(pause_at - run_from) / kSampleRate);
+        }
         if (s.write_save) s.write_save();
-        std::printf("Going on from %.1f s earlier\n", double(pause_at - from) / kSampleRate);
       }
     }
     resume = false;
+    // The rewind or the count-in over, the music goes on: from where the road was run
+    // back to, or from where it stopped.
+    if (going == Going::Rewinding || going == Going::Counting) {
+      const double before = going_t;
+      going_t += dt;
+      if (going == Going::Counting && going_t < 3 * kCountStep && int(going_t / kCountStep) != int(before / kCountStep))
+        s.fx.number(1, 90, 5);  // a click for each number
+      if (going_t >= (going == Going::Rewinding ? rewind_seconds : 3 * kCountStep)) {
+        const std::int32_t from = going == Going::Rewinding ? run_from : pause_at;
+        const std::size_t first = std::min(out.size(), std::size_t(from - music_start) * 4);  // 2 stereo frames per heard sample
+        s.audio.play_music(std::vector<std::int16_t>(out.begin() + std::ptrdiff_t(first), out.end()));
+        buffer_start = from;
+        going = going == Going::Rewinding ? Going::RunUp : Going::No;
+      }
+    }
 
     // Heard position, 22.05 kHz samples from the song's start (negative during the 8 s ahead).
     auto heard_at = [&](std::uint64_t ns) {
       return static_cast<std::int32_t>(std::floor(s.audio.heard_frame_at(now_ns, ns) / 2.0)) + buffer_start;
     };
-    const std::int32_t raw = paused ? pause_at : heard_at(now_ns);
-    if (running_up && raw >= pause_at) running_up = false;
-    const bool frozen = paused || running_up;  // the rules stand still
+    std::int32_t raw = pause_at;
+    if (going == Going::Rewinding) {  // eased back from where it stopped
+      const double u = std::clamp(going_t / rewind_seconds, 0.0, 1.0);
+      raw = pause_at - static_cast<std::int32_t>(double(pause_at - run_from) * u * u * (3.0 - 2.0 * u));
+    } else if (!paused && going != Going::Counting) {
+      raw = heard_at(now_ns);
+    }
+    if (going == Going::RunUp) {
+      // Vibri clears again what she had cleared, as the music reaches it.
+      for (; replayed < replay.size() && replay[replayed].time <= raw; ++replayed) {
+        const Part& p = replay[replayed];
+        if (p.missed) continue;
+        s.scene.set_move(p.road, false);
+        if (effects_on) s.fx.number(16 + p.road, 127, 3);
+      }
+      if (raw >= pause_at) going = Going::No;
+    }
+    const bool frozen = paused || going != Going::No;  // the rules stand still
     const std::int32_t heard = frozen ? last_position : std::max(raw, last_position);
     const std::int32_t view_at = frozen ? std::min(raw, pause_at) : heard;  // where the road is drawn
     if (frozen) presses.clear();
@@ -763,7 +889,8 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
 
     // Draw. The jitter changes at the original's 50 Hz, whatever the display does.
     Scene::Frame f;
-    f.seconds = paused ? 0.0 : dt;
+    const bool still_frame = paused || going == Going::Rewinding || going == Going::Counting;  // Vibri waits
+    f.seconds = still_frame ? 0.0 : dt;
     f.jitter_seed = next_random(static_cast<std::uint32_t>(double(now_ns - start_ns) * 1e-9 * kOriginalRefresh) * 2654435761u);
     f.speed = game.speed();
     f.road = frozen ? game.road_at(view_at, s.opt.vr) : game.road(s.opt.vr);
@@ -823,7 +950,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
 
     // The meters and the sign, each through its own camera, over the scene.
     Hud::Frame h;
-    h.seconds = paused ? 0.0 : dt;
+    h.seconds = still_frame ? 0.0 : dt;
     h.jitter_seed = next_random(f.jitter_seed);
     h.score = game.score();
     h.combo = game.combo();
@@ -836,8 +963,9 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
       convert(hud_layers[i].lines, hud_lines[i]);
       layers.push_back({&hud_lines[i], matrix(hud_layers[i].view), hud_layers[i].view.fov_y});
     }
-    if (paused) {  // the settings, over everything
-      panel_layer = s.panel->draw(s.save.options, s.opt.vr, f.jitter_seed);
+    if (paused || going == Going::Counting) {  // the settings, or the count-in's number, over everything
+      panel_layer = paused ? s.panel->draw(s.save.options, s.opt.vr, f.jitter_seed)
+                           : s.panel->draw_big(std::to_string(3 - std::min(2, int(going_t / kCountStep))), f.jitter_seed);
       convert(panel_layer.lines, panel_lines);
       layers.push_back({&panel_lines, matrix(panel_layer.view), panel_layer.view.fov_y});
     }
@@ -1133,6 +1261,11 @@ int run(int argc, char** argv) {
         prev_layers.clear();
         std::printf("Demo: the kiosk movie\n");
       };
+      // Ours: View (or P / Tab) opens the settings anywhere in the menus, beside a preview of play.
+      bool in_settings = false, toggle_settings = false;
+      PlayPreview preview;
+      std::vector<SceneLine> preview_lines;
+      std::vector<vibr::LineInstance> settings_lines[2];
       std::uint64_t last_ns = SDL_GetTicksNS();
       double behind = 0;
       bool course_chosen = false, running = true, replay = false;
@@ -1161,6 +1294,7 @@ int run(int argc, char** argv) {
                 case SDLK_RIGHT: case SDLK_D: press(3, down); break;
                 case SDLK_RETURN: case SDLK_SPACE: case SDLK_Z: press(4, down); break;
                 case SDLK_ESCAPE: case SDLK_BACKSPACE: case SDLK_X: press(5, down); break;
+                case SDLK_P: case SDLK_TAB: if (down) toggle_settings = true; break;
                 case SDLK_MINUS: case SDLK_EQUALS:
                   if (down) {
                     change_line_width(s, e.key.key == SDLK_EQUALS);
@@ -1197,6 +1331,7 @@ int run(int argc, char** argv) {
                 case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: press(3, down); break;
                 case SDL_GAMEPAD_BUTTON_SOUTH: case SDL_GAMEPAD_BUTTON_START: press(4, down); break;
                 case SDL_GAMEPAD_BUTTON_EAST: case SDL_GAMEPAD_BUTTON_NORTH: press(5, down); break;
+                case SDL_GAMEPAD_BUTTON_BACK: if (down) toggle_settings = true; break;  // View: our settings
                 case SDL_GAMEPAD_BUTTON_RIGHT_STICK: if (down) renderer.recentre(); break;  // R3
                 case SDL_GAMEPAD_BUTTON_LEFT_STICK:  // L3
                   if (down) {
@@ -1213,7 +1348,27 @@ int run(int argc, char** argv) {
         }
         if (!running) break;
         const std::uint64_t now_ns = SDL_GetTicksNS();
-        zoom_with_stick(s, double(now_ns - last_ns) * 1e-9, s.save.options.vr_menu_zoom);
+        const double frame_dt = double(now_ns - last_ns) * 1e-9;
+        if (toggle_settings && !in_kiosk) {
+          toggle_settings = false;
+          in_settings = !in_settings;
+          if (in_settings) {
+            panel.set_items(menu_items(opt.vr));
+            panel.set_wraps(true);
+            panel.set_active(true);
+            preview.start(s);
+          } else {
+            title.sound_effects = save.options.sound_effects;
+            title.vibration = save.options.vibration;
+            write_save();
+          }
+          s.fx.number(1, 90, 5);
+          prev_layers.clear();
+          pressed = {};
+        }
+        toggle_settings = false;
+        // (In the settings the right stick zooms play's view, which the preview shows.)
+        zoom_with_stick(s, frame_dt, in_settings ? s.save.options.vr_zoom : s.save.options.vr_menu_zoom);
         behind = std::min(behind + double(now_ns - last_ns) * 1e-9, 0.1);
         last_ns = now_ns;
         while (behind >= 1.0 / TitleScreens::kFrameRate) {
@@ -1224,6 +1379,22 @@ int run(int argc, char** argv) {
           pressed = {};
           in.voices_playing = voices.playing();
           in.music_playing = music.playing();
+          if (in_settings) {
+            // The menus stand still meanwhile (their music goes on).
+            SettingsPanel::Input pi;
+            pi.up = in.up, pi.down = in.down, pi.left = in.left, pi.right = in.right;
+            pi.confirm = in.confirm, pi.cancel = in.cancel;
+            held_directions(s, pi);
+            const SettingsPanel::Action act = panel.tick(pi, 1.0 / TitleScreens::kFrameRate, save.options, opt.vr);
+            panel_sound(s, act);
+            if (act == SettingsPanel::Action::Changed) apply_settings(s);
+            if (act == SettingsPanel::Action::Recentre) renderer.recentre();
+            if (act == SettingsPanel::Action::Close) toggle_settings = true;
+            idle_ticks = 0;
+            music.update();
+            voices.update();
+            continue;
+          }
           if (in_kiosk) {
             KioskMovie::Input ki;
             ki.confirm = in.confirm || in.cancel;
@@ -1302,53 +1473,11 @@ int run(int argc, char** argv) {
             if (!running) break;
             continue;
           }
-          if (title.option_extra()) {
-            // Our settings below the Options screen have the cursor; the screen stands still.
-            SettingsPanel::Input pi;
-            pi.up = in.up, pi.down = in.down, pi.left = in.left, pi.right = in.right;
-            pi.confirm = in.confirm, pi.cancel = in.cancel;
-            held_directions(s, pi);
-            const SettingsPanel::Action act = panel.tick(pi, 1.0 / TitleScreens::kFrameRate, save.options, opt.vr);
-            panel_sound(s, act);
-            switch (act) {
-              case SettingsPanel::Action::Changed:
-                apply_settings(s);
-                write_save();
-                break;
-              case SettingsPanel::Action::Recentre: renderer.recentre(); break;
-              case SettingsPanel::Action::Close: case SettingsPanel::Action::LeaveTop:
-                title.set_option_extra(false);  // back to the original's last item
-                panel.set_active(false);
-                panel.home();
-                panel.set_place(-0.8f, 1, 0.65f);
-                break;
-              default: break;
-            }
-            const bool voices_playing = in.voices_playing, music_playing = in.music_playing;
-            in = {};
-            in.voices_playing = voices_playing, in.music_playing = music_playing;
-          }
           const R r = title.tick(in);
           switch (r) {
             case R::PsjModes: title.go_to(S::PsjModeSelect); break;
             case R::UnknownModes: std::printf("Courses from your own music come later.\n"); break;
-            case R::Options:
-              title.go_to(S::Option);
-              // Ours after the original's items: a dimmed "more settings" at the bottom left
-              // until down from its last item, then the list in place of its menu, left of
-              // Vibri (she sits at the lower right). In a headset as deep as the menu's text.
-              panel.set_items(option_items(opt.vr));
-              panel.set_wraps(false);
-              panel.set_active(false);
-              panel.set_place(-0.8f, 1, 0.65f);
-              panel.set_columns(-1850.0f, 450.0f);
-              break;
-            case R::OptionMore:
-              panel.set_active(true);
-              panel.home();
-              panel.set_place(0.75f, 10, 0.65f);
-              s.fx.number(1, 50, 5);
-              break;
+            case R::Options: title.go_to(S::Option); break;
             // The original's "leave" goes back to its title screen (close the window to quit).
             case R::Leave:
               music.stop();
@@ -1438,6 +1567,29 @@ int run(int argc, char** argv) {
           behind = 0;
           continue;
         }
+        if (in_settings) {
+          // Play's preview and the settings beside it (left of the road).
+          ++menu_display_frame;
+          SceneView view;
+          const auto jitter_seed = next_random(static_cast<std::uint32_t>(double(now_ns) * 1e-9 * kOriginalRefresh) * 2654435761u);
+          preview.draw(s, frame_dt, jitter_seed, preview_lines, view);
+          // Beside Vibri, not over her: on the monitor the original's camera has her at the
+          // right, so the settings go left; in a headset she is on the side the view is
+          // not (seen from her right she is to the left), so they go on the other.
+          panel.set_place(0.6f, 14, opt.vr ? 0.25f : 1.0f);
+          if (opt.vr && save.options.vr_angle >= 0) panel.set_columns(600.0f, 3000.0f);
+          else if (opt.vr) panel.set_columns(-3000.0f, -600.0f);
+          else panel.set_columns(-2900.0f, -500.0f);
+          const Hud::Layer pl = panel.draw(save.options, opt.vr, next_random(jitter_seed));
+          to_instances(s, preview_lines, menu_display_frame, settings_lines[0]);
+          to_instances(s, pl.lines, menu_display_frame, settings_lines[1]);
+          auto matrix = [](const SceneView& v) {
+            return vibr::look_at({v.eye.x, v.eye.y, v.eye.z}, {v.target.x, v.target.y, v.target.z}, {0, -1, 0});
+          };
+          const std::vector<vibr::Layer> out{{&settings_lines[0], matrix(view), view.fov_y}, {&settings_lines[1], matrix(pl.view), pl.view.fov_y}};
+          renderer.draw(out, float(s.line_width * std::max(1, renderer.height()) / 288.0));
+          continue;
+        }
         // Draw the last frame the title or the menus made.
         const auto& layers = in_kiosk ? kiosk->layers() : at_title ? intro.layers() : title.layers();
         std::vector<vibr::Layer> out;
@@ -1455,12 +1607,13 @@ int run(int argc, char** argv) {
           return Vec3f{b.x + (n.x - b.x) * alpha + now_jitter.x, b.y + (n.y - b.y) * alpha + now_jitter.y,
                        b.z + (n.z - b.z) * alpha + now_jitter.z};
         };
-        // Ours below the Options screen's items, drawn as its other layers are.
+        // On the Options screen, the hint that View opens our settings, drawn as its other layers are.
         const bool show_panel = !in_kiosk && !at_title && title.screen() == S::Option;
         Hud::Layer panel_layer;
-        if (show_panel) {
-          const std::uint32_t panel_seed = next_random(menu_display_frame * 2654435761u);
-          panel_layer = title.option_extra() ? panel.draw(save.options, opt.vr, panel_seed) : panel.draw_hint(panel_seed);
+        if (show_panel) {  // a dimmed "More settings (View)" at the bottom left, away from Vibri and the menu
+          panel.set_place(-0.8f, 1, 0.65f);
+          panel.set_columns(-1850.0f, 450.0f);
+          panel_layer = panel.draw_hint(next_random(menu_display_frame * 2654435761u));
         }
         menu_lines.resize(layers.size() + 1);
         for (std::size_t i = 0; i < layers.size() + (show_panel ? 1 : 0); ++i) {

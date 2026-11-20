@@ -352,3 +352,19 @@ TEST(the_road_as_it_was_two_seconds_ago_for_a_pause_run_up) {
   const auto now = r.g.road(), same = r.g.road_at(r.now - kStep);
   CHECK(now.size() == same.size());
 }
+
+TEST(after_a_pause_vibri_starts_clear_of_parts_and_replays_what_was_judged) {
+  Run r;
+  for (int i = 1; i <= 8; ++i) r.g.add_event(part(22050 * i, i % 4));  // one a second
+  r.press_at(22050, road_presses(1));
+  r.run_to(22050 * 5 + 11025);
+  // Back 2 s from 5.5 s is 3.5 s: half way between parts, clear with a 0.4 s margin.
+  CHECK(r.g.clear_before(22050 * 7 / 2, 22050 * 2 / 5, 0) == 22050 * 7 / 2);
+  // From 3.1 s the part at 3 s is too near: it moves back to 2.6 s.
+  CHECK(r.g.clear_before(22050 * 31 / 10, 22050 * 2 / 5, 0) == 22050 * 3 - 22050 * 2 / 5);
+  // Never before the earliest allowed.
+  CHECK(r.g.clear_before(22050 * 31 / 10, 22050 * 2 / 5, 22050 * 3) == 22050 * 3);
+  const auto done = r.g.judged(0, 22050 * 5 + 11025);
+  CHECK(done.size() == 5);  // 1 to 5 s, every one judged (the first hit, the rest missed)
+  CHECK(!done.empty() && !done[0].missed && done.back().missed && done[0].time < done.back().time);
+}

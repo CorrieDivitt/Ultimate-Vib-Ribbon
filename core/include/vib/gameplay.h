@@ -90,7 +90,7 @@ class Gameplay {
  public:
   static constexpr int kMaxScore = 116279;
   static constexpr std::int32_t kOriginalVideoDelay = 882;
-  static constexpr std::int32_t kKeepForRewind = 3 * kSampleRate;  // parts passed in the last 3 s stay known (a pause rewinds 2)
+  static constexpr std::int32_t kKeepForRewind = 8 * kSampleRate;  // parts passed in the last 8 s stay known (a pause rewinds 2 or more)
 
   explicit Gameplay(float distance = 10.0f, float vibri_position = 1.25f, float beats_per_second = 2.0f);
 
@@ -118,6 +118,12 @@ class Gameplay {
   // still known: for drawing a pause's run-up, while the rules stand still. Parts
   // passed in the last few seconds are kept for this whatever keep_passed() says.
   std::vector<RoadPiece> road_at(std::int32_t position, bool far = false) const;
+  // Parts already judged whose times are in [from, to), oldest first: for the run-up
+  // to replay Vibri's moves over them.
+  std::vector<Part> judged(std::int32_t from, std::int32_t to) const;
+  // The latest position at or before `at` with no known part within `margin`
+  // samples of it (so Vibri does not start inside one), but not before `earliest`.
+  std::int32_t clear_before(std::int32_t at, std::int32_t margin, std::int32_t earliest) const;
   // A part play has not been given yet (built further ahead, for drawing), placed
   // where play would put it at `position`; false if play would not take it.
   bool preview(const CourseEvent& e, std::int32_t position, RoadPiece& out) const;
