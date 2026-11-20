@@ -296,6 +296,26 @@ void zoom_with_stick(Session& s, double seconds, double& zoom) {
 // Returns the press for play, 0 for none.
 std::uint8_t trigger_pulled(Session& s, const SDL_GamepadAxisEvent& a);
 
+// In a headset the lines jitter afresh every frame of its own (owner's choice),
+// not at the original's 50 Hz: each end loses its frame's jitter and gets a new
+// one, as wide, from its vertex and the display frame, so lines through the same
+// vertex still meet.
+Vec3f headset_jitter(Vec3f p, Vec3f old_jitter, std::uint32_t vertex, float shake, std::uint32_t frame) {
+  const Vec3f base{p.x - old_jitter.x, p.y - old_jitter.y, p.z - old_jitter.z};
+  if (shake <= 0 || vertex == 0) return base;
+  std::uint32_t h = vertex * 0x9E3779B1u ^ (frame + 1) * 0x85EBCA77u;
+  auto next = [&h] {
+    h ^= h >> 16;
+    h *= 0x7FEB352Du;
+    h ^= h >> 15;
+    h *= 0x846CA68Bu;
+    h ^= h >> 16;
+    return float(double(h) / 4294967296.0 * 2.0 - 1.0);  // [-1, 1)
+  };
+  const float dx = next(), dy = next(), dz = next();
+  return {base.x + dx * shake, base.y + dy * shake, base.z + dz * shake};
+}
+
 // Thicker or thinner lines, saved for the display in use. In a headset each step is
 // a quarter more or less, with the confirm click so it can be heard without a console.
 void change_line_width(Session& s, bool thicker) {
@@ -432,6 +452,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   double title_timer = 0;
   std::vector<PressEvent> presses;
   std::vector<SceneLine> scene_lines;
+  std::uint32_t display_frame = 0;
   std::vector<vibr::LineInstance> lines;
   std::vector<Hud::Layer> hud_layers;
   std::vector<std::vector<vibr::LineInstance>> hud_lines;
@@ -590,10 +611,17 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     SceneView view;
     s.scene.draw(f, scene_lines, view);
     if (s.opt.vr) view = vr_play_view(s.scene.vibri_z(), float(s.save.options.vr_zoom), s.save.options.vr_angle);
-    auto convert = [](const std::vector<SceneLine>& in, std::vector<vibr::LineInstance>& dst) {
+    ++display_frame;
+    auto convert = [&](const std::vector<SceneLine>& in, std::vector<vibr::LineInstance>& dst) {
       dst.clear();
-      for (const SceneLine& l : in)
-        dst.push_back({{l.a.x, l.a.y, l.a.z}, {l.b.x, l.b.y, l.b.z}, {l.colour.r / 255.0f, l.colour.g / 255.0f, l.colour.b / 255.0f, 1.0f}});
+      for (const SceneLine& l : in) {
+        Vec3f a = l.a, b = l.b;
+        if (s.opt.vr) {  // jittered afresh every headset frame
+          a = headset_jitter(l.a, l.jitter_a, l.vertex_a, l.shake_a, display_frame);
+          b = headset_jitter(l.b, l.jitter_b, l.vertex_b, l.shake_b, display_frame);
+        }
+        dst.push_back({{a.x, a.y, a.z}, {b.x, b.y, b.z}, {l.colour.r / 255.0f, l.colour.g / 255.0f, l.colour.b / 255.0f, 1.0f}});
+      }
     };
     auto matrix = [](const SceneView& v) {
       return vibr::look_at({v.eye.x, v.eye.y, v.eye.z}, {v.target.x, v.target.y, v.target.z}, {0, -1, 0});
@@ -872,6 +900,7 @@ int run(int argc, char** argv) {
       TitleScreens::Input pressed, held;
       std::vector<std::vector<vibr::LineInstance>> menu_lines;
       std::vector<Hud::Layer> prev_layers;
+      std::uint32_t menu_display_frame = 0;
       std::uint64_t last_ns = SDL_GetTicksNS();
       double behind = 0;
       bool course_chosen = false, running = true, replay = false;
@@ -1079,6 +1108,7 @@ int run(int argc, char** argv) {
         // this one's (shown a frame late), its jitter still this frame's, as play's is.
         // A layer whose lines changed (another model, another screen) is shown as it is.
         const bool blend = Clip::smooth() && prev_layers.size() == layers.size();
+        ++menu_display_frame;
         const float alpha = float(std::clamp(behind * TitleScreens::kFrameRate, 0.0, 1.0));
         auto mix = [&](Vec3f now, Vec3f now_jitter, Vec3f before, Vec3f before_jitter) {
           const Vec3f n{now.x - now_jitter.x, now.y - now_jitter.y, now.z - now_jitter.z};
@@ -1097,6 +1127,10 @@ int run(int argc, char** argv) {
               const SceneLine& p = before->lines[k];
               a = mix(l.a, l.jitter_a, p.a, p.jitter_a);
               b = mix(l.b, l.jitter_b, p.b, p.jitter_b);
+            }
+            if (opt.vr) {  // jittered afresh every headset frame (the blend kept this frame's jitter in a and b)
+              a = headset_jitter(a, l.jitter_a, l.vertex_a, l.shake_a, menu_display_frame);
+              b = headset_jitter(b, l.jitter_b, l.vertex_b, l.shake_b, menu_display_frame);
             }
             menu_lines[i].push_back({{a.x, a.y, a.z}, {b.x, b.y, b.z}, {l.colour.r / 255.0f, l.colour.g / 255.0f, l.colour.b / 255.0f, 1.0f}});
           }

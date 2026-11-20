@@ -368,6 +368,13 @@ void LineBuilder::object(const TmdObject& obj, const Xform& xf, int range, std::
     if (faces_away(view_, vtx(0), vtx(1), vtx(2))) return;
   }
   std::vector<Vec3f> work(obj.vertices.size()), shake(obj.vertices.size());
+  // The object's size in the world, for its jitter range there.
+  auto length = [](float x, float y, float z) { return std::sqrt(x * x + y * y + z * z); };
+  const float scale = (length(xf.m.m[0][0], xf.m.m[1][0], xf.m.m[2][0]) + length(xf.m.m[0][1], xf.m.m[1][1], xf.m.m[2][1]) +
+                       length(xf.m.m[0][2], xf.m.m[1][2], xf.m.m[2][2])) / 3.0f;
+  const float reach = float(std::max(range, 0)) * scale;
+  const std::uint32_t first = next_vertex_;
+  next_vertex_ += std::uint32_t(obj.vertices.size());
   for (std::size_t i = 0; i < obj.vertices.size(); ++i) {
     const std::int32_t dx = offset(range), dy = offset(range), dz = offset(range);
     const Vec3s& v = obj.vertices[i];
@@ -375,13 +382,17 @@ void LineBuilder::object(const TmdObject& obj, const Xform& xf, int range, std::
     shake[i] = xf.m.apply({float(dx), float(dy), float(dz)});
   }
   for (const TmdLine& l : obj.lines)
-    out.push_back({world(work[l.a]), world(work[l.b]), colour_override ? *colour_override : l.colour_a, shake[l.a], shake[l.b]});
+    out.push_back({world(work[l.a]), world(work[l.b]), colour_override ? *colour_override : l.colour_a, shake[l.a], shake[l.b],
+                   first + l.a, first + l.b, reach, reach});
   if (join && !work.empty()) {
     // A line from the previous object's last vertex (kept in its own local
     // coordinates, as the original does) to this object's first.
     const Rgb colour = obj.lines.empty() ? Rgb{255, 255, 255} : obj.lines.front().colour_a;
-    out.push_back({world(*join), world(work.front()), colour, {}, shake.front()});
+    out.push_back({world(*join), world(work.front()), colour, {}, shake.front(), join_vertex_ ? join_vertex_ : first, first,
+                   join_vertex_ ? join_shake_ : 0.0f, reach});
     *join = work.back();
+    join_vertex_ = first + std::uint32_t(obj.vertices.size()) - 1;
+    join_shake_ = reach;
   }
 }
 

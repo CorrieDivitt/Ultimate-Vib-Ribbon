@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <map>
 #include <string>
 
 #include "test.h"
@@ -486,4 +487,31 @@ TEST(disc_sces02873_language_files_named_as_the_original) {
   const Pak title(iso.read("TITLE/FILES.PAK"));
   CHECK(localized(title, "MENU/MODE/MODE.TMD", 0) == "MENU/MODE/04_MODE.TMD");
   CHECK(localized(title, "MENU/MODE/MODE.TMD", 4) == "MENU/MODE/20_MODE.TMD");
+}
+
+TEST(disc_sces02873_line_ends_know_their_vertex_for_fresh_jitter) {
+  const std::string cue = test_cue();
+  if (cue.empty()) SKIP("set VIB_TEST_CUE to your SCES-02873 .cue to run");
+  DiscImage disc = DiscImage::open(path_from_utf8(cue));
+  Iso9660 iso(disc);
+  const Pak game(iso.read("GAME/02_FILES.PAK"));
+  TitleScreens t(game);
+  t.go_to(TitleScreens::Screen::Main);
+  for (int i = 0; i < 60; ++i) t.tick({});
+  std::size_t lines = 0, shaking = 0;
+  for (const auto& layer : t.layers()) {
+    std::map<std::uint32_t, Vec3f> place;  // a vertex is at one place within a frame
+    for (const SceneLine& l : layer.lines) {
+      ++lines;
+      CHECK(l.vertex_b != 0);
+      shaking += l.shake_b > 0;
+      for (const auto& [v, p] : {std::pair{l.vertex_a, l.a}, std::pair{l.vertex_b, l.b}}) {
+        if (v == 0) continue;
+        const auto it = place.find(v);
+        if (it == place.end()) place[v] = p;
+        else CHECK(it->second.x == p.x && it->second.y == p.y && it->second.z == p.z);
+      }
+    }
+  }
+  CHECK(lines > 100 && shaking > 0);
 }

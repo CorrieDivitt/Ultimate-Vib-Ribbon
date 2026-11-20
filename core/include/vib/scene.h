@@ -27,6 +27,11 @@ struct SceneLine {
   // How much of a and b is this frame's jitter (world space), so a display can
   // blend the lines' places between the original's 50 Hz frames and keep the jitter.
   Vec3f jitter_a{}, jitter_b{};
+  // Each end's vertex (shared by every line through it within one frame, never 0)
+  // and how far it may jitter each way in world space, so a display can jitter it
+  // afresh every frame of its own and the lines still meet.
+  std::uint32_t vertex_a = 0, vertex_b = 0;
+  float shake_a = 0, shake_b = 0;
 };
 
 struct SceneView {
@@ -88,7 +93,11 @@ class LineBuilder {
     Mat3 m;
     Vec3f t;
   };
-  void seed(std::uint32_t s) { random_ = s; }
+  void seed(std::uint32_t s) {
+    random_ = s;
+    next_vertex_ = 1;
+    join_vertex_ = 0;
+  }
   void set_view(const SceneView& v) { view_ = v; }
   // One object: each vertex moved by a random offset in [-range, range) on each
   // axis, then `z_offset` added to z, then `xf` applied. With `join`, a line from
@@ -116,6 +125,8 @@ class LineBuilder {
 
  private:
   std::int32_t offset(int range);
+  std::uint32_t next_vertex_ = 1, join_vertex_ = 0;
+  float join_shake_ = 0;
   std::uint32_t random_ = 0;
   SceneView view_;
 };

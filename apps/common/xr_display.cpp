@@ -832,7 +832,9 @@ class XrDisplay::Impl {
   XrSession session_ = XR_NULL_HANDLE;
   XrSpace space_ = XR_NULL_HANDLE, head_ = XR_NULL_HANDLE;
   Mat4 scene_place_;  // the scene in the headset's starting space (identity until recentred)
-  bool recentre_ = false;
+  // Recentred as soon as the headset is tracked: at start (and so after a change of
+  // language, which starts the game again).
+  bool recentre_ = true;
   XrAction recentre_action_ = XR_NULL_HANDLE, zoom_stick_ = XR_NULL_HANDLE;
   float zoom_ = 1.0f;
   bool zooming_ = false;
