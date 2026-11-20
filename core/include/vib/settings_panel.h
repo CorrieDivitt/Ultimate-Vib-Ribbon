@@ -77,7 +77,7 @@ class SettingsPanel {
   // Where the labels start and the values end, across (at size 1, the screen's
   // edges are about -3080 and 3080).
   void set_columns(float label_x, float value_right) { label_x_ = label_x, value_right_ = value_right; }
-  // Just a dimmed "More settings (View)" at the first row's place: the Options
+  // Just a dimmed "More options (Select)" at the first row's place: the Options
   // screen's hint that View opens ours.
   Hud::Layer draw_hint(std::uint32_t seed);
   // `text` (font codes) large in the middle of the screen: the count-in's numbers.

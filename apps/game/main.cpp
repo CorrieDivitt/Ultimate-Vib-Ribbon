@@ -1610,7 +1610,7 @@ int run(int argc, char** argv) {
         // On the Options screen, the hint that View opens our settings, drawn as its other layers are.
         const bool show_panel = !in_kiosk && !at_title && title.screen() == S::Option;
         Hud::Layer panel_layer;
-        if (show_panel) {  // a dimmed "More settings (View)" at the bottom left, away from Vibri and the menu
+        if (show_panel) {  // a dimmed "More options (Select)" at the bottom left, away from Vibri and the menu
           panel.set_place(-0.8f, 1, 0.65f);
           panel.set_columns(-1850.0f, 450.0f);
           panel_layer = panel.draw_hint(next_random(menu_display_frame * 2654435761u));

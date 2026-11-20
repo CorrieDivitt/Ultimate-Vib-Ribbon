@@ -33,8 +33,8 @@ const char* const kLabels[kLanguages][kItemCount] = {
      "Angolo di vista", "Vista avanti", "Vista indietro", "Ricentra la vista", "Effetti sonori", "Vibrazione", "Ritardo audio",
      "Esci dalla canzone", "Ripresa"},
 };
-const char* const kMore[kLanguages] = {"Weitere Einstellungen (View)", "More settings (View)", "Más ajustes (View)", "Autres réglages (View)",
-                                       "Altre impostazioni (View)"};
+const char* const kMore[kLanguages] = {"Weitere Einstellungen (Select)", "More options (Select)", "Más ajustes (Select)", "Autres réglages (Select)",
+                                       "Altre impostazioni (Select)"};
 const char* const kRewind[kLanguages] = {"Zurückspulen", "Rewind", "Rebobinar", "Rembobiner", "Riavvolgi"};
 const char* const kCountIn[kLanguages] = {"Countdown", "Countdown", "Cuenta atrás", "Compte à rebours", "Conto alla rovescia"};
 const char* const kOn[kLanguages] = {"An", "On", "Sí", "Oui", "Sì"};

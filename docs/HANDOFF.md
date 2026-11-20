@@ -1,6 +1,6 @@
 # Vib Ribbon VR: Handoff Document
 
-Last updated 2026-11-19 (session 2). Read this first in any new session, then the tracker.
+Last updated 2026-11-19 (end of session 2). Read this first in any new session, then the tracker.
 
 - Repository: https://github.com/CorrieDivitt/Vib-Ribbon-VR. Master copies of this file, the plan and the tracker source live in its `docs/` folder.
 
@@ -10,6 +10,8 @@ Last updated 2026-11-19 (session 2). Read this first in any new session, then th
 Confidence labels used below: **[measured]** = computed this session from the disc or repo files. **[source]** = stated by the linked project or page. **[summary]** = from an automated summary of a decompiled source file, not yet read line by line. **[inferred]** = my reasoning from measured data, needs confirming.
 
 ## 1. Where things stand
+
+**End of session 2 (2026-11-19, late):** the settings panel and pause (section 2m) were tested by the owner in the headset and work ("It's working great"); the Options screen's hint now reads "More options (Select)" (Select = the gamepad's View/Back button; the other languages say "(Select)" too). The demo (2.6) is done. Virtual Desktop offers only one refresh rate (80 Hz as set there), so 120 Hz must be set in Virtual Desktop. The owner added ten PCVR features to the tracker as tasks 4.6-4.15: performance overlay, infinite horizon for the obstacles and the line, a new way of showing the score, a new song progress bar, the score in numbers during play (option), the course wrapped round the player with no horizon, timing feedback during play, colour options, a speed modifier, play with passthrough. **Next session starts with 4.6, the performance overlay** (plan in section 2n).
 
 **Latest (2026-11-19):** Phase 2 under way. The course generator reproduces Polaroid exactly; see section 2b. Tasks 2.1 and 2.2 done, 2.3, 2.4 and 2.5 active, 1.6 active (owner recording the remaining songs; they will say when the files are complete). Gameplay rules are written (section 2c). All six songs compared (section 2d): 2.3 and 2.5 done; a repeat recording confirmed the original varies between its own runs on songs 5 and 6. Next: extend the recorder to log score and level so 2.4 can be checked, then 2.7. Owner decided courses vary like the original by default (section 2d, last bullets); fixed courses are an option (Q13). Phase 3 started: first playable desktop build `vibplay` (section 2e), waiting for the owner to try it (Q15). Scoring check passed (2.4 done, section 2c).
 
@@ -319,7 +321,18 @@ Pause (vibplay play_song): View or P/Tab pauses (not in the demo, where any butt
 
 Options screen: `TitleScreens::Result::OptionMore` when down is pressed on its last item (Back) instead of wrapping; `set_option_extra()` makes the screen stand still, take no input and hide its menu layer (Vibri's stays). vibplay shows a dimmed "More settings" with a down mark at the bottom left while the original's items have the cursor, and our list (top 0.75, 10 rows, columns -1850 to 450) when ours have it: left of Vibri, who sits at the lower right (her lines' box measured, not looked at). Up from the first or B goes back to Back. Headset: wobble, hold, line width, zoom, angle, ahead, behind, recentre, sound timing; monitor: wobble, smooth, line width, sound timing (the original's own items cover sound effects and vibration). After a course the title's two switches are refreshed from the options (the pause may have changed them).
 
-L3 on the monitor now saves the smooth setting (it is in the panel too). Tests: `settings_words_turn_into_the_fonts_codes`, `the_road_as_it_was_two_seconds_ago_for_a_pause_run_up`, `disc_sces02873_settings_panel` (every language's labels are in the font, ranges, repeat, wrap and leave-top, scrolling), and the menu flow test reaches OptionMore. Not yet seen by the owner.
+L3 on the monitor now saves the smooth setting (it is in the panel too). Tests: `settings_words_turn_into_the_fonts_codes`, `the_road_as_it_was_two_seconds_ago_for_a_pause_run_up`, `disc_sces02873_settings_panel` (every language's labels are in the font, ranges, repeat, wrap and leave-top, scrolling), (the OptionMore path was later removed). Tested by the owner: working.
+
+## 2n. Next: the performance overlay, task 4.6 (plan for session 3)
+
+Goal: see at a glance in the headset (and on the monitor) whether play holds the headset's rate and whether timing stays steady, to judge later features (infinite horizon, wrap-around course, passthrough) by numbers.
+
+Proposed first version (to confirm with the owner at the start):
+- What it shows: display rate and frame time (average and worst over the last second), frames late or dropped (OpenXR: predicted display period vs. the time between xrWaitFrame returns; frames whose submit misses), CPU time per frame split into game update, line building and the renderer's submit, the line count drawn, the audio clock's drift (heard position vs. the steady clock) and its output latency, and in play the last presses' judged offset in ms. Maybe a small frame-time graph drawn with lines.
+- How it is drawn: as a layer of lines with the disc's line font (SettingsPanel's writer, a small text block, no jitter), fixed in view in a corner (head-locked in the headset, about 1 m away, low left), so it never hides Vibri; on the monitor at the top left. Our own words, numbers only where possible (the font has digits, letters, . - ( ) but no : / %).
+- How it is switched: a settings item "Performance" (off / on / detailed), saved (Options::perf_overlay), plus a quick toggle (proposed: the gamepad's L3 + R3 together, or F3 on the keyboard). Also printed once a second to the console when on.
+- Where the numbers come from: XrDisplay already has the frame loop (xrWaitFrame's predictedDisplayPeriod and predictedDisplayTime); add timing stats to `vibr::Display` (a `stats()` call returning the last frame's times) for both Renderer and XrDisplay; vibplay measures its own update and build times with SDL_GetTicksNS; Audio gives latency_ms() and heard positions.
+- Tests: a core-side frame statistics class (rolling average, worst, late count) with unit tests; the overlay's text layout with the disc test.
 
 ## 3. How the game works
 
