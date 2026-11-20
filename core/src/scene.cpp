@@ -593,6 +593,11 @@ Hud::Hud(const Pak& pak, int language) {
   time_camera_ = parse_anc(pak.view("METERS/TIME.ANC"));
   time_ = Clip(int(time_anim_.frames.size()), time_anim_.rate, false);
   sign_model_ = parse_tmd(pak.view(localized(pak, "MESSAGE/ROUND.TMD", language)));
+  // The demo's sign: its own model, looping clip and camera.
+  demo_model_ = parse_tmd(pak.view(localized(pak, "MESSAGE/DEMO.TMD", language)));
+  demo_anim_ = parse_anm(pak.view(localized(pak, "MESSAGE/DEMO.ANM", language)));
+  demo_camera_ = parse_anc(pak.view(localized(pak, "MESSAGE/DEMO.ANC", language)));
+  demo_ = Clip(int(demo_anim_.frames.size()), demo_anim_.rate, true);
   sign_anims_[0] = parse_anm(pak.view("MESSAGE/ROUND01.ANM"));
   sign_anims_[1] = parse_anm(pak.view("MESSAGE/ROUND02.ANM"));
   sign_camera_ = parse_anc(pak.view("MESSAGE/ROUND.ANC"));
@@ -634,6 +639,14 @@ void Hud::draw(const Frame& f, std::vector<Layer>& layers) {
     lines_.set_view(l.view);
     const double gone = std::clamp(1.0 - f.time_left, 0.0, 1.0);
     lines_.animated(time_model_, time_anim_, static_cast<int>(gone * (time_.frames() - 1)), {}, 3, l.lines);
+    layers.push_back(std::move(l));
+  }
+  if (f.demo) {
+    Layer l;
+    l.view = fixed_view(demo_camera_);
+    lines_.set_view(l.view);
+    lines_.animated(demo_model_, demo_anim_, demo_.pose(), {}, 3, l.lines);
+    demo_.advance(f.seconds);
     layers.push_back(std::move(l));
   }
   if (show_sign_) {

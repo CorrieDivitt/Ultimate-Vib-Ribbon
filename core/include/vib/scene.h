@@ -150,6 +150,7 @@ class Hud {
     int combo = 0;          // hits toward the next form: the marks circle faster
     double time_left = 1;   // 1 at the start of the round, 0 at its end
     bool show_score = true, show_time = true;
+    bool demo = false;      // the title's demo: its sign, looping, over the round
   };
   struct Layer {
     std::vector<SceneLine> lines;
@@ -163,10 +164,10 @@ class Hud {
 
  private:
   LineBuilder lines_;
-  TmdModel mark_model_, time_model_, sign_model_;
-  ModelAnimation score_anim_, time_anim_, sign_anims_[2];
-  CameraAnimation time_camera_, sign_camera_;
-  Clip score_, time_, sign_;
+  TmdModel mark_model_, time_model_, sign_model_, demo_model_;
+  ModelAnimation score_anim_, time_anim_, sign_anims_[2], demo_anim_;
+  CameraAnimation time_camera_, sign_camera_, demo_camera_;
+  Clip score_, time_, sign_, demo_;
   int sign_index_ = 0;
   bool show_sign_ = false;
 };

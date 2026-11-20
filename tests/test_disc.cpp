@@ -515,3 +515,21 @@ TEST(disc_sces02873_line_ends_know_their_vertex_for_fresh_jitter) {
   }
   CHECK(lines > 100 && shaking > 0);
 }
+
+TEST(disc_sces02873_demo_sign_shows_in_the_demo) {
+  const std::string cue = test_cue();
+  if (cue.empty()) SKIP("set VIB_TEST_CUE to your SCES-02873 .cue to run");
+  DiscImage disc = DiscImage::open(path_from_utf8(cue));
+  Iso9660 iso(disc);
+  for (int language = 0; language < 5; ++language) {
+    const Pak pak(iso.read("GAME/" + language_prefix(language) + "FILES.PAK"));
+    Hud hud(pak, language);
+    std::vector<Hud::Layer> plain, demo;
+    Hud::Frame f;
+    f.seconds = 0.02;
+    hud.draw(f, plain);
+    f.demo = true;
+    hud.draw(f, demo);
+    CHECK(demo.size() == plain.size() + 1 && !demo.back().lines.empty());
+  }
+}

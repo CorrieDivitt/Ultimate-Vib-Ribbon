@@ -238,6 +238,7 @@ struct Session {
   int song = 0;                    // 1-6 when practising one song
   int final_score = 0, final_bonus = 0, final_form = 1;  // the last song cleared
   bool zooming = false, turning = false;                  // the sticks are moving the view (headset)
+  bool demo = false;  // the title's demo: the game plays itself (missing now and then), any button ends it
   // The player's own music, played as a one-track audio CD: its course follows the
   // original's audio-CD rules (the medley script, placed by the disc's key).
   const vibr::Music* music = nullptr;
@@ -431,7 +432,9 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   setup.course_seconds = total / kSampleRate;
   setup.points = points;
   setup.track_index = track_index;
+  setup.demo = s.demo;
   game.start(setup);
+  if (s.demo) game.seed_demo(seed);
   // In a headset the whole line is in view: passed parts stay on it for 8 s, and
   // every part built so far (8 s ahead) shows ahead.
   if (s.opt.vr) game.keep_passed(static_cast<std::int32_t>(s.save.options.vr_behind_seconds * kSampleRate));
@@ -445,7 +448,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   const auto far_extra = static_cast<std::int32_t>(std::max(0.0, s.save.options.vr_ahead_seconds - 8.0) * kSampleRate);
   bool far_warned = false;
   s.scene.reset(true, false);
-  s.hud.start_round(track_index, !s.song && !s.music);  // the "Round 1/2" sign belongs to the two-song courses
+  s.hud.start_round(track_index, !s.song && !s.music && !s.demo);  // the "Round 1/2" sign belongs to the two-song courses
 
   std::printf("\nSong %d: %d s, %s course (lead %d, frame phase %.0f)\n", song, total / kSampleRate,
               s.fixed ? "fixed" : "original-style", timing.lead, double(timing.frame_phase_q16) / 65536.0);
@@ -545,6 +548,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
         case SDL_EVENT_WINDOW_RESIZED: s.renderer.request_resize(); break;
         case SDL_EVENT_KEY_DOWN:
           if (e.key.repeat) break;
+          if (s.demo) return Result::Abort;  // any key ends the demo
           if (e.key.key == SDLK_ESCAPE) return Result::Abort;
           if (e.key.key == SDLK_LEFTBRACKET || e.key.key == SDLK_RIGHTBRACKET) {
             s.audio.adjust_offset(e.key.key == SDLK_LEFTBRACKET ? -5 : 5);
@@ -569,6 +573,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
           }
           break;
         case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+          if (s.demo) return Result::Abort;  // any button ends the demo
           if (e.gbutton.button == SDL_GAMEPAD_BUTTON_BACK || e.gbutton.button == SDL_GAMEPAD_BUTTON_START) return Result::Abort;
           if (e.gbutton.button == SDL_GAMEPAD_BUTTON_RIGHT_STICK) s.renderer.recentre();  // R3
           if (e.gbutton.button == SDL_GAMEPAD_BUTTON_LEFT_STICK) l3_pressed(s);           // L3
@@ -678,6 +683,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     h.jitter_seed = next_random(f.jitter_seed);
     h.score = game.score();
     h.combo = game.combo();
+    h.demo = s.demo;
     const int seconds = heard >= 0 ? heard / kSampleRate : 0;  // whole seconds, as the original counts
     h.time_left = 1.0 - double(seconds) / std::max(1, setup.course_seconds);
     s.hud.draw(h, hud_layers);
@@ -723,6 +729,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
 // After the language changes the game starts again in it, at the title's mode menu.
 constexpr int kRestart = -100;
 bool g_restart_at_title = false;
+int g_demo_count = 0;  // which demo comes next, kept across a change of language
 
 int run(int argc, char** argv) {
   Args opt;
@@ -927,6 +934,10 @@ int run(int argc, char** argv) {
       Effects title_fx(iso, audio, "TITLE/AUDIO/TITLE");
       constexpr int kTitleVoice = 2;  // the title's voices 0, 1 and 5 play on 2, 3 and 7
       bool at_title = true, menus_shown = false;
+      // Left alone at the title for 96 s, the original plays a demo: songs 1 to 3, the
+      // kiosk movie, songs 4 to 6, the kiosk movie again, one each time, in turn.
+      int idle_ticks = 0;
+      bool demo_start = false;
       if (g_restart_at_title) {  // back after a change of language: straight to the title's mode menu
         g_restart_at_title = false;
         intro.start(true);
@@ -1041,6 +1052,15 @@ int run(int argc, char** argv) {
             ti.confirm = in.confirm, ti.cancel = in.cancel;
             ti.confirm_sound_playing = title_fx.is_playing(kTitleVoice + 1);
             intro.tick(ti);
+            const bool touched = ti.up || ti.down || ti.left || ti.right || ti.confirm || ti.cancel || in.held_up ||
+                                 in.held_down || in.held_left || in.held_right;
+            idle_ticks = touched ? 0 : idle_ticks + 1;
+            if (menus_shown && save.options.language >= 0 && !intro.leaving() &&
+                idle_ticks >= int(96 * TitleScreens::kFrameRate)) {
+              idle_ticks = 0;
+              demo_start = true;
+              break;
+            }
             for (const TitleIntro::Sound& snd : intro.take_sounds()) title_fx.number(snd.number, 64, kTitleVoice + snd.voice);
             using C = TitleIntro::Choice;
             using M = TitleIntro::Menu;
@@ -1127,6 +1147,31 @@ int run(int argc, char** argv) {
           if (!running) break;
         }
         if (!running) break;
+        if (demo_start) {
+          demo_start = false;
+          static const int kDemoLevels[8] = {1, 2, 3, 0, 4, 5, 6, 0};  // 0: the kiosk movie (not built yet: passed over)
+          int level = 0;
+          for (int tries = 0; tries < 8 && level == 0; ++tries) level = kDemoLevels[g_demo_count++ % 8];
+          for (int v : {0, 1, 5}) title_fx.stop(kTitleVoice + v);
+          music.stop();
+          voices.stop();
+          s.demo = true;
+          s.course = Course(int(Course::Bronze) + (level - 1) / 2);
+          s.song = 0;
+          int demo_points = 0;
+          std::printf("Demo: song %d\n", level);
+          const Result r = play_song(s, level, (level - 1) % 2, demo_points, seed + std::uint32_t(g_demo_count));
+          s.demo = false;
+          s.audio.play_music({});
+          if (r == Result::Quit) break;
+          // Back to the title's menu, its lines gathering in.
+          intro.start(true);
+          intro.close_menus();
+          prev_layers.clear();
+          last_ns = SDL_GetTicksNS();
+          behind = 0;
+          continue;
+        }
         if (course_chosen && title.done()) {
           music.stop();
           voices.stop();
