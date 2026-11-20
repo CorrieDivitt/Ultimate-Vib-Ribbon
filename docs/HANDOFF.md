@@ -344,6 +344,10 @@ Tests: `frame_stats_*` (rate, worst, late window, median fallback, sound drift, 
 
 Not yet: the owner's headset test (placement, size, the numbers seen). Possible follow-ups: GPU time (Vulkan timestamp queries), Virtual Desktop's own overlay for network and decode latency (the game cannot see those), timing feedback during play for players (task 4.12, separate).
 
+## 2o. Idea dropped: Vibri speaking English (session 3, 2026-11-20)
+
+Owner asked whether Vibri could say the menu items in English by restitching her syllables. Finding: only numbers are stitched (about 20 Japanese number syllables, sounds 64-79, plus the juu/hyaku/sen/man units 80-85, on a beat grid in `TitleScreens::say_number`); every menu word, comment and reaction is one whole clip (e.g. 112-114 the course names, 96 back, 129-132 options and on/off, 99/100 again/no). English cannot be built from those. New recordings, TTS or a voice model trained on her clips were offered; the owner declined all of them (no new lines, no other voice). Not to be revisited unless the owner raises it.
+
 ## 3. How the game works
 
 File formats [source: open-ribbon documentation]:
