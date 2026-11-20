@@ -30,6 +30,7 @@ class TitleScreens {
     PsjModes, UnknownModes, Options, Leave,          // main
     Bronze, Silver, Gold, PsjHiscores, PsjBack,      // game-disc course select
     OptionBack,                                      // options
+    OptionMore,                                      // down from its last item: on to our settings
     HiscoreBack,                                     // high scores
     ResultsDone,                                     // high scores shown after a course; AGAIN is over
     PlayAgain, AgainBack,                            // AGAIN SELECT: try the song again, or leave
@@ -87,6 +88,12 @@ class TitleScreens {
   const std::vector<Hud::Layer>& layers() const { return layers_; }
   // The requests since the last call, in order.
   std::vector<SoundRequest> take_sounds() { return std::exchange(sounds_, {}); }
+
+  // Our settings (after the Options screen's last item) have the cursor: the screen
+  // stands still, takes no input and hides its menu until this is cleared (the app
+  // draws the settings in its place; Vibri stays).
+  void set_option_extra(bool on) { option_extra_ = on; }
+  bool option_extra() const { return option_extra_; }
 
   // What the screens show and change.
   bool sound_effects = true, vibration = true;
@@ -209,7 +216,7 @@ class TitleScreens {
   std::uint32_t random_ = 12345;
   Cursor again_cursor_{0, 2, 1};
   double speed_ = 1.0;
-  bool entering_ = false, leaving_ = false;
+  bool entering_ = false, leaving_ = false, option_extra_ = false;
   Vibri vibri_ = Vibri::Hidden;
   int vibri_movie_ = 0, vibri_frame_ = 0;
   bool voice_playing_ = false, music_playing_ = false;

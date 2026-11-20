@@ -561,12 +561,17 @@ TitleScreens::Result TitleScreens::options(const Input& in) {
     entering_ = true;
     menu_movie_ = option_steps_[0];
     option_cursor_.index = 0;
+    option_extra_ = false;
     rewind_movies();
     camera_cue_ = 2;
     set_camera(2);
     speed_ = 0;
   }
-  const MenuRead r = read(option_cursor_, in, true, still && !entering_ && !leaving_);
+  // Ours: down from the last item (instead of round to the first) moves on to the
+  // settings the app draws below; while they have the cursor this screen stands still.
+  const bool active = still && !entering_ && !leaving_;
+  const bool more = active && !option_extra_ && option_cursor_.index == 2 && in.down;
+  const MenuRead r = read(option_cursor_, in, true, active && !option_extra_ && !more);
   const int jitter = kMenuJitter * kGteOne;
   model.jitter_all(jitter / kGteOne);
   const int i = option_cursor_.index;
@@ -603,12 +608,16 @@ TitleScreens::Result TitleScreens::options(const Input& in) {
   if (entering_) draw_menu_movie(option_open_, menu.lines);
   else draw_movie(menu_movie_, speed_, menu.lines);
   layers_.push_back(std::move(vibri));
-  layers_.push_back(std::move(menu));
+  if (!option_extra_) layers_.push_back(std::move(menu));  // ours take its place meanwhile
   if (leaving_ && movies_[std::size_t(option_close_)].clip.finished()) {
     leaving_ = false;
     camera_cue_ = 3;
     set_camera(3);
     return Result::OptionBack;
+  }
+  if (more) {
+    option_extra_ = true;
+    return Result::OptionMore;
   }
   if (r.confirm) {
     if (i == 0 || i == 1) {

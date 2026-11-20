@@ -19,6 +19,7 @@
 #include "vib/title.h"
 #include "vib/title_intro.h"
 #include "vib/kiosk_movie.h"
+#include "vib/settings_panel.h"
 #include "vib/course_script.h"
 #include "vib/motion.h"
 #include "vib/sound_bank.h"
@@ -227,6 +228,15 @@ TEST(disc_sces02873_menus_flow) {
   CHECK(t.sound_effects);
   run(5, confirm);
   CHECK(!t.sound_effects);
+  // Ours: down from its last item moves on to our settings, and the screen stands still.
+  run(10, down);
+  run(10, down);
+  CHECK(!t.option_extra());
+  CHECK(run(5, down) == R::OptionMore);
+  CHECK(t.option_extra());
+  CHECK(run(5, confirm) == R::None);  // the screen takes no input meanwhile
+  t.set_option_extra(false);
+  CHECK(run(40, confirm) == R::OptionBack);  // still on its last item
   t.results_course = 1;
   t.results_rank = 2;
   t.go_to(S::Results);
@@ -573,4 +583,79 @@ TEST(disc_sces02873_kiosk_movie_plays_and_ends) {
     k.tick({});
     CHECK(k.finished());
   }
+}
+
+TEST(disc_sces02873_settings_panel) {
+  const std::string cue = test_cue();
+  if (cue.empty()) SKIP("set VIB_TEST_CUE to your SCES-02873 .cue to run");
+  DiscImage disc = DiscImage::open(path_from_utf8(cue));
+  Iso9660 iso(disc);
+  const GameText words = GameText::from_exe(iso.read("MAIN_G.EXE"));
+  using I = SettingsPanel::Item;
+  using A = SettingsPanel::Action;
+  const std::vector<I> all = {I::Continue, I::WobbleSize, I::WobbleHold, I::Smooth, I::LineWidth, I::Zoom, I::ViewAngle,
+                              I::SeeAhead, I::SeeBehind, I::Recentre, I::SoundEffects, I::Vibration, I::SoundTiming, I::QuitSong};
+  for (int language = 0; language < 5; ++language) {
+    const Pak game(iso.read("GAME/" + language_prefix(language) + "FILES.PAK"));
+    SettingsPanel p(game, language, &words);
+    p.set_items(all);
+    Options o;
+    for (const I item : all) {
+      const std::string l = p.label(item);
+      CHECK(!l.empty() && l.find('?') == std::string::npos);  // every letter is in the font
+    }
+    for (const bool vr : {false, true}) {
+      const Hud::Layer layer = p.draw(o, vr, 1234);
+      CHECK(layer.lines.size() > 100);
+    }
+  }
+  const Pak game(iso.read("GAME/02_FILES.PAK"));
+  SettingsPanel p(game, 1, &words);
+  p.set_items(all);
+  Options o;
+  SettingsPanel::Input up, down, left, right, confirm, cancel, none;
+  up.up = down.down = left.left = right.right = confirm.confirm = cancel.cancel = true;
+  auto go_to = [&](I item) {
+    p.home();
+    while (p.current() != item) p.tick(down, 0.02, o, true);
+  };
+  CHECK(p.tick(confirm, 0.02, o, true) == A::Close);  // Continue
+  CHECK(p.tick(up, 0.02, o, true) == A::Moved && p.current() == I::QuitSong);  // wraps in play
+  CHECK(p.tick(confirm, 0.02, o, true) == A::QuitSong);
+  go_to(I::WobbleSize);
+  CHECK(p.tick(right, 0.02, o, true) == A::Changed && std::abs(o.vr_jitter_scale - 1.1) < 1e-9);
+  CHECK(o.jitter_scale == 1.0);  // the monitor's own is left alone
+  for (int i = 0; i < 30; ++i) p.tick(right, 0.02, o, true);
+  CHECK(o.vr_jitter_scale == 2.0);
+  for (int i = 0; i < 30; ++i) p.tick(left, 0.02, o, true);
+  CHECK(o.vr_jitter_scale == 0.0);
+  CHECK(p.tick(left, 0.02, o, true) == A::None);
+  // Held: after 0.4 s it repeats.
+  go_to(I::SeeAhead);
+  p.tick(right, 0.02, o, true);
+  SettingsPanel::Input held;
+  held.held_right = true;
+  for (int i = 0; i < 50; ++i) p.tick(held, 0.02, o, true);  // 1 s
+  CHECK(o.vr_ahead_seconds > 34 && o.vr_ahead_seconds < 60);
+  go_to(I::ViewAngle);
+  o.vr_angle = 180;
+  p.tick(right, 0.02, o, true);
+  CHECK(std::abs(o.vr_angle + 165) < 1e-9);
+  go_to(I::LineWidth);
+  p.tick(right, 0.02, o, true);
+  CHECK(std::abs(o.vr_line_width - 0.15 * 1.25) < 1e-9);
+  go_to(I::SoundEffects);
+  CHECK(p.tick(confirm, 0.02, o, true) == A::Changed && !o.sound_effects);
+  go_to(I::Recentre);
+  CHECK(p.tick(confirm, 0.02, o, true) == A::Recentre);
+  CHECK(p.tick(cancel, 0.02, o, true) == A::Close);
+  // Below the Options screen: up from the first leaves it.
+  p.set_wraps(false);
+  p.home();
+  CHECK(p.tick(up, 0.02, o, true) == A::LeaveTop);
+  // A long list scrolls: only `rows` rows are drawn.
+  p.set_place(0.5f, 3, 0.65f);
+  const std::size_t three = p.draw(o, true, 1).lines.size();
+  p.set_place(0.5f, 14);
+  CHECK(three > 0 && three < p.draw(o, true, 1).lines.size());
 }

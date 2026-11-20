@@ -332,3 +332,23 @@ TEST(a_joint_stays_joined_when_jittered_afresh) {
     CHECK(joint->shake_a == last_of_first->shake_b && joint->shake_a > 200.0f);
   }
 }
+
+TEST(the_road_as_it_was_two_seconds_ago_for_a_pause_run_up) {
+  // A pause's run-up draws the road at earlier places while the rules stand still.
+  Run r;
+  r.g.add_event(part(44100, 0));
+  r.g.add_event(part(66150, 1));
+  r.g.add_event(part(88200, 2));
+  r.press_at(44100, kPressBlock);
+  r.run_to(55125);
+  const auto then = r.g.road();
+  const std::int32_t at = r.now - kStep;  // the last update's position
+  r.run_to(55125 + 2 * 22050);
+  const auto again = r.g.road_at(at);
+  CHECK(then.size() == again.size());
+  for (std::size_t i = 0; i < then.size() && i < again.size(); ++i)
+    CHECK(then[i].road == again[i].road && then[i].position.raw() == again[i].position.raw());
+  // Now (no pause) it is play's own road.
+  const auto now = r.g.road(), same = r.g.road_at(r.now - kStep);
+  CHECK(now.size() == same.size());
+}

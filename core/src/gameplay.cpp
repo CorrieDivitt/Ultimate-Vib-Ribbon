@@ -242,12 +242,30 @@ bool Gameplay::preview(const CourseEvent& e, std::int32_t position, RoadPiece& o
 std::vector<RoadPiece> Gameplay::road(bool far) const {
   std::vector<RoadPiece> out;
   if (far)
-    for (const Part& p : passed_) out.push_back({p.road, p.position + vibri_, p.missed, p.screw});
+    for (const Part& p : passed_)
+      if (position_ - p.time <= keep_passed_) out.push_back({p.road, p.position + vibri_, p.missed, p.screw});
   const Fixed limit = distance_ - vibri_ + Fixed::from(3.0);
   for (const Part& p : parts_) {
     if (!far && p.position >= limit) break;  // parts_ is sorted by position
     out.push_back({p.road, p.position + vibri_, p.missed, p.screw});
   }
+  return out;
+}
+
+std::vector<RoadPiece> Gameplay::road_at(std::int32_t position, bool far) const {
+  const Fixed common = speed_course_ ? speed_.over(kSampleRate >> 6) : Fixed();
+  const Fixed behind = Fixed::whole(-3) - vibri_;
+  const Fixed limit = distance_ - vibri_ + Fixed::from(3.0);
+  std::vector<RoadPiece> out;
+  auto add = [&](const Part& p) {
+    const Fixed at = (common.raw() != 0 ? common : p.rate).times((p.time - position) >> 6);
+    if (!far && (at < behind || !(at < limit))) return;
+    if (far && at < behind && position - p.time > keep_passed_) return;
+    out.push_back({p.road, at + vibri_, p.missed, p.screw});
+  };
+  for (const Part& p : passed_) add(p);
+  for (const Part& p : parts_) add(p);
+  std::stable_sort(out.begin(), out.end(), [](const RoadPiece& a, const RoadPiece& b) { return a.position < b.position; });
   return out;
 }
 
@@ -263,13 +281,16 @@ Outcome Gameplay::update(std::int32_t position, std::uint8_t pressed, bool move_
   const Fixed common = speed_course_ ? speed_.over(kSampleRate >> 6) : Fixed();
   for (Part& p : parts_) p.position = (common.raw() != 0 ? common : p.rate).times((p.time - position) >> 6);
   std::stable_sort(parts_.begin(), parts_.end(), [](const Part& a, const Part& b) { return a.position < b.position; });
+  position_ = position;
   const Fixed behind = Fixed::whole(-3) - vibri_;
   const auto gone = std::find_if(parts_.begin(), parts_.end(), [&](const Part& p) { return p.position >= behind; });
-  if (keep_passed_ > 0) {
-    // Kept for drawing only, moving on as the rest do, until they are far enough behind.
+  {
+    // Kept for drawing only, moving on as the rest do, until they are far enough
+    // behind (and for a pause's run-up, at least the last few seconds' worth).
+    const std::int32_t keep = std::max(keep_passed_, kKeepForRewind);
     passed_.insert(passed_.end(), parts_.begin(), gone);
     for (Part& p : passed_) p.position = (common.raw() != 0 ? common : p.rate).times((p.time - position) >> 6);
-    passed_.erase(passed_.begin(), std::find_if(passed_.begin(), passed_.end(), [&](const Part& p) { return position - p.time <= keep_passed_; }));
+    passed_.erase(passed_.begin(), std::find_if(passed_.begin(), passed_.end(), [&](const Part& p) { return position - p.time <= keep; }));
   }
   parts_.erase(parts_.begin(), gone);
 

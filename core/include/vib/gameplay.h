@@ -90,6 +90,7 @@ class Gameplay {
  public:
   static constexpr int kMaxScore = 116279;
   static constexpr std::int32_t kOriginalVideoDelay = 882;
+  static constexpr std::int32_t kKeepForRewind = 3 * kSampleRate;  // parts passed in the last 3 s stay known (a pause rewinds 2)
 
   explicit Gameplay(float distance = 10.0f, float vibri_position = 1.25f, float beats_per_second = 2.0f);
 
@@ -113,6 +114,10 @@ class Gameplay {
   // keep_passed()'s time behind. Drawing only: the rules never see the passed ones.
   std::vector<RoadPiece> road(bool far = false) const;
   void keep_passed(std::int32_t samples) { keep_passed_ = samples; }
+  // The same road as it was (or will be) at an earlier `position`, from the parts
+  // still known: for drawing a pause's run-up, while the rules stand still. Parts
+  // passed in the last few seconds are kept for this whatever keep_passed() says.
+  std::vector<RoadPiece> road_at(std::int32_t position, bool far = false) const;
   // A part play has not been given yet (built further ahead, for drawing), placed
   // where play would put it at `position`; false if play would not take it.
   bool preview(const CourseEvent& e, std::int32_t position, RoadPiece& out) const;
@@ -151,6 +156,7 @@ class Gameplay {
   std::vector<Part> parts_;
   std::vector<Part> passed_;     // gone from parts_, kept for drawing (oldest first)
   std::int32_t keep_passed_ = 0;
+  std::int32_t position_ = 0;  // of the last update
   std::vector<GameEvent> events_, incoming_;
   Interval start_, end_, quiet_, fade_;
   // screw effect
