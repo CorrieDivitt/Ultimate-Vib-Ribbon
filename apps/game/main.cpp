@@ -321,6 +321,12 @@ Vec3f headset_jitter(Vec3f p, Vec3f old_jitter, std::uint32_t vertex, float shak
   return {base.x + dx * shake, base.y + dy * shake, base.z + dz * shake};
 }
 
+// L3: smooth animation on or off for this run (for comparing; not saved).
+void toggle_smooth() {
+  Clip::set_smooth(!Clip::smooth());
+  std::printf("Animation: %s\n", Clip::smooth() ? "smooth (poses blended)" : "stepped, like the original");
+}
+
 // Thicker or thinner lines, saved for the display in use. In a headset each step is
 // a quarter more or less, with the confirm click so it can be heard without a console.
 void change_line_width(Session& s, bool thicker) {
@@ -540,6 +546,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
         case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
           if (e.gbutton.button == SDL_GAMEPAD_BUTTON_BACK || e.gbutton.button == SDL_GAMEPAD_BUTTON_START) return Result::Abort;
           if (e.gbutton.button == SDL_GAMEPAD_BUTTON_RIGHT_STICK) s.renderer.recentre();  // R3
+          if (e.gbutton.button == SDL_GAMEPAD_BUTTON_LEFT_STICK) toggle_smooth();         // L3
           if (const std::uint8_t b = pad_bits(e.gbutton.button)) presses.push_back({b, e.gbutton.timestamp});
           break;
         case SDL_EVENT_GAMEPAD_AXIS_MOTION:
@@ -971,6 +978,7 @@ int run(int argc, char** argv) {
                 case SDL_GAMEPAD_BUTTON_SOUTH: case SDL_GAMEPAD_BUTTON_START: press(4, down); break;
                 case SDL_GAMEPAD_BUTTON_EAST: case SDL_GAMEPAD_BUTTON_NORTH: press(5, down); break;
                 case SDL_GAMEPAD_BUTTON_RIGHT_STICK: if (down) renderer.recentre(); break;  // R3
+                case SDL_GAMEPAD_BUTTON_LEFT_STICK: if (down) toggle_smooth(); break;      // L3
                 default: break;
               }
               break;
