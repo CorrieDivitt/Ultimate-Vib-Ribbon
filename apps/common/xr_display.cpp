@@ -104,10 +104,11 @@ float depth_for(float fov_y) {
 
 class XrDisplay::Impl {
  public:
-  explicit Impl(float scale) : scale_(scale) {
+  Impl(float scale, float refresh_hz) : scale_(scale) {
     create_instance();
     create_vulkan();
     create_session();
+    choose_refresh_rate(refresh_hz);
     create_swapchains();
     create_pipeline();
     create_actions();
@@ -258,6 +259,9 @@ class XrDisplay::Impl {
       if (std::strcmp(e.extensionName, XR_EXT_USER_PRESENCE_EXTENSION_NAME) == 0) {
         exts.push_back(XR_EXT_USER_PRESENCE_EXTENSION_NAME);
         presence_ = true;
+      } else if (std::strcmp(e.extensionName, XR_FB_DISPLAY_REFRESH_RATE_EXTENSION_NAME) == 0) {
+        exts.push_back(XR_FB_DISPLAY_REFRESH_RATE_EXTENSION_NAME);
+        refresh_rates_ = true;
       }
     XrInstanceCreateInfo info{XR_TYPE_INSTANCE_CREATE_INFO};
     std::strncpy(info.applicationInfo.applicationName, "Vib-Ribbon VR", XR_MAX_APPLICATION_NAME_SIZE - 1);
@@ -392,6 +396,33 @@ class XrDisplay::Impl {
     xr_check(xrCreateReferenceSpace(session_, &space, &space_), "xrCreateReferenceSpace");
     space.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_VIEW;
     xr_check(xrCreateReferenceSpace(session_, &space, &head_), "xrCreateReferenceSpace (view)");
+  }
+
+  // The headset's refresh rate: the one asked for if it offers it, else the highest.
+  // A faster one shortens each frame, so the jitter's ghost images are fainter.
+  void choose_refresh_rate(float wanted) {
+    if (!refresh_rates_) {
+      std::printf("Headset refresh rate: set by the headset (choose it in the Meta Quest Link app or SteamVR)\n");
+      return;
+    }
+    auto enumerate = xr_function<PFN_xrEnumerateDisplayRefreshRatesFB>("xrEnumerateDisplayRefreshRatesFB");
+    auto request = xr_function<PFN_xrRequestDisplayRefreshRateFB>("xrRequestDisplayRefreshRateFB");
+    auto current = xr_function<PFN_xrGetDisplayRefreshRateFB>("xrGetDisplayRefreshRateFB");
+    std::uint32_t n = 0;
+    if (XR_FAILED(enumerate(session_, 0, &n, nullptr)) || n == 0) return;
+    std::vector<float> rates(n);
+    if (XR_FAILED(enumerate(session_, n, &n, rates.data()))) return;
+    float pick = *std::max_element(rates.begin(), rates.end());
+    if (wanted > 0)
+      for (const float r : rates)
+        if (std::abs(r - wanted) < std::abs(pick - wanted) || std::abs(r - wanted) < 0.5f) pick = r;
+    std::string offered;
+    for (const float r : rates) offered += (offered.empty() ? "" : ", ") + std::to_string(int(std::lround(r)));
+    const XrResult r = request(session_, pick);
+    float now = 0;
+    current(session_, &now);
+    std::printf("Headset refresh rate: %.0f Hz (offers %s Hz)%s\n", double(now > 0 ? now : pick), offered.c_str(),
+                XR_FAILED(r) ? "; the request was refused" : "");
   }
 
   // The scene's place: where the head was at the last recentre, turned only about
@@ -884,7 +915,7 @@ class XrDisplay::Impl {
   // player however long the game ran before they put it on.
   bool recentre_ = true;
   std::uint64_t recentre_at_ns_ = 0;
-  bool presence_ = false;
+  bool presence_ = false, refresh_rates_ = false;
   XrAction recentre_action_ = XR_NULL_HANDLE, zoom_stick_ = XR_NULL_HANDLE;
   float zoom_ = 1.0f;
   bool zooming_ = false;
@@ -915,7 +946,7 @@ class XrDisplay::Impl {
   std::array<Eye, 2> eyes_;
 };
 
-XrDisplay::XrDisplay(float metres_per_unit) : impl_(std::make_unique<Impl>(metres_per_unit)) {}
+XrDisplay::XrDisplay(float metres_per_unit, float refresh_hz) : impl_(std::make_unique<Impl>(metres_per_unit, refresh_hz)) {}
 XrDisplay::~XrDisplay() = default;
 const char* XrDisplay::gpu_name() const { return impl_->gpu_name(); }
 int XrDisplay::height() const { return impl_->height(); }

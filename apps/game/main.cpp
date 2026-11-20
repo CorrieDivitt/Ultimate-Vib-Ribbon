@@ -336,6 +336,22 @@ void l3_pressed(Session& s) {
   std::printf("Animation: %s\n", Clip::smooth() ? "smooth (poses blended)" : "stepped, like the original");
 }
 
+// On the monitor: the original's 50 Hz jitter, scaled (1 as it was, 0 none).
+Vec3f scaled_jitter(Vec3f p, Vec3f jitter, double scale) {
+  if (scale == 1.0) return p;
+  const float k = float(scale) - 1.0f;
+  return {p.x + jitter.x * k, p.y + jitter.y * k, p.z + jitter.z * k};
+}
+
+// D-pad left or right in play: how far the lines wobble, a tenth of the original's
+// at a time, from 0 (not at all) to 2; saved for the display in use, with the click.
+void change_jitter_scale(Session& s, bool more) {
+  double& scale = s.opt.vr ? s.save.options.vr_jitter_scale : s.save.options.jitter_scale;
+  scale = std::clamp(std::round(scale * 10.0 + (more ? 1.0 : -1.0)) / 10.0, 0.0, 2.0);
+  s.fx.number(1, 90, 5);
+  std::printf("%swobble %.1f (saved)\n", s.opt.vr ? "headset " : "", scale);
+}
+
 // Thicker or thinner lines, saved for the display in use. In a headset each step is
 // a quarter more or less, with the confirm click so it can be heard without a console.
 void change_line_width(Session& s, bool thicker) {
@@ -556,6 +572,8 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
           if (e.gbutton.button == SDL_GAMEPAD_BUTTON_BACK || e.gbutton.button == SDL_GAMEPAD_BUTTON_START) return Result::Abort;
           if (e.gbutton.button == SDL_GAMEPAD_BUTTON_RIGHT_STICK) s.renderer.recentre();  // R3
           if (e.gbutton.button == SDL_GAMEPAD_BUTTON_LEFT_STICK) l3_pressed(s);           // L3
+          if (e.gbutton.button == SDL_GAMEPAD_BUTTON_DPAD_LEFT || e.gbutton.button == SDL_GAMEPAD_BUTTON_DPAD_RIGHT)
+            change_jitter_scale(s, e.gbutton.button == SDL_GAMEPAD_BUTTON_DPAD_RIGHT);  // (unused by play)
           if (const std::uint8_t b = pad_bits(e.gbutton.button)) presses.push_back({b, e.gbutton.timestamp});
           break;
         case SDL_EVENT_GAMEPAD_AXIS_MOTION:
@@ -638,8 +656,12 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
       for (const SceneLine& l : in) {
         Vec3f a = l.a, b = l.b;
         if (s.opt.vr) {  // jittered afresh every headset frame
-          a = headset_jitter(l.a, l.jitter_a, l.vertex_a, l.shake_a, display_frame / std::uint32_t(s.save.options.vr_jitter_hold));
-          b = headset_jitter(l.b, l.jitter_b, l.vertex_b, l.shake_b, display_frame / std::uint32_t(s.save.options.vr_jitter_hold));
+          const float k = float(s.save.options.vr_jitter_scale);
+          a = headset_jitter(l.a, l.jitter_a, l.vertex_a, l.shake_a * k, display_frame / std::uint32_t(s.save.options.vr_jitter_hold));
+          b = headset_jitter(l.b, l.jitter_b, l.vertex_b, l.shake_b * k, display_frame / std::uint32_t(s.save.options.vr_jitter_hold));
+        } else {
+          a = scaled_jitter(l.a, l.jitter_a, s.save.options.jitter_scale);
+          b = scaled_jitter(l.b, l.jitter_b, s.save.options.jitter_scale);
         }
         dst.push_back({{a.x, a.y, a.z}, {b.x, b.y, b.z}, {l.colour.r / 255.0f, l.colour.g / 255.0f, l.colour.b / 255.0f, 1.0f}});
       }
@@ -778,7 +800,7 @@ int run(int argc, char** argv) {
     std::unique_ptr<vibr::Display> display;
     if (opt.vr) {
 #ifdef VIB_VR
-      auto xr = std::make_unique<vibr::XrDisplay>(opt.vr_scale);
+      auto xr = std::make_unique<vibr::XrDisplay>(opt.vr_scale, float(save.options.vr_refresh_hz));
       std::printf("Headset runtime: %s (one unit = %.4f m)\n", xr->runtime_name(), double(opt.vr_scale));
       display = std::move(xr);
 #else
@@ -1156,8 +1178,12 @@ int run(int argc, char** argv) {
               b = mix(l.b, l.jitter_b, p.b, p.jitter_b);
             }
             if (opt.vr) {  // jittered afresh every headset frame (the blend kept this frame's jitter in a and b)
-              a = headset_jitter(a, l.jitter_a, l.vertex_a, l.shake_a, menu_display_frame / std::uint32_t(save.options.vr_jitter_hold));
-              b = headset_jitter(b, l.jitter_b, l.vertex_b, l.shake_b, menu_display_frame / std::uint32_t(save.options.vr_jitter_hold));
+              const float wobble = float(save.options.vr_jitter_scale);
+              a = headset_jitter(a, l.jitter_a, l.vertex_a, l.shake_a * wobble, menu_display_frame / std::uint32_t(save.options.vr_jitter_hold));
+              b = headset_jitter(b, l.jitter_b, l.vertex_b, l.shake_b * wobble, menu_display_frame / std::uint32_t(save.options.vr_jitter_hold));
+            } else {
+              a = scaled_jitter(a, l.jitter_a, save.options.jitter_scale);
+              b = scaled_jitter(b, l.jitter_b, save.options.jitter_scale);
             }
             menu_lines[i].push_back({{a.x, a.y, a.z}, {b.x, b.y, b.z}, {l.colour.r / 255.0f, l.colour.g / 255.0f, l.colour.b / 255.0f, 1.0f}});
           }

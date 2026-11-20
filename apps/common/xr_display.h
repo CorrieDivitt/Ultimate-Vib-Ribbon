@@ -20,7 +20,9 @@ namespace vibr {
 class XrDisplay : public Display {
  public:
   // `metres_per_unit`: the size of one unit of the original's world.
-  explicit XrDisplay(float metres_per_unit);
+  // `refresh_hz`: the refresh rate to ask the headset for (0: the highest it offers),
+  // where the runtime lets a program choose (XR_FB_display_refresh_rate).
+  explicit XrDisplay(float metres_per_unit, float refresh_hz = 0);
   ~XrDisplay() override;
   XrDisplay(const XrDisplay&) = delete;
   XrDisplay& operator=(const XrDisplay&) = delete;

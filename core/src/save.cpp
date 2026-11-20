@@ -63,6 +63,11 @@ std::string SaveData::to_text() const {
   std::snprintf(buf, sizeof buf, "%.1f", options.vr_ahead_seconds);
   out << "vr_ahead_seconds " << buf << '\n';
   out << "vr_jitter_hold " << options.vr_jitter_hold << '\n';
+  std::snprintf(buf, sizeof buf, "%.2f", options.jitter_scale);
+  out << "jitter_scale " << buf << '\n';
+  std::snprintf(buf, sizeof buf, "%.2f", options.vr_jitter_scale);
+  out << "vr_jitter_scale " << buf << '\n';
+  out << "vr_refresh_hz " << options.vr_refresh_hz << '\n';
   std::snprintf(buf, sizeof buf, "%.1f", options.vr_angle);
   out << "vr_angle " << buf << '\n';
   std::snprintf(buf, sizeof buf, "%.1f", options.audio_offset_ms);
@@ -106,6 +111,9 @@ SaveData SaveData::from_text(const std::string& text) {
     else if (key == "vr_zoom" && number > 0) d.options.vr_zoom = number;
     else if (key == "vr_angle") d.options.vr_angle = number;
     else if (key == "vr_jitter_hold" && number >= 1 && number <= 3) d.options.vr_jitter_hold = int(number);
+    else if (key == "jitter_scale" && number >= 0 && number <= 2) d.options.jitter_scale = number;
+    else if (key == "vr_jitter_scale" && number >= 0 && number <= 2) d.options.vr_jitter_scale = number;
+    else if (key == "vr_refresh_hz" && number >= 0 && number <= 240) d.options.vr_refresh_hz = int(number);
     else if (key == "vr_menu_zoom" && number > 0) d.options.vr_menu_zoom = number;
     else if (key == "vr_behind_seconds" && number >= 0) d.options.vr_behind_seconds = number;
     else if (key == "vr_ahead_seconds" && number >= 0) d.options.vr_ahead_seconds = number;
