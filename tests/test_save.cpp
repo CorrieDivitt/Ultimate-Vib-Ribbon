@@ -37,11 +37,12 @@ TEST(save_text_round_trips_and_tolerates_old_files) {
   d.options.vr_zoom = 1.75;
   d.options.vr_angle = -30;
   d.options.language = 3;
+  d.options.vr_jitter_hold = 3;
   d.options.audio_offset_ms = -12.5;
   const SaveData back = SaveData::from_text(d.to_text());
   CHECK(back.high_scores == d.high_scores);
   CHECK(!back.options.vibration && back.options.fixed_courses && back.options.smooth_animation && back.options.sound_effects);
-  CHECK(back.options.line_width == 0.375 && back.options.vr_line_width == 0.125 && back.options.vr_zoom == 1.75 && back.options.vr_angle == -30 && back.options.language == 3 && back.options.audio_offset_ms == -12.5);
+  CHECK(back.options.line_width == 0.375 && back.options.vr_line_width == 0.125 && back.options.vr_zoom == 1.75 && back.options.vr_angle == -30 && back.options.language == 3 && back.options.vr_jitter_hold == 3 && back.options.audio_offset_ms == -12.5);
   // Lines missing, unknown keys and Windows line ends: defaults fill in, nothing breaks.
   const SaveData partial = SaveData::from_text("vibration 0\r\nsomething_new 5\r\nhigh_scores.gold 1 2\r\n");
   CHECK(!partial.options.vibration && partial.options.line_width == 0.3);

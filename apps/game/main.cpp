@@ -321,8 +321,17 @@ Vec3f headset_jitter(Vec3f p, Vec3f old_jitter, std::uint32_t vertex, float shak
   return {base.x + dx * shake, base.y + dy * shake, base.z + dz * shake};
 }
 
-// L3: smooth animation on or off for this run (for comparing; not saved).
-void toggle_smooth() {
+// L3: on the monitor, smooth animation on or off for this run; in a headset (where
+// smoothing stays on), how often the jitter changes: every 1, 2 or 3 of its frames
+// (saved). Every frame looked doubled to the owner (the eye fuses two jitters).
+void l3_pressed(Session& s) {
+  if (s.opt.vr) {
+    int& hold = s.save.options.vr_jitter_hold;
+    hold = hold % 3 + 1;
+    s.fx.number(1, 90, 5);  // the click, to hear it in the headset
+    std::printf("Jitter changes every %d headset frame%s (saved)\n", hold, hold == 1 ? "" : "s");
+    return;
+  }
   Clip::set_smooth(!Clip::smooth());
   std::printf("Animation: %s\n", Clip::smooth() ? "smooth (poses blended)" : "stepped, like the original");
 }
@@ -546,7 +555,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
         case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
           if (e.gbutton.button == SDL_GAMEPAD_BUTTON_BACK || e.gbutton.button == SDL_GAMEPAD_BUTTON_START) return Result::Abort;
           if (e.gbutton.button == SDL_GAMEPAD_BUTTON_RIGHT_STICK) s.renderer.recentre();  // R3
-          if (e.gbutton.button == SDL_GAMEPAD_BUTTON_LEFT_STICK) toggle_smooth();         // L3
+          if (e.gbutton.button == SDL_GAMEPAD_BUTTON_LEFT_STICK) l3_pressed(s);           // L3
           if (const std::uint8_t b = pad_bits(e.gbutton.button)) presses.push_back({b, e.gbutton.timestamp});
           break;
         case SDL_EVENT_GAMEPAD_AXIS_MOTION:
@@ -629,8 +638,8 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
       for (const SceneLine& l : in) {
         Vec3f a = l.a, b = l.b;
         if (s.opt.vr) {  // jittered afresh every headset frame
-          a = headset_jitter(l.a, l.jitter_a, l.vertex_a, l.shake_a, display_frame);
-          b = headset_jitter(l.b, l.jitter_b, l.vertex_b, l.shake_b, display_frame);
+          a = headset_jitter(l.a, l.jitter_a, l.vertex_a, l.shake_a, display_frame / std::uint32_t(s.save.options.vr_jitter_hold));
+          b = headset_jitter(l.b, l.jitter_b, l.vertex_b, l.shake_b, display_frame / std::uint32_t(s.save.options.vr_jitter_hold));
         }
         dst.push_back({{a.x, a.y, a.z}, {b.x, b.y, b.z}, {l.colour.r / 255.0f, l.colour.g / 255.0f, l.colour.b / 255.0f, 1.0f}});
       }
@@ -978,7 +987,12 @@ int run(int argc, char** argv) {
                 case SDL_GAMEPAD_BUTTON_SOUTH: case SDL_GAMEPAD_BUTTON_START: press(4, down); break;
                 case SDL_GAMEPAD_BUTTON_EAST: case SDL_GAMEPAD_BUTTON_NORTH: press(5, down); break;
                 case SDL_GAMEPAD_BUTTON_RIGHT_STICK: if (down) renderer.recentre(); break;  // R3
-                case SDL_GAMEPAD_BUTTON_LEFT_STICK: if (down) toggle_smooth(); break;      // L3
+                case SDL_GAMEPAD_BUTTON_LEFT_STICK:  // L3
+                  if (down) {
+                    l3_pressed(s);
+                    write_save();
+                  }
+                  break;
                 default: break;
               }
               break;
@@ -1142,8 +1156,8 @@ int run(int argc, char** argv) {
               b = mix(l.b, l.jitter_b, p.b, p.jitter_b);
             }
             if (opt.vr) {  // jittered afresh every headset frame (the blend kept this frame's jitter in a and b)
-              a = headset_jitter(a, l.jitter_a, l.vertex_a, l.shake_a, menu_display_frame);
-              b = headset_jitter(b, l.jitter_b, l.vertex_b, l.shake_b, menu_display_frame);
+              a = headset_jitter(a, l.jitter_a, l.vertex_a, l.shake_a, menu_display_frame / std::uint32_t(save.options.vr_jitter_hold));
+              b = headset_jitter(b, l.jitter_b, l.vertex_b, l.shake_b, menu_display_frame / std::uint32_t(save.options.vr_jitter_hold));
             }
             menu_lines[i].push_back({{a.x, a.y, a.z}, {b.x, b.y, b.z}, {l.colour.r / 255.0f, l.colour.g / 255.0f, l.colour.b / 255.0f, 1.0f}});
           }
