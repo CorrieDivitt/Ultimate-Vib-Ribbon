@@ -1,6 +1,6 @@
 # Vib Ribbon VR: Handoff Document
 
-Last updated 2026-11-19 (end of session 2). Read this first in any new session, then the tracker.
+Last updated 2026-11-20 (session 3). Read this first in any new session, then the tracker.
 
 - Repository: https://github.com/CorrieDivitt/Vib-Ribbon-VR. Master copies of this file, the plan and the tracker source live in its `docs/` folder.
 
@@ -10,6 +10,8 @@ Last updated 2026-11-19 (end of session 2). Read this first in any new session, 
 Confidence labels used below: **[measured]** = computed this session from the disc or repo files. **[source]** = stated by the linked project or page. **[summary]** = from an automated summary of a decompiled source file, not yet read line by line. **[inferred]** = my reasoning from measured data, needs confirming.
 
 ## 1. Where things stand
+
+**Session 3 (2026-11-20):** task 4.6, the performance overlay, is built and pushed (section 2n): L3 or F3 steps it off / one line / detailed, also the Performance item in the settings. Waiting for the owner's headset test. The owner's local repo had 13 files with only line endings changed (CRLF) and was two commits behind; the tracker's Session 3 command discards those and pulls.
 
 **End of session 2 (2026-11-19, late):** the settings panel and pause (section 2m) were tested by the owner in the headset and work ("It's working great"); the Options screen's hint now reads "More options (Select)" (Select = the gamepad's View/Back button; the other languages say "(Select)" too). The demo (2.6) is done. Virtual Desktop offers only one refresh rate (80 Hz as set there), so 120 Hz must be set in Virtual Desktop. The owner added ten PCVR features to the tracker as tasks 4.6-4.15: performance overlay, infinite horizon for the obstacles and the line, a new way of showing the score, a new song progress bar, the score in numbers during play (option), the course wrapped round the player with no horizon, timing feedback during play, colour options, a speed modifier, play with passthrough. **Next session starts with 4.6, the performance overlay** (plan in section 2n).
 
@@ -323,16 +325,24 @@ Options screen: `TitleScreens::Result::OptionMore` when down is pressed on its l
 
 L3 on the monitor now saves the smooth setting (it is in the panel too). Tests: `settings_words_turn_into_the_fonts_codes`, `the_road_as_it_was_two_seconds_ago_for_a_pause_run_up`, `disc_sces02873_settings_panel` (every language's labels are in the font, ranges, repeat, wrap and leave-top, scrolling), (the OptionMore path was later removed). Tested by the owner: working.
 
-## 2n. Next: the performance overlay, task 4.6 (plan for session 3)
+## 2n. The performance overlay, task 4.6 (session 3, 2026-11-20)
 
-Goal: see at a glance in the headset (and on the monitor) whether play holds the headset's rate and whether timing stays steady, to judge later features (infinite horizon, wrap-around course, passthrough) by numbers.
+Owner's choices at the start of session 3: the plan below as proposed; **L3 (left stick click) steps the overlay** (off, one line, detailed) instead of a chord, because the wobble hold and smoothing L3 used to change are now in the settings panel; corner and levels left to the assistant (taken: low left in the headset, three levels). F3 does the same on the keyboard.
 
-Proposed first version (to confirm with the owner at the start):
-- What it shows: display rate and frame time (average and worst over the last second), frames late or dropped (OpenXR: predicted display period vs. the time between xrWaitFrame returns; frames whose submit misses), CPU time per frame split into game update, line building and the renderer's submit, the line count drawn, the audio clock's drift (heard position vs. the steady clock) and its output latency, and in play the last presses' judged offset in ms. Maybe a small frame-time graph drawn with lines.
-- How it is drawn: as a layer of lines with the disc's line font (SettingsPanel's writer, a small text block, no jitter), fixed in view in a corner (head-locked in the headset, about 1 m away, low left), so it never hides Vibri; on the monitor at the top left. Our own words, numbers only where possible (the font has digits, letters, . - ( ) but no : / %).
-- How it is switched: a settings item "Performance" (off / on / detailed), saved (Options::perf_overlay), plus a quick toggle (proposed: the gamepad's L3 + R3 together, or F3 on the keyboard). Also printed once a second to the console when on.
-- Where the numbers come from: XrDisplay already has the frame loop (xrWaitFrame's predictedDisplayPeriod and predictedDisplayTime); add timing stats to `vibr::Display` (a `stats()` call returning the last frame's times) for both Renderer and XrDisplay; vibplay measures its own update and build times with SDL_GetTicksNS; Audio gives latency_ms() and heard positions.
-- Tests: a core-side frame statistics class (rolling average, worst, late count) with unit tests; the overlay's text layout with the disc test.
+What it shows (our own words, English only; numbers mostly; the font has no : / % +, so spaces and words):
+- One line: `80 Hz   12.5 ms   worst 13.9   late 0`: the display's rate (from its period), average and worst frame interval over the last second, frames late in the last 10 s (an interval over 1.5 periods).
+- Detailed adds: `CPU ms   game   lines   draw   wait` (play: from the top of the loop to the start of building = input, rules, sound; building the scene, HUD, panel and overlay lines; the display's draw() minus its wait; the wait for the display: xrWaitFrame in the headset, the fence plus vkAcquireNextImage on the monitor), `Lines n   target t ms`, `Sound   latency n ms   drift x ms in 1 s` (latency is Audio::latency_ms; drift is play's heard position against the steady clock over the last second, so it shows the smoothing's pull; "(no music)" in the menus, pause and run-up), `Presses ms (- early)` with the last 5 hits (press position minus the part's time; GameEvent Hit and Miss now carry the part's `time`), and a one-second frame-time graph (a bar a frame, the target at half height, late frames red).
+- Rows are rewritten 4 times a second so they can be read; the graph every frame. Printed to the console once a second while on (`Perf  |  row  |  row ...`).
+
+Where the numbers come from: `vibr::FrameTiming` and `Display::timing()`. XrDisplay: interval = difference of successive predictedDisplayTime (a gap over one period = the runtime showed a frame we missed), period = predictedDisplayPeriod; Virtual Desktop decides the rate. Renderer (monitor, FIFO vsync): interval between draw() returns, period from the window's display mode. `vib::FrameStats` (core/include/vib/perf_overlay.h) keeps 10 s of samples; `perf_rows()` makes the text; `PerfOverlay` draws it with the line font (no jitter). vibplay's `draw_frame()` adds the overlay layer, draws, and records the sample; every frame of play, menus, settings preview and kiosk goes through it.
+
+How it is drawn: `vibr::Layer::head_locked` (metres a unit). XrDisplay locates the eyes a second time in the VIEW space (`head_`) and draws such layers with projection x eye-from-head x scale x layer view, so the block stays fixed in view: units are mm at z 1000 (1 m), x -560 onwards, y 200 down, scale 0.12 (about 7 to 29 degrees left, 11 to 21 down). On the monitor the same layer goes through a 60 degree camera at the top left, sized from the window's aspect. Checked offline by drawing the layers' lines (monitor 16:9, and a 100 degree headset view): placement as intended, nothing near the centre.
+
+Switching: `Options::perf_overlay` (save key `perf_overlay`, 0-2, default 0), settings item `Performance` (Off/On/Detailed in five languages; confirm or right steps forward, left back) in the pause and the menus' settings, monitor and headset; L3 or F3 anywhere (saved).
+
+Tests: `frame_stats_*` (rate, worst, late window, median fallback, sound drift, presses), `perf_rows_use_only_the_fonts_characters`, `disc_sces02873_performance_overlay_draws_its_rows_and_graph` (all languages, both layouts, no jitter, left of centre, below eye level in the headset), save round trip, settings item steps. 74 tests pass here against the disc. App code compiles with -Werror against SDL 3.2.26, Vulkan-Headers and OpenXR 1.1.65 headers (syntax only; no GPU here); CI builds it with MSVC.
+
+Not yet: the owner's headset test (placement, size, the numbers seen). Possible follow-ups: GPU time (Vulkan timestamp queries), Virtual Desktop's own overlay for network and decode latency (the game cannot see those), timing feedback during play for players (task 4.12, separate).
 
 ## 3. How the game works
 
