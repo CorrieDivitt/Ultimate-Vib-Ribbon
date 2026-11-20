@@ -43,11 +43,12 @@ TEST(save_text_round_trips_and_tolerates_old_files) {
   d.options.vr_refresh_hz = 120;
   d.options.audio_offset_ms = -12.5;
   d.options.perf_overlay = 2;
+  d.options.score_numbers = true;
   const SaveData back = SaveData::from_text(d.to_text());
   CHECK(back.high_scores == d.high_scores);
   CHECK(!back.options.vibration && back.options.fixed_courses && back.options.smooth_animation && back.options.sound_effects);
   CHECK(back.options.line_width == 0.375 && back.options.vr_line_width == 0.125 && back.options.vr_zoom == 1.75 && back.options.vr_angle == -30 && back.options.language == 3 && back.options.vr_jitter_hold == 2 && back.options.jitter_scale == 0 && back.options.vr_jitter_scale == 0.7 &&
-        back.options.vr_refresh_hz == 120 && back.options.audio_offset_ms == -12.5 && back.options.perf_overlay == 2);
+        back.options.vr_refresh_hz == 120 && back.options.audio_offset_ms == -12.5 && back.options.perf_overlay == 2 && back.options.score_numbers);
   CHECK(SaveData::from_text("vr_behind_seconds 0\n").options.vr_behind_seconds == 2.0);  // 2 s at least
   CHECK(SaveData().options.perf_overlay == 0 && SaveData::from_text("perf_overlay 7\n").options.perf_overlay == 0);  // off unless set
   // Lines missing, unknown keys and Windows line ends: defaults fill in, nothing breaks.

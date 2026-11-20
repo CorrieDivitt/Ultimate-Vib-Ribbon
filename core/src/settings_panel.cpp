@@ -10,28 +10,28 @@ namespace vib {
 namespace {
 
 constexpr double kTau = 6.28318530717958647692;
-constexpr int kItemCount = 16;
+constexpr int kItemCount = 17;
 constexpr int kLanguages = 5;  // German, English, Spanish, French, Italian (the PAL menus)
 
 // Our own words. Order as SettingsPanel::Item.
 const char* const kLabels[kLanguages][kItemCount] = {
     // German
     {"Weiter", "Wackelgröße", "Wackeltakt", "Weiche Bewegung", "Linienstärke", "Zoom", "Blickwinkel", "Sicht nach vorn",
-     "Sicht nach hinten", "Ansicht zentrieren", "Soundeffekte", "Vibration", "Tonversatz", "Lied beenden", "Fortsetzen", "Leistung"},
+     "Sicht nach hinten", "Ansicht zentrieren", "Soundeffekte", "Vibration", "Tonversatz", "Lied beenden", "Fortsetzen", "Leistung", "Punkte als Zahl"},
     // English
     {"Continue", "Wobble size", "Wobble hold", "Smooth motion", "Line width", "Zoom", "View angle", "See ahead", "See behind",
-     "Recentre view", "Sound effects", "Vibration", "Sound timing", "Quit song", "Resume", "Performance"},
+     "Recentre view", "Sound effects", "Vibration", "Sound timing", "Quit song", "Resume", "Performance", "Score in numbers"},
     // Spanish
     {"Continuar", "Tamaño del temblor", "Ritmo del temblor", "Movimiento suave", "Grosor de línea", "Zoom", "Ángulo de vista",
-     "Ver adelante", "Ver atrás", "Centrar vista", "Efectos de sonido", "Vibración", "Desfase de sonido", "Salir de la canción", "Reanudar", "Rendimiento"},
+     "Ver adelante", "Ver atrás", "Centrar vista", "Efectos de sonido", "Vibración", "Desfase de sonido", "Salir de la canción", "Reanudar", "Rendimiento", "Puntos en números"},
     // French
     {"Continuer", "Taille du tremblement", "Rythme du tremblement", "Mouvement fluide", "Épaisseur des lignes", "Zoom",
      "Angle de vue", "Voir devant", "Voir derrière", "Recentrer la vue", "Effets sonores", "Vibration", "Décalage du son",
-     "Quitter la chanson", "Reprise", "Performances"},
+     "Quitter la chanson", "Reprise", "Performances", "Score en chiffres"},
     // Italian
     {"Continua", "Ampiezza del tremolio", "Ritmo del tremolio", "Movimento fluido", "Spessore delle linee", "Zoom",
      "Angolo di vista", "Vista avanti", "Vista indietro", "Ricentra la vista", "Effetti sonori", "Vibrazione", "Ritardo audio",
-     "Esci dalla canzone", "Ripresa", "Prestazioni"},
+     "Esci dalla canzone", "Ripresa", "Prestazioni", "Punteggio in cifre"},
 };
 const char* const kMore[kLanguages] = {"Weitere Einstellungen (Select)", "More options (Select)", "Más ajustes (Select)", "Autres réglages (Select)",
                                        "Altre impostazioni (Select)"};
@@ -99,7 +99,7 @@ std::string SettingsPanel::label(Item item, bool vr) const {
   std::string text = to_font_text(kLabels[table_language(language_)][int(item)]);
   switch (item) {
     case Item::WobbleSize: case Item::WobbleHold: case Item::Smooth: case Item::LineWidth: case Item::Zoom:
-    case Item::ViewAngle: case Item::SeeAhead: case Item::SeeBehind: case Item::SoundTiming:
+    case Item::ViewAngle: case Item::SeeAhead: case Item::SeeBehind: case Item::SoundTiming: case Item::ScoreNumbers:
       text += " (" + value(item, original_options(), vr) + ")";  // the original game's value
       break;
     default: break;
@@ -129,6 +129,7 @@ std::string SettingsPanel::value(Item item, const Options& o, bool vr) const {
     case Item::SoundTiming: std::snprintf(buf, sizeof buf, "%.0f ms", o.audio_offset_ms); break;
     case Item::ResumeStyle: return to_font_text(o.resume_countdown ? kCountIn[l] : kRewind[l]);
     case Item::Performance: return to_font_text(o.perf_overlay == 0 ? kOff[l] : o.perf_overlay == 1 ? kOn[l] : kDetailed[l]);
+    case Item::ScoreNumbers: return on_off(o.score_numbers);
     default: return {};
   }
   return buf;
@@ -188,6 +189,7 @@ bool SettingsPanel::change(Item item, int d, Options& o, bool vr) {
     case Item::SoundTiming: return step(o.audio_offset_ms, 5.0 * d, -500.0, 500.0);
     case Item::ResumeStyle: o.resume_countdown = !o.resume_countdown; return true;
     case Item::Performance: o.perf_overlay = (o.perf_overlay + (d > 0 ? 1 : 2)) % 3; return true;  // round: off, on, detailed
+    case Item::ScoreNumbers: o.score_numbers = !o.score_numbers; return true;
     default: return false;
   }
 }
@@ -209,7 +211,7 @@ SettingsPanel::Action SettingsPanel::tick(const Input& in, double seconds, Optio
       case Item::Continue: return Action::Close;
       case Item::Recentre: return Action::Recentre;
       case Item::QuitSong: return Action::QuitSong;
-      case Item::Smooth: case Item::SoundEffects: case Item::Vibration: case Item::ResumeStyle: case Item::Performance:
+      case Item::Smooth: case Item::SoundEffects: case Item::Vibration: case Item::ResumeStyle: case Item::Performance: case Item::ScoreNumbers:
         change(item, 1, o, vr);
         return Action::Changed;
       default: return Action::None;
@@ -289,6 +291,55 @@ Hud::Layer SettingsPanel::draw_big(const std::string& text, std::uint32_t seed) 
   Hud::Layer layer = start_layer(seed);
   constexpr float kScale = 4.0f;
   write(text, -0.5f * text_width(text, kScale) + 36.0f * kScale, 0.0f, kScale, nullptr, 6, layer.lines);
+  return layer;
+}
+
+std::vector<SceneLine> SettingsPanel::text_lines(const std::string& text, float scale, std::uint32_t seed, int range) {
+  std::vector<SceneLine> out;
+  if (!text_) return out;
+  SceneView v;  // seen from -z, so the font's facing marks face the viewer
+  v.eye = {0, 0, -4000};
+  v.target = {0, 0, 0};
+  v.fov_y = 1.0f;
+  lines_.set_view(v);
+  lines_.seed(seed);
+  LineBuilder::Xform xf;
+  const float k = 0.8f * scale;
+  xf.m.m = {{{k, 0, 0}, {0, k, 0}, {0, 0, k}}};
+  const float left = -0.5f * text_width(text, scale) + 36.0f * scale;
+  bool second = false;
+  int column = 0;
+  for (const char ch : text) {
+    const auto c = static_cast<unsigned char>(ch);
+    const bool this_second = second;
+    second = false;
+    if (c == '~') {
+      second = true;
+      continue;
+    }
+    if (c != ' ') {
+      const int object = text_->object_for(c, this_second);
+      if (object >= 0 && object < int(font_.objects.size())) {
+        xf.t = {left + 72.0f * scale * float(column), 0.0f, 0.0f};
+        lines_.object(font_.objects[std::size_t(object)], xf, range, 0, nullptr, out);
+      }
+    }
+    ++column;
+  }
+  return out;
+}
+
+Hud::Layer SettingsPanel::draw_score(int score, std::uint32_t seed) {
+  Hud::Layer layer;
+  layer.view.eye = {0, 0, 0};
+  layer.view.target = {0, 0, 4730};
+  layer.view.fov_y = float(682 * kTau / 4096.0);
+  const float half_height = 4000.0f * std::tan(0.5f * layer.view.fov_y);
+  layer.lines = text_lines(std::to_string(score), 1.4f, seed, 4);
+  for (SceneLine& l : layer.lines) {  // to just above the time meter's strip (its top is about 84% down)
+    l.a.y += 0.72f * half_height, l.b.y += 0.72f * half_height;
+    l.a.z += 4000.0f, l.b.z += 4000.0f;
+  }
   return layer;
 }
 

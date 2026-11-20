@@ -589,7 +589,7 @@ TEST(disc_sces02873_settings_panel) {
   using I = SettingsPanel::Item;
   using A = SettingsPanel::Action;
   const std::vector<I> all = {I::Continue, I::WobbleSize, I::WobbleHold, I::Smooth, I::LineWidth, I::Zoom, I::ViewAngle,
-                              I::SeeAhead, I::SeeBehind, I::Recentre, I::SoundEffects, I::Vibration, I::SoundTiming, I::QuitSong,
+                              I::SeeAhead, I::SeeBehind, I::ScoreNumbers, I::Recentre, I::SoundEffects, I::Vibration, I::SoundTiming, I::QuitSong,
                               I::ResumeStyle, I::Performance};
   for (int language = 0; language < 5; ++language) {
     const Pak game(iso.read("GAME/" + language_prefix(language) + "FILES.PAK"));
@@ -673,6 +673,15 @@ TEST(disc_sces02873_settings_panel) {
   CHECK(p.label(I::WobbleHold, true) == "Wobble hold (1)" && p.label(I::WobbleSize, true) == "Wobble size (1.0)");
   CHECK(p.label(I::Smooth) == "Smooth motion (Off)" && p.label(I::SoundTiming) == "Sound timing (0 ms)");
   CHECK(p.label(I::Performance) == "Performance" && p.label(I::ResumeStyle) == "Resume");  // (owner: none for these)
+  CHECK(p.label(I::ScoreNumbers) == "Score in numbers (Off)");  // the original shows only the marks
+  // The score in numbers: the font's digits, centred, and on the monitor a layer of its own.
+  {
+    const auto digits = p.text_lines("116279", 1.0f, 3, 4);
+    float lo = 1e9f, hi = -1e9f;
+    for (const SceneLine& l : digits) lo = std::min({lo, l.a.x, l.b.x}), hi = std::max({hi, l.a.x, l.b.x});
+    CHECK(digits.size() > 10 && std::abs(lo + hi) < 60);
+    CHECK(!p.draw_score(1234, 5).lines.empty());
+  }
   // No counterpart in the original: ours.
   CHECK(p.label(I::Zoom, true) == "Zoom (1.00)" && p.label(I::ViewAngle, true) == "View angle (45)");
   CHECK(p.label(I::SoundEffects) == "Sound effects" && p.label(I::Continue) == "Continue" && p.label(I::Recentre, true) == "Recentre view");
@@ -790,7 +799,7 @@ TEST(disc_sces02873_settings_labels_with_defaults_fit_beside_their_values) {
   using I = SettingsPanel::Item;
   const std::vector<I> all = {I::WobbleSize, I::WobbleHold, I::Smooth, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead,
                               I::SeeBehind, I::Recentre, I::SoundEffects, I::Vibration, I::SoundTiming, I::QuitSong,
-                              I::ResumeStyle, I::Performance, I::Continue};
+                              I::ResumeStyle, I::Performance, I::ScoreNumbers, I::Continue};
   Options longest;
   longest.vr_ahead_seconds = longest.vr_behind_seconds = kWholeSongSeconds;
   longest.resume_countdown = true;

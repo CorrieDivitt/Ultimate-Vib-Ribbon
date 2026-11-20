@@ -40,6 +40,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
 #include <exception>
 #include <fstream>
 #include <functional>
@@ -268,9 +269,9 @@ struct Session {
 // is moved a little away from the road, level (owner, session 3): in the original it
 // is a flat ring in the road's own upright plane, about 1.3 m across and dipping
 // 0.2 m below the road, so in stereo it ran straight through the road. The owner
-// tried it 0.3 m in front (towards the eye), then chose 0.3 m behind the road.
+// tried it 0.3 m in front (towards the eye), then 0.3 m behind, then chose 0.5 m behind.
 void evo_behind_road(std::vector<SceneLine>& lines, std::size_t first, float vibri_z, Vec3f eye) {
-  constexpr float kNearer = -300.0f;  // towards the eye; negative: behind the road, seen from the eye
+  constexpr float kNearer = -500.0f;  // towards the eye; negative: behind the road, seen from the eye
   float dx = eye.x, dz = eye.z - vibri_z;  // level, from her towards the eye
   const float len = std::sqrt(dx * dx + dz * dz);
   if (len < 1.0f) return;
@@ -413,16 +414,16 @@ std::vector<SettingsPanel::Item> pause_items(bool vr) {
   using I = SettingsPanel::Item;
   if (vr)
     return {I::Continue, I::WobbleSize, I::WobbleHold, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind,
-            I::Recentre, I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::QuitSong};
+            I::Recentre, I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::ScoreNumbers, I::QuitSong};
   return {I::Continue, I::WobbleSize, I::Smooth, I::LineWidth, I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle,
-          I::Performance, I::QuitSong};
+          I::Performance, I::ScoreNumbers, I::QuitSong};
 }
 std::vector<SettingsPanel::Item> menu_items(bool vr) {
   using I = SettingsPanel::Item;
   if (vr)
     return {I::WobbleSize, I::WobbleHold, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind, I::Recentre,
-            I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance};
-  return {I::WobbleSize, I::Smooth, I::LineWidth, I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance};
+            I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::ScoreNumbers};
+  return {I::WobbleSize, I::Smooth, I::LineWidth, I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::ScoreNumbers};
 }
 
 // Scene lines to the renderer's, jittered as play does: in a headset afresh every
@@ -700,6 +701,28 @@ void meter_below_vibri(const Hud::Layer& meter, float vibri_z, Vec3f eye, std::v
   }
 }
 
+// In a headset, with the Score in numbers setting (task 4.10), the score's number sits
+// below the time meter under Vibri, placed as the meter is: centred on her, upright,
+// facing `eye`, at a fixed height (its middle 1,090 below the road, just under the
+// meter's strip), in the game's own line font with its text jitter. `text`: from
+// SettingsPanel::text_lines, centred on the origin as if seen from -z.
+void number_below_vibri(const std::vector<SceneLine>& text, float vibri_z, Vec3f eye, std::vector<SceneLine>& out) {
+  constexpr float kY = 1090.0f;
+  float fx, fz;
+  facing(vibri_z, eye, fx, fz);
+  auto place = [&](Vec3f p) { return Vec3f{fz * p.x + fx * p.z, kY + p.y, vibri_z - fx * p.x + fz * p.z}; };
+  auto turn = [&](Vec3f v) { return Vec3f{fz * v.x + fx * v.z, v.y, -fx * v.x + fz * v.z}; };
+  out.clear();
+  for (const SceneLine& l : text) {
+    SceneLine w = l;
+    w.a = place(l.a), w.b = place(l.b);
+    w.jitter_a = turn(l.jitter_a), w.jitter_b = turn(l.jitter_b);
+    if (w.vertex_a) w.vertex_a += 0x60000000u;  // (its own vertices, apart from the scene's)
+    if (w.vertex_b) w.vertex_b += 0x60000000u;
+    out.push_back(w);
+  }
+}
+
 Result play_song(Session& s, int song, int track_index, int& points, std::uint32_t seed) {
   // Timing: like the original, a little different on every play, unless --fixed.
   const CourseTiming timing = s.fixed ? CourseTiming::consistent() : CourseTiming::like_original(seed);
@@ -815,6 +838,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   std::vector<vibr::LineInstance> lines;
   std::vector<Hud::Layer> hud_layers;
   std::vector<std::vector<vibr::LineInstance>> hud_lines;
+  std::deque<std::vector<vibr::LineInstance>> score_number_lines;  // (a deque: layers point into it)
   Result result = Result::Clear;
 
   // The sound effects option silences gameplay's sounds only, as in the original
@@ -1162,6 +1186,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     };
     convert(scene_lines, lines);
     std::vector<vibr::Layer> layers{{&lines, matrix(view), view.fov_y}};
+    score_number_lines.clear();
 
     // The meters and the sign, each through its own camera, over the scene.
     Hud::Frame h;
@@ -1194,6 +1219,23 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
       }
       convert(hud_layers[i].lines, hud_lines[i]);
       layers.push_back({&hud_lines[i], matrix(hud_layers[i].view), hud_layers[i].view.fov_y});
+    }
+    // Ours (task 4.10): the score in numbers as well, if set. In a headset below the
+    // meter under Vibri; on the monitor near the bottom, just above the meter.
+    if (s.save.options.score_numbers && s.panel && !s.demo) {
+      const int shown = std::min(game.score(), Hud::kMaxScore);
+      if (s.opt.vr) {
+        std::vector<SceneLine> placed;
+        number_below_vibri(s.panel->text_lines(std::to_string(shown), 1.2f, h.jitter_seed, 4), s.scene.vibri_z(), view.eye, placed);
+        score_number_lines.emplace_back();
+        convert(placed, score_number_lines.back());
+        layers.push_back({&score_number_lines.back(), matrix(view), view.fov_y});
+      } else {
+        const Hud::Layer number = s.panel->draw_score(shown, h.jitter_seed);
+        score_number_lines.emplace_back();
+        convert(number.lines, score_number_lines.back());
+        layers.push_back({&score_number_lines.back(), matrix(number.view), number.view.fov_y});
+      }
     }
     if (paused || going == Going::Counting) {  // the settings, or the count-in's number, over everything
       panel_layer = paused ? s.panel->draw(s.save.options, s.opt.vr, f.jitter_seed)

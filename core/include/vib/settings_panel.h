@@ -44,6 +44,7 @@ class SettingsPanel {
     QuitSong,      // an action: leave the song, as Start does
     ResumeStyle,   // resume_countdown: after a pause, rewind a little or count in
     Performance,   // perf_overlay: off, one line, detailed
+    ScoreNumbers,  // score_numbers: the score in numbers too, during play
   };
   enum class Action { None, Moved, Changed, Close, Recentre, QuitSong, LeaveTop };
 
@@ -83,6 +84,14 @@ class SettingsPanel {
   Hud::Layer draw_hint(std::uint32_t seed);
   // `text` (font codes) large in the middle of the screen: the count-in's numbers.
   Hud::Layer draw_big(const std::string& text, std::uint32_t seed);
+  // `text` (font codes) as lines centred on the origin, as if seen from -z (x right,
+  // y down, z 0 the text's own plane), each character 72 x `scale` across, jittered by
+  // `range` as the game's own text is: for a display to place where it wants (the
+  // headset puts the score's number below Vibri).
+  std::vector<SceneLine> text_lines(const std::string& text, float scale, std::uint32_t seed, int range);
+  // The score in numbers on the monitor: centred near the bottom, just above the time
+  // meter's strip, with the game's text jitter.
+  Hud::Layer draw_score(int score, std::uint32_t seed);
   // The panel as a layer of its own, with its own camera. `seed`: its jitter.
   Hud::Layer draw(const Options& o, bool vr, std::uint32_t seed);
 
