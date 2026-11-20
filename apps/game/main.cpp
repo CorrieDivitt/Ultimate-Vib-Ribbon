@@ -602,31 +602,82 @@ void score_above_vibri(const std::vector<SceneLine>& marks, float vibri_z, Vec3f
   }
 }
 
-// In a headset the song's progress is a straight bar below Vibri (ours, task 4.9, in
-// place of the original's time meter), placed as the score is above her: centred on
-// her, upright, turned to face `eye`, at a fixed height so it never moves when she
-// jumps. 1,200 units long (1.2 m), at 900 below the road: under the deepest part of
-// any obstacle (a pit, 559) and about as far below the eye as the score is above it.
-// A dim line the whole length with a tick at each end, and over it, from the left, a
-// bright one as far as the song has gone; a small upright mark rides its end.
-void progress_below_vibri(double progress, float vibri_z, Vec3f eye, std::vector<SceneLine>& out) {
-  constexpr float kHalf = 600.0f, kY = 900.0f, kTick = 60.0f;
-  float fx, fz;
-  facing(vibri_z, eye, fx, fz);
-  auto at = [&](float across, float y) { return Vec3f{fz * across, y, vibri_z - fx * across}; };  // across: to the viewer's right
-  auto line = [&](Vec3f a, Vec3f b, Rgb colour) {
-    SceneLine l;
-    l.a = a, l.b = b, l.colour = colour;
-    out.push_back(l);
-  };
+// In a headset the song's progress is the original's own time meter, moved below
+// Vibri (task 4.9; owner: "more in the style of the original", running right to left
+// as it does). The meter's model is drawn far larger than the original's screen and
+// only a strip of it shows along the screen's bottom edge, sliding as the song goes;
+// so the meter's lines are cut to that strip, the original picture's 4:3 window
+// through its camera, then that strip is placed below her as the score is above:
+// centred on her, upright, turned to face `eye`, at a fixed height (900 below the
+// road, under the deepest pit, 559), never moving when she jumps, 1,200 across.
+void meter_below_vibri(const Hud::Layer& meter, float vibri_z, Vec3f eye, std::vector<SceneLine>& out) {
+  constexpr float kWidth = 1200.0f, kY = 900.0f;
   out.clear();
-  const Rgb dim{90, 90, 90}, bright{255, 255, 255};
-  const float done = -kHalf + 2.0f * kHalf * float(std::clamp(progress, 0.0, 1.0));
-  line(at(-kHalf, kY), at(kHalf, kY), dim);
-  line(at(-kHalf, kY - kTick), at(-kHalf, kY + kTick), dim);
-  line(at(kHalf, kY - kTick), at(kHalf, kY + kTick), dim);
-  if (done > -kHalf) line(at(-kHalf, kY), at(done, kY), bright);
-  line(at(done, kY - kTick), at(done, kY + kTick), bright);
+  // The meter's camera: right, down and forward, as the original's screen shows them.
+  const Vec3f e = meter.view.eye, t = meter.view.target;
+  auto norm = [](Vec3f v) {
+    const float n = std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+    return n > 0 ? Vec3f{v.x / n, v.y / n, v.z / n} : Vec3f{0, 0, 1};
+  };
+  const Vec3f f = norm({t.x - e.x, t.y - e.y, t.z - e.z});
+  const Vec3f r = norm({f.z, 0.0f, -f.x});  // f x (0, -1, 0): right on screen
+  const Vec3f d{f.y * r.z - f.z * r.y, f.z * r.x - f.x * r.z, f.x * r.y - f.y * r.x};  // f x r: down on screen
+  auto dot = [](Vec3f a, Vec3f b) { return a.x * b.x + a.y * b.y + a.z * b.z; };
+  auto to_camera = [&](Vec3f p) { const Vec3f q{p.x - e.x, p.y - e.y, p.z - e.z}; return Vec3f{dot(q, r), dot(q, d), dot(q, f)}; };
+  // The original's window at the meter's depth (its lines all lie at one depth).
+  float depth = 0;
+  for (const SceneLine& l : meter.lines) depth = std::max(depth, to_camera(l.a).z);
+  if (meter.lines.empty() || depth <= 0) return;
+  const float half_h = depth * std::tan(0.5f * meter.view.fov_y), half_w = half_h * 4.0f / 3.0f;
+  const float k = kWidth / (2.0f * half_w);
+  // Its visible strip: from the lowest point any line reaches inside the window, to the window's bottom edge.
+  float facing_x, facing_z;
+  facing(vibri_z, eye, facing_x, facing_z);
+  auto place = [&](Vec3f c, float centre_y) {  // camera space to the world below Vibri
+    const float across = c.x * k, down = (c.y - centre_y) * k;
+    return Vec3f{facing_z * across, kY + down, vibri_z - facing_x * across};
+  };
+  auto turn = [&](Vec3f v) {  // a jitter, from the meter's world into ours
+    const Vec3f c{dot(v, r) * k, dot(v, d) * k, dot(v, f) * k};
+    return Vec3f{facing_z * c.x + facing_x * c.z, c.y, -facing_x * c.x + facing_z * c.z};
+  };
+  struct Cut {
+    Vec3f a, b, ja, jb;
+    std::uint32_t va, vb;
+    const SceneLine* from;
+  };
+  std::vector<Cut> cuts;
+  float top = half_h;
+  for (const SceneLine& l : meter.lines) {
+    Vec3f a = to_camera(l.a), b = to_camera(l.b);
+    // Cut to the window (Liang-Barsky on x and y); the depth hardly varies.
+    double t0 = 0, t1 = 1;
+    const double dx = b.x - a.x, dy = b.y - a.y;
+    bool inside = true;
+    auto clip = [&](double p, double q) {
+      if (p == 0) return q >= 0;
+      const double u = q / p;
+      if (p < 0) { if (u > t1) return false; if (u > t0) t0 = u; }
+      else { if (u < t0) return false; if (u < t1) t1 = u; }
+      return true;
+    };
+    inside = clip(-dx, a.x + half_w) && clip(dx, half_w - a.x) && clip(-dy, a.y + half_h) && clip(dy, half_h - a.y);
+    if (!inside) continue;
+    const Vec3f ca{float(a.x + t0 * dx), float(a.y + t0 * dy), a.z}, cb{float(a.x + t1 * dx), float(a.y + t1 * dy), b.z};
+    // Ends that were cut get no fresh jitter of their own (no shared vertex there).
+    cuts.push_back({ca, cb, t0 > 0 ? Vec3f{} : l.jitter_a, t1 < 1 ? Vec3f{} : l.jitter_b, t0 > 0 ? 0u : l.vertex_a, t1 < 1 ? 0u : l.vertex_b, &l});
+    top = std::min({top, ca.y, cb.y});
+  }
+  const float centre_y = 0.5f * (top + half_h);
+  for (const Cut& c : cuts) {
+    SceneLine w = *c.from;
+    w.a = place(c.a, centre_y), w.b = place(c.b, centre_y);
+    w.jitter_a = turn(c.ja), w.jitter_b = turn(c.jb);
+    w.vertex_a = c.va ? c.va + 0x50000000u : 0u;  // (its own vertices, apart from the scene's)
+    w.vertex_b = c.vb ? c.vb + 0x50000000u : 0u;
+    w.shake_a = c.from->shake_a * k, w.shake_b = c.from->shake_b * k;
+    out.push_back(w);
+  }
 }
 
 Result play_song(Session& s, int song, int track_index, int& points, std::uint32_t seed) {
@@ -1102,10 +1153,9 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     hud_lines.resize(hud_layers.size());
     for (std::size_t i = 0; i < hud_layers.size(); ++i) {
       if (s.opt.vr && hud_layers[i].time) {
-        // In a headset the song's progress is a bar below Vibri (task 4.9), moving smoothly.
-        const double progress = double(std::max(0, view_at)) / std::max(1.0, double(setup.course_seconds) * kSampleRate);
+        // In a headset the original's time meter sits below Vibri (task 4.9).
         std::vector<SceneLine> bar;
-        progress_below_vibri(progress, s.scene.vibri_z(), view.eye, bar);
+        meter_below_vibri(hud_layers[i], s.scene.vibri_z(), view.eye, bar);
         convert(bar, hud_lines[i]);
         layers.push_back({&hud_lines[i], matrix(view), view.fov_y});
         continue;
