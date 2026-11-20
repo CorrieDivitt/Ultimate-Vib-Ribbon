@@ -254,7 +254,8 @@ SceneView vr_play_view(float vibri_z, float zoom, double angle_degrees) {
 // In a headset: a gamepad's right stick held up zooms in (the view closer to Vibri),
 // down zooms out, smoothly, twice as close or as far for each second at full tilt;
 // the left stick left or right takes the view round her, 90 degrees a second.
-void zoom_with_stick(Session& s, double seconds) {
+// `zoom`: play's or the menus' own (each saved).
+void zoom_with_stick(Session& s, double seconds, double& zoom) {
   if (!s.opt.vr) return;
   float y = 0, x = 0;
   for (const auto& [id, pad] : s.pads) {
@@ -275,12 +276,11 @@ void zoom_with_stick(Session& s, double seconds) {
   }
   if (std::abs(y) > 0.2f) {
     const double t = (std::abs(y) - 0.2) / 0.8 * (y > 0 ? 1.0 : -1.0);
-    s.renderer.set_zoom(float(s.renderer.zoom() * std::exp2(t * std::min(seconds, 0.1))));
+    zoom = std::clamp(zoom * std::exp2(t * std::min(seconds, 0.1)), 1.0 / 24.0, 4.0);  // 4x closer to 24x further
     s.zooming = true;
   } else if (s.zooming) {
     s.zooming = false;
-    s.save.options.vr_zoom = s.renderer.zoom();
-    std::printf("Zoom %.2f\n", double(s.renderer.zoom()));
+    std::printf("Zoom %.3f\n", zoom);
   }
 }
 
@@ -506,7 +506,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
 
     const std::uint64_t now_ns = SDL_GetTicksNS();
     const double dt = double(now_ns - last_ns) * 1e-9;
-    zoom_with_stick(s, dt);
+    zoom_with_stick(s, dt, s.save.options.vr_zoom);
     last_ns = now_ns;
     // Heard position, 22.05 kHz samples from the song's start (negative during the 8 s ahead).
     auto heard_at = [&](std::uint64_t ns) {
@@ -562,7 +562,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     f.stage = game.stage();
     SceneView view;
     s.scene.draw(f, scene_lines, view);
-    if (s.opt.vr) view = vr_play_view(s.scene.vibri_z(), s.renderer.zoom(), s.save.options.vr_angle);
+    if (s.opt.vr) view = vr_play_view(s.scene.vibri_z(), float(s.save.options.vr_zoom), s.save.options.vr_angle);
     auto convert = [](const std::vector<SceneLine>& in, std::vector<vibr::LineInstance>& dst) {
       dst.clear();
       for (const SceneLine& l : in)
@@ -619,7 +619,6 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
       break;
     }
   }
-  if (s.opt.vr) s.save.options.vr_zoom = s.renderer.zoom();  // kept with the save when it is next written
   return result;
 }
 
@@ -705,7 +704,6 @@ int run(int argc, char** argv) {
       display = std::make_unique<vibr::Renderer>(window);
     }
     vibr::Display& renderer = *display;
-    renderer.set_zoom(float(save.options.vr_zoom));
     vibg::Audio audio(opt.offset_ms.value_or(save.options.audio_offset_ms));
     audio.set_volumes(opt.music.value_or(save.options.music_volume), opt.sfx.value_or(save.options.effects_volume));
     Effects fx(iso, audio);
@@ -892,7 +890,7 @@ int run(int argc, char** argv) {
         }
         if (!running) break;
         const std::uint64_t now_ns = SDL_GetTicksNS();
-        zoom_with_stick(s, double(now_ns - last_ns) * 1e-9);
+        zoom_with_stick(s, double(now_ns - last_ns) * 1e-9, s.save.options.vr_menu_zoom);
         behind = std::min(behind + double(now_ns - last_ns) * 1e-9, 0.1);
         last_ns = now_ns;
         while (behind >= 1.0 / TitleScreens::kFrameRate) {
@@ -986,13 +984,17 @@ int run(int argc, char** argv) {
           menu_lines[i].clear();
           for (const SceneLine& l : layers[i].lines)
             menu_lines[i].push_back({{l.a.x, l.a.y, l.a.z}, {l.b.x, l.b.y, l.b.z}, {l.colour.r / 255.0f, l.colour.g / 255.0f, l.colour.b / 255.0f, 1.0f}});
-          const SceneView& v = layers[i].view;
+          SceneView v = layers[i].view;
+          if (opt.vr) {  // zoom: each camera moved along its line of sight towards what it looks at
+            const float k = 1.0f / float(save.options.vr_menu_zoom);
+            v.eye = {v.target.x + (v.eye.x - v.target.x) * k, v.target.y + (v.eye.y - v.target.y) * k,
+                     v.target.z + (v.eye.z - v.target.z) * k};
+          }
           out.push_back({&menu_lines[i], vibr::look_at({v.eye.x, v.eye.y, v.eye.z}, {v.target.x, v.target.y, v.target.z}, {0, -1, 0}), v.fov_y});
         }
         renderer.draw(out, float(s.line_width * std::max(1, renderer.height()) / 288.0));
       }
     }
-    if (opt.vr) save.options.vr_zoom = renderer.zoom();
     write_save();
     for (auto& [id, pad] : s.pads) SDL_CloseGamepad(pad);
   }

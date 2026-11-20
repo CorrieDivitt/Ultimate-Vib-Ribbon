@@ -466,7 +466,10 @@ void Scene::draw(const Frame& f, std::vector<SceneLine>& out, SceneView& view) {
   const Fixed jitter = f.still ? Fixed() : speed_jitter;
 
   // The camera follows Vibri's place on the road.
-  const auto vibri_z = static_cast<float>((offset_ + start_).times(600).integer());
+  // Road units to world z (600 each). In 64 bits: the original's 32-bit product
+  // wraps beyond about 54 road lengths, which only the headset's long road reaches.
+  auto to_z = [](Fixed u) { return static_cast<std::int32_t>((std::int64_t(u.raw()) * 600) >> 16); };
+  const auto vibri_z = static_cast<float>(to_z(offset_ + start_));
   vibri_z_ = vibri_z;
   view_ = camera_.update(f.seconds, {0, 0, vibri_z});
   view = view_;
@@ -479,13 +482,13 @@ void Scene::draw(const Frame& f, std::vector<SceneLine>& out, SceneView& view) {
     if (f.road.front().position - length_ < before) before = f.road.front().position - length_;
     if (after < f.road.back().position + length_) after = f.road.back().position + length_;
   }
-  Vec3f join{0, 0, float(before.times(600).integer())};
+  Vec3f join{0, 0, float(to_z(before))};
   const int side = camera_.side();
   auto piece = [&](const TmdObject& obj, Fixed position, bool missed, int lean) {
     LineBuilder::Xform xf;
     xf.m = lean ? rotation_z(lean) : Mat3{};
     const int range = (missed ? speed_jitter.times(5) : jitter * Fixed::from(1.5)).integer();
-    lines_.object(obj, xf, range, (offset_ + position).times(600).integer(), &join, out);
+    lines_.object(obj, xf, range, to_z(offset_ + position), &join, out);
   };
   piece(point_.objects.front(), before, false, 0);
   for (const RoadPiece& p : f.road) {

@@ -25,6 +25,7 @@ struct Options {
   double vr_zoom = 1.0;         // in a headset, how close the view stands to Vibri in play (larger: closer)
   double vr_behind_seconds = 30.0;  // in a headset, how long passed parts stay on the line
   double vr_ahead_seconds = 30.0;   // and how far ahead it is drawn (play itself builds 8 s ahead)
+  double vr_menu_zoom = 1.0;    // in a headset, the menus' cameras moved towards what they look at (larger: closer)
   double vr_angle = 45.0;       // and where around her, degrees: 0 behind, 90 to her right, -90 to her left
   double audio_offset_ms = 0;  // added to the estimated output latency
   float music_volume = 1.0f, effects_volume = 1.0f;
