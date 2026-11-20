@@ -962,12 +962,17 @@ int run(int argc, char** argv) {
       std::optional<Effects> kiosk_fx;
       constexpr int kKioskVoice = 8;  // its voices 0 and 1 play on 8 and 9
       bool in_kiosk = false;
+      // Its music is a CD track of the game's disc, as the original's kiosk program
+      // plays it: audio track 7 (disc track 8, after the data track and the six songs).
+      std::vector<std::int16_t> kiosk_track;
       auto start_kiosk = [&]() {
         if (!kiosk) {
           kiosk_pak.emplace(iso.read("KIOSK/" + language_prefix(language) + "FILES.PAK"));
           kiosk.emplace(*kiosk_pak, language);
           kiosk_fx.emplace(iso, audio, "KIOSK/AUDIO/KIOSK");
+          kiosk_track = disc.read_audio_track(8);
         }
+        audio.play_music(kiosk_track);  // the film starts with its music
         for (int v : {0, 1, 5}) title_fx.stop(kTitleVoice + v);
         music.stop();
         voices.stop();
@@ -1078,6 +1083,7 @@ int run(int argc, char** argv) {
               // Back to the title's menu, its lines gathering in.
               kiosk_fx->stop(kKioskVoice);
               kiosk_fx->stop(kKioskVoice + 1);
+              audio.play_music({});
               in_kiosk = false;
               intro.start(true);
               intro.close_menus();
