@@ -110,6 +110,11 @@ class Effects {
     audio_.play_effect(&samples_[std::size_t(t.sample - 1)], rate, gain, voice, loops_[std::size_t(t.sample - 1)], after);
   }
   void number(int n, int volume, int voice, int after = -1) { play(n >> 4, n & 15, volume, voice, after); }
+  // Going: no voice may go on reading these sounds (a language change used to crash
+  // here, its confirm sound still playing as the menus' sound banks were freed).
+  ~Effects() { audio_.stop_using(samples_); }
+  Effects(const Effects&) = delete;
+  Effects& operator=(const Effects&) = delete;
   bool is_playing(int voice) { return audio_.is_playing(voice); }
   void stop(int voice) { audio_.stop(voice); }
 

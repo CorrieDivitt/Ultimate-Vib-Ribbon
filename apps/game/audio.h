@@ -33,6 +33,9 @@ class Audio {
   void play_effect(const std::vector<std::int16_t>* mono, double rate, float gain, int voice, int loop_start = -1, int after = -1);
   bool is_playing(int voice);
   void stop(int voice);
+  // Stops every voice playing (or waiting to play) one of `samples`: their owner is
+  // going, and the mixer must not read them after.
+  void stop_using(const std::vector<std::vector<std::int16_t>>& samples);
 
   // The music frame being heard at `ticks_ns` (SDL_GetTicksNS time), smoothed so
   // it moves evenly; may be fractional. Call with non-decreasing times for the

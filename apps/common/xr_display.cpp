@@ -114,6 +114,28 @@ class XrDisplay::Impl {
   }
 
   ~Impl() {
+    // Ask the runtime to end the session and let it, before taking it apart (a
+    // change of language starts a new one straight after). Never throws.
+    tearing_down_ = true;  // (its end is ours: not the player closing the game)
+    if (session_ && running_) {
+      try {
+        xrRequestExitSession(session_);
+        for (int i = 0; i < 120 && running_; ++i) {
+          poll_events();
+          if (!running_) break;
+          XrFrameWaitInfo wait{XR_TYPE_FRAME_WAIT_INFO};
+          XrFrameState state{XR_TYPE_FRAME_STATE};
+          if (XR_FAILED(xrWaitFrame(session_, &wait, &state))) break;
+          XrFrameBeginInfo begin{XR_TYPE_FRAME_BEGIN_INFO};
+          if (XR_FAILED(xrBeginFrame(session_, &begin))) break;
+          XrFrameEndInfo end{XR_TYPE_FRAME_END_INFO};
+          end.displayTime = state.predictedDisplayTime;
+          end.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
+          if (XR_FAILED(xrEndFrame(session_, &end))) break;
+        }
+      } catch (...) {
+      }
+    }
     if (device_) vkDeviceWaitIdle(device_);
     for (Eye& e : eyes_) {
       for (VkFramebuffer f : e.framebuffers) vkDestroyFramebuffer(device_, f, nullptr);
@@ -736,9 +758,11 @@ class XrDisplay::Impl {
           case XR_SESSION_STATE_EXITING:
           case XR_SESSION_STATE_LOSS_PENDING: {
             running_ = false;
-            SDL_Event quit{};
-            quit.type = SDL_EVENT_QUIT;
-            SDL_PushEvent(&quit);
+            if (!tearing_down_) {
+              SDL_Event quit{};
+              quit.type = SDL_EVENT_QUIT;
+              SDL_PushEvent(&quit);
+            }
             break;
           }
           default: break;
@@ -869,7 +893,7 @@ class XrDisplay::Impl {
   std::vector<Button> buttons_;
   XrAction stick_ = XR_NULL_HANDLE;
   bool stick_down_[4] = {};
-  bool running_ = false, focused_ = false;
+  bool running_ = false, focused_ = false, tearing_down_ = false;
   std::string runtime_name_, gpu_name_;
 
   VkInstance vk_instance_ = VK_NULL_HANDLE;

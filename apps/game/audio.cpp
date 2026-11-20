@@ -51,6 +51,15 @@ bool Audio::is_playing(int voice) {
   return voices_[voice].pcm != nullptr;
 }
 
+void Audio::stop_using(const std::vector<std::vector<std::int16_t>>& samples) {
+  if (samples.empty()) return;
+  const auto* first = &samples.front();
+  const auto* last = &samples.back();
+  std::lock_guard<std::mutex> lock(mutex_);
+  for (Voice& v : voices_)
+    if (v.pcm >= first && v.pcm <= last) v = {};
+}
+
 void Audio::stop(int voice) {
   if (voice < 0 || voice >= 24) return;
   std::lock_guard<std::mutex> lock(mutex_);
