@@ -9,6 +9,7 @@ add_executable(vibcore_tests
   test_gameplay.cpp
   test_save.cpp
   test_settings.cpp
+  test_perf.cpp
 )
 target_link_libraries(vibcore_tests PRIVATE vibcore vib_warnings)
 add_test(NAME vibcore_tests COMMAND vibcore_tests)

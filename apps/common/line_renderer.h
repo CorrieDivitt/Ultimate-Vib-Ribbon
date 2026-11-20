@@ -71,6 +71,18 @@ struct Layer {
   const std::vector<LineInstance>* lines = nullptr;
   Mat4 view;
   float fov_y = 0.8f;
+  // In a headset, > 0: fixed in front of the eyes instead of placed in the world,
+  // this many metres a unit; `view` then takes the lines to the head's own space
+  // (y up, -z ahead of the face). A monitor draws the layer as any other.
+  float head_locked = 0;
+};
+
+// How the last frame went, as the display measured it (the performance overlay).
+struct FrameTiming {
+  double interval_ms = 0;  // since the frame before: shown (headset: display times), else handed over; 0 unknown
+  double period_ms = 0;    // the display's frame period; 0 if it does not say
+  double wait_ms = 0;      // in draw(), blocked until the display was ready for the frame
+  double submit_ms = 0;    // the rest of draw(): copying the lines, recording, submitting, presenting
 };
 
 // Where the game's lines are shown: a window on the monitor, or a headset.
@@ -87,6 +99,8 @@ class Display {
   // A headset: how close the view stands to Vibri in play (1 = as set up, larger = closer).
   virtual float zoom() const { return 1.0f; }
   virtual void set_zoom(float) {}
+  // The last draw()'s timing.
+  virtual FrameTiming timing() const { return {}; }
 };
 
 class Renderer : public Display {
@@ -103,6 +117,7 @@ class Renderer : public Display {
   int height() const override;  // pixels
   void draw(const std::vector<LineInstance>& lines, const Mat4& view, float fov_y, float line_width);
   void draw(const std::vector<Layer>& layers, float line_width) override;
+  FrameTiming timing() const override;
 
  private:
   class Impl;

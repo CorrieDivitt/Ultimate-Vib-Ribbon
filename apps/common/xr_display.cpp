@@ -178,7 +178,15 @@ class XrDisplay::Impl {
     }
     XrFrameWaitInfo wait{XR_TYPE_FRAME_WAIT_INFO};
     XrFrameState state{XR_TYPE_FRAME_STATE};
+    const std::uint64_t start_ns = SDL_GetTicksNS();
     xr_check(xrWaitFrame(session_, &wait, &state), "xrWaitFrame");
+    const std::uint64_t waited_ns = SDL_GetTicksNS();
+    // The frame's timing by the runtime's own display times: a gap of more than one
+    // period means the headset showed a frame we were too late for.
+    timing_.wait_ms = double(waited_ns - start_ns) * 1e-6;
+    timing_.period_ms = double(state.predictedDisplayPeriod) * 1e-6;
+    timing_.interval_ms = last_display_time_ ? double(state.predictedDisplayTime - last_display_time_) * 1e-6 : 0.0;
+    last_display_time_ = state.predictedDisplayTime;
     XrFrameBeginInfo begin{XR_TYPE_FRAME_BEGIN_INFO};
     xr_check(xrBeginFrame(session_, &begin), "xrBeginFrame");
     poll_actions();
@@ -196,6 +204,14 @@ class XrDisplay::Impl {
       for (XrView& v : views) v.type = XR_TYPE_VIEW;
       std::uint32_t count = 0;
       xr_check(xrLocateViews(session_, &locate, &view_state, 2, &count, views.data()), "xrLocateViews");
+      // The same eyes seen from the head, for layers fixed in front of it.
+      std::array<XrView, 2> head_views{};
+      for (XrView& v : head_views) v.type = XR_TYPE_VIEW, v.pose.orientation.w = 1;
+      XrViewLocateInfo locate_head = locate;
+      locate_head.space = head_;
+      XrViewState head_state{XR_TYPE_VIEW_STATE};
+      if (XR_FAILED(xrLocateViews(session_, &locate_head, &head_state, 2, &count, head_views.data())))
+        for (XrView& v : head_views) v.pose = {{0, 0, 0, 1}, {0, 0, 0}};  // (then from between the eyes)
       if (recentre_at_ns_ && SDL_GetTicksNS() >= recentre_at_ns_) {
         recentre_at_ns_ = 0;
         recentre_ = true;
@@ -203,7 +219,7 @@ class XrDisplay::Impl {
       if (recentre_) place_scene(state.predictedDisplayTime);
       if ((view_state.viewStateFlags & XR_VIEW_STATE_POSITION_VALID_BIT) &&
           (view_state.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT)) {
-        render(layers, line_width, views, projected);
+        render(layers, line_width, views, head_views, projected);
         layer.space = space_;
         layer.viewCount = 2;
         layer.views = projected.data();
@@ -217,7 +233,10 @@ class XrDisplay::Impl {
     end.layerCount = drawn ? 1 : 0;
     end.layers = submitted;
     xr_check(xrEndFrame(session_, &end), "xrEndFrame");
+    timing_.submit_ms = double(SDL_GetTicksNS() - waited_ns) * 1e-6;
   }
+
+  FrameTiming timing() const { return timing_; }
 
  private:
   struct Eye {
@@ -821,7 +840,7 @@ class XrDisplay::Impl {
   }
 
   void render(const std::vector<Layer>& layers, float line_width, const std::array<XrView, 2>& views,
-              std::array<XrCompositionLayerProjectionView, 2>& projected) {
+              const std::array<XrView, 2>& head_views, std::array<XrCompositionLayerProjectionView, 2>& projected) {
     vkWaitForFences(device_, 1, &fence_, VK_TRUE, UINT64_MAX);
     vkResetFences(device_, 1, &fence_);
     // Every layer's lines into the one buffer, the colours as the headset wants them.
@@ -873,11 +892,16 @@ class XrDisplay::Impl {
       const VkDeviceSize zero = 0;
       vkCmdBindVertexBuffers(cmd_, 0, 1, &lines_, &zero);
       // Each layer's camera stands at the headset's starting place, in metres; the eye looks from where it is now.
-      const Mat4 eye_view = mul(mul(projection(views[e].fov, 0.05f, 2000.0f), view_from_pose(views[e].pose)), scene_place_);
+      const Mat4 eye_projection = projection(views[e].fov, 0.05f, 2000.0f);
+      const Mat4 eye_view = mul(mul(eye_projection, view_from_pose(views[e].pose)), scene_place_);
+      // Layers fixed to the head (the performance overlay): from the eye's place in the head.
+      const Mat4 head_view = mul(eye_projection, view_from_pose(head_views[e].pose));
       for (std::size_t i = 0; i < layers.size(); ++i) {
         if (!counts[i]) continue;
         PushConstants pc;
-        pc.mvp = mul(eye_view, mul(scaling(scale_, scale_, scale_ * depth_for(layers[i].fov_y)), layers[i].view));
+        const float hl = layers[i].head_locked;
+        pc.mvp = hl > 0 ? mul(head_view, mul(scaling(hl, hl, hl), layers[i].view))
+                        : mul(eye_view, mul(scaling(scale_, scale_, scale_ * depth_for(layers[i].fov_y)), layers[i].view));
         pc.viewport[0] = float(eye.width);
         pc.viewport[1] = float(eye.height);
         pc.width = line_width;
@@ -909,6 +933,8 @@ class XrDisplay::Impl {
   XrSession session_ = XR_NULL_HANDLE;
   XrSpace space_ = XR_NULL_HANDLE, head_ = XR_NULL_HANDLE;
   Mat4 scene_place_;  // the scene in the headset's starting space (identity until recentred)
+  FrameTiming timing_;
+  XrTime last_display_time_ = 0;
   // Recentred as soon as the headset is tracked at start (after a change of
   // language too, which starts the game again), and a moment after the game gets
   // the headset's focus or the headset is put on, so the scene is in front of the
@@ -954,6 +980,7 @@ void XrDisplay::draw(const std::vector<Layer>& layers, float line_width) { impl_
 void XrDisplay::recentre() { impl_->recentre(); }
 float XrDisplay::zoom() const { return impl_->zoom(); }
 void XrDisplay::set_zoom(float z) { impl_->set_zoom(z); }
+FrameTiming XrDisplay::timing() const { return impl_->timing(); }
 const char* XrDisplay::runtime_name() const { return impl_->runtime_name(); }
 void XrDisplay::set_scale(float metres_per_unit) { impl_->set_scale(metres_per_unit); }
 float XrDisplay::scale() const { return impl_->scale(); }

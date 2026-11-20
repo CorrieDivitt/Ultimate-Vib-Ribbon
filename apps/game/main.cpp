@@ -24,6 +24,7 @@
 //   Loop   (R1/R2)             Right arrow, D         gamepad: right shoulder or trigger
 //   Wave   (Triangle/Cross)    Space, J, K            gamepad: top or bottom face button
 //   [ and ]: audio offset -/+ 5 ms     - and =: line width     Esc: quit
+//   L3 (left stick click) or F3: the performance overlay, off / one line / detailed
 //
 // High scores and options (sound effects, vibration, fixed courses, line width,
 // audio offset, volumes) live in save.txt in the per-user folder SDL picks, printed
@@ -71,6 +72,7 @@
 #include "vib/title_intro.h"
 #include "vib/kiosk_movie.h"
 #include "vib/settings_panel.h"
+#include "vib/perf_overlay.h"
 
 namespace {
 
@@ -249,6 +251,12 @@ struct Session {
   std::int32_t music_samples = 0;  // its whole seconds at 22,050 Hz, as the original counts a CD track
   SettingsPanel* panel = nullptr;      // our settings: the pause, and below the Options screen
   std::function<void()> write_save;    // keeps the options now
+  // The performance overlay (ours, task 4.6): every frame measured, shown when on.
+  PerfOverlay* perf = nullptr;
+  FrameStats stats;
+  std::vector<std::string> perf_text;  // its rows, rewritten 4 times a second so they can be read
+  std::uint64_t perf_text_ns = 0, perf_print_ns = 0;
+  std::vector<vibr::LineInstance> perf_lines;
 };
 
 // In a headset, play is seen from down beside Vibri instead of from the original's
@@ -327,20 +335,16 @@ Vec3f headset_jitter(Vec3f p, Vec3f old_jitter, std::uint32_t vertex, float shak
   return {base.x + dx * shake, base.y + dy * shake, base.z + dz * shake};
 }
 
-// L3: on the monitor, smooth animation on or off for this run; in a headset (where
-// smoothing stays on), how often the jitter changes: every 1, 2 or 3 of its frames
-// (saved). Every frame looked doubled to the owner (the eye fuses two jitters).
+// L3 (or F3): the performance overlay off, one line, detailed, and round again
+// (owner's choice; the wobble hold and smoothing L3 used to change are in the
+// settings now). Saved, with the click to hear it in the headset.
 void l3_pressed(Session& s) {
-  if (s.opt.vr) {
-    int& hold = s.save.options.vr_jitter_hold;
-    hold = hold % 3 + 1;
-    s.fx.number(1, 90, 5);  // the click, to hear it in the headset
-    std::printf("Jitter changes every %d headset frame%s (saved)\n", hold, hold == 1 ? "" : "s");
-    return;
-  }
-  s.save.options.smooth_animation = !Clip::smooth();
-  Clip::set_smooth(s.save.options.smooth_animation);
-  std::printf("Animation: %s (saved)\n", Clip::smooth() ? "smooth (poses blended)" : "stepped, like the original");
+  int& level = s.save.options.perf_overlay;
+  level = (level + 1) % 3;
+  s.fx.number(1, 90, 5);
+  static const char* names[] = {"off", "on (one line)", "detailed"};
+  std::printf("Performance overlay %s (saved)\n", names[level]);
+  s.perf_text_ns = 0;  // its rows at once
 }
 
 // On the monitor: the original's 50 Hz jitter, scaled (1 as it was, 0 none).
@@ -387,15 +391,16 @@ std::vector<SettingsPanel::Item> pause_items(bool vr) {
   using I = SettingsPanel::Item;
   if (vr)
     return {I::Continue, I::WobbleSize, I::WobbleHold, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind,
-            I::Recentre, I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle, I::QuitSong};
-  return {I::Continue, I::WobbleSize, I::Smooth, I::LineWidth, I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle, I::QuitSong};
+            I::Recentre, I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::QuitSong};
+  return {I::Continue, I::WobbleSize, I::Smooth, I::LineWidth, I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle,
+          I::Performance, I::QuitSong};
 }
 std::vector<SettingsPanel::Item> menu_items(bool vr) {
   using I = SettingsPanel::Item;
   if (vr)
     return {I::WobbleSize, I::WobbleHold, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind, I::Recentre,
-            I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle};
-  return {I::WobbleSize, I::Smooth, I::LineWidth, I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle};
+            I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance};
+  return {I::WobbleSize, I::Smooth, I::LineWidth, I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance};
 }
 
 // Scene lines to the renderer's, jittered as play does: in a headset afresh every
@@ -415,6 +420,49 @@ void to_instances(const Session& s, const std::vector<SceneLine>& in, std::uint3
     }
     out.push_back({{a.x, a.y, a.z}, {b.x, b.y, b.z}, {l.colour.r / 255.0f, l.colour.g / 255.0f, l.colour.b / 255.0f, 1.0f}});
   }
+}
+
+// One frame through the display, measured for the performance overlay: when it is
+// on, its layer goes over the others (in a headset fixed low left in the view, on
+// the monitor at the top left). `update_ms`, `build_ms`: the game's own work for
+// this frame before drawing (rules, sound and input; making the lines).
+void draw_frame(Session& s, std::vector<vibr::Layer>& layers, double update_ms, double build_ms) {
+  const std::uint64_t now = SDL_GetTicksNS();
+  const int level = s.save.options.perf_overlay;
+  if (level > 0 && s.perf) {
+    if (now - s.perf_text_ns > 250'000'000) {
+      s.perf_text_ns = now;
+      s.perf_text = perf_rows(s.stats.summary(now), level, s.audio.latency_ms());
+      if (now - s.perf_print_ns > 1'000'000'000) {  // and in the console once a second
+        s.perf_print_ns = now;
+        std::string line = "Perf";
+        for (const std::string& r : s.perf_text) line += "  |  " + r;
+        std::printf("%s\n", line.c_str());
+      }
+    }
+    const FrameStats::Summary sum = s.stats.summary(now);
+    int w = 4, h = 3;
+    if (!s.opt.vr) SDL_GetWindowSizeInPixels(s.window, &w, &h);
+    const Hud::Layer pl = s.perf->draw(s.perf_text, level >= 2 ? s.stats.intervals(now) : std::vector<double>{}, sum.target_ms, s.opt.vr,
+                                       float(w) / float(std::max(1, h)));
+    s.perf_lines.clear();
+    for (const SceneLine& l : pl.lines)
+      s.perf_lines.push_back({{l.a.x, l.a.y, l.a.z}, {l.b.x, l.b.y, l.b.z}, {l.colour.r / 255.0f, l.colour.g / 255.0f, l.colour.b / 255.0f, 1.0f}});
+    const SceneView& v = pl.view;
+    layers.push_back({&s.perf_lines, vibr::look_at({v.eye.x, v.eye.y, v.eye.z}, {v.target.x, v.target.y, v.target.z}, {0, -1, 0}), v.fov_y,
+                      s.opt.vr ? PerfOverlay::kHeadMetresPerUnit : 0.0f});
+  }
+  int lines = 0;
+  for (const vibr::Layer& l : layers) lines += l.lines ? int(l.lines->size()) : 0;
+  const double build_more = double(SDL_GetTicksNS() - now) * 1e-6;  // (the overlay's own lines count as building)
+  // The original's lines are one pixel on a 288-line picture.
+  s.renderer.draw(layers, float(s.line_width * std::max(1, s.renderer.height()) / 288.0));
+  const vibr::FrameTiming t = s.renderer.timing();
+  FrameSample f;
+  f.ns = SDL_GetTicksNS();
+  f.interval_ms = t.interval_ms, f.period_ms = t.period_ms, f.wait_ms = t.wait_ms, f.submit_ms = t.submit_ms;
+  f.update_ms = update_ms, f.build_ms = build_ms + build_more, f.lines = lines;
+  s.stats.add(f);
 }
 
 // The menus' settings screen shows play beside the settings: Vibri walking a road of
@@ -685,7 +733,9 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   Hud::Layer panel_layer;
   std::vector<vibr::LineInstance> panel_lines;
 
+  s.stats.reset_audio();
   for (;;) {
+    const std::uint64_t frame_start_ns = SDL_GetTicksNS();
     presses.clear();
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
@@ -705,12 +755,17 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
               case SDLK_RETURN: case SDLK_SPACE: case SDLK_Z: pin.confirm = true; break;
               case SDLK_ESCAPE: case SDLK_BACKSPACE: case SDLK_X: pin.cancel = true; break;
               case SDLK_P: case SDLK_TAB: resume = true; break;
+              case SDLK_F3: l3_pressed(s); break;
               default: break;
             }
             break;
           }
           if (e.key.key == SDLK_P || e.key.key == SDLK_TAB) {
             pause = true;
+            break;
+          }
+          if (e.key.key == SDLK_F3) {
+            l3_pressed(s);
             break;
           }
           if (e.key.key == SDLK_ESCAPE) return Result::Abort;
@@ -878,6 +933,8 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
       const std::int32_t at = std::clamp(heard_at(p.ns), last_position, heard);
       outcome = game.update(at, p.bits, s.scene.move_done(0.5));
       last_position = at;
+      for (const GameEvent& ev : game.events())  // how early or late, for the performance overlay
+        if (ev.type == GameEvent::Type::Hit) s.stats.add_press(double(at - ev.time) * 1000.0 / kSampleRate);
       handle(game.events());
       if (outcome != Outcome::Playing) break;
     }
@@ -886,6 +943,11 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
       last_position = heard;
       handle(game.events());
     }
+
+    // The sound clock for the overlay, while the song plays (not frozen, not rewinding).
+    if (frozen) s.stats.reset_audio();
+    else s.stats.add_audio(now_ns, double(heard) / kSampleRate);  // (play's own reading: the clock is read once a frame)
+    const std::uint64_t build_start_ns = SDL_GetTicksNS();
 
     // Draw. The jitter changes at the original's 50 Hz, whatever the display does.
     Scene::Frame f;
@@ -969,9 +1031,8 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
       convert(panel_layer.lines, panel_lines);
       layers.push_back({&panel_lines, matrix(panel_layer.view), panel_layer.view.fov_y});
     }
-    // The original's lines are one pixel on a 288-line picture.
-    const float width = float(s.line_width * std::max(1, s.renderer.height()) / 288.0);
-    s.renderer.draw(layers, width);
+    const std::uint64_t built_ns = SDL_GetTicksNS();
+    draw_frame(s, layers, double(build_start_ns - frame_start_ns) * 1e-6, double(built_ns - build_start_ns) * 1e-6);
 
     title_timer -= dt;
     if (title_timer <= 0) {
@@ -1113,6 +1174,9 @@ int run(int argc, char** argv) {
     }
     SettingsPanel panel(pak, language, words ? &*words : nullptr);
     s.panel = &panel;
+    PerfOverlay perf(pak, language, words ? &*words : nullptr);
+    s.perf = &perf;
+    if (save.options.perf_overlay > 0) std::printf("Performance overlay on (L3 or F3 steps it: off, one line, detailed)\n");
     s.write_save = write_save;
     std::uint32_t seed = opt.seed;
     int last_rank = 0, last_score = 0, lost_song = 0, points_before_lost = 0;
@@ -1295,6 +1359,12 @@ int run(int argc, char** argv) {
                 case SDLK_RETURN: case SDLK_SPACE: case SDLK_Z: press(4, down); break;
                 case SDLK_ESCAPE: case SDLK_BACKSPACE: case SDLK_X: press(5, down); break;
                 case SDLK_P: case SDLK_TAB: if (down) toggle_settings = true; break;
+                case SDLK_F3:
+                  if (down) {
+                    l3_pressed(s);
+                    write_save();
+                  }
+                  break;
                 case SDLK_MINUS: case SDLK_EQUALS:
                   if (down) {
                     change_line_width(s, e.key.key == SDLK_EQUALS);
@@ -1516,6 +1586,7 @@ int run(int argc, char** argv) {
           if (!running) break;
         }
         if (!running) break;
+        const std::uint64_t ticked_ns = SDL_GetTicksNS();  // (the menus' work this frame, for the overlay)
         if (demo_start) {
           demo_start = false;
           static const int kDemoLevels[8] = {1, 2, 3, 0, 4, 5, 6, 0};  // 0: the kiosk movie
@@ -1586,8 +1657,8 @@ int run(int argc, char** argv) {
           auto matrix = [](const SceneView& v) {
             return vibr::look_at({v.eye.x, v.eye.y, v.eye.z}, {v.target.x, v.target.y, v.target.z}, {0, -1, 0});
           };
-          const std::vector<vibr::Layer> out{{&settings_lines[0], matrix(view), view.fov_y}, {&settings_lines[1], matrix(pl.view), pl.view.fov_y}};
-          renderer.draw(out, float(s.line_width * std::max(1, renderer.height()) / 288.0));
+          std::vector<vibr::Layer> out{{&settings_lines[0], matrix(view), view.fov_y}, {&settings_lines[1], matrix(pl.view), pl.view.fov_y}};
+          draw_frame(s, out, double(ticked_ns - now_ns) * 1e-6, double(SDL_GetTicksNS() - ticked_ns) * 1e-6);
           continue;
         }
         // Draw the last frame the title or the menus made.
@@ -1652,7 +1723,7 @@ int run(int argc, char** argv) {
           }
           out.push_back({&menu_lines[i], vibr::look_at({v.eye.x, v.eye.y, v.eye.z}, {v.target.x, v.target.y, v.target.z}, {0, -1, 0}), v.fov_y});
         }
-        renderer.draw(out, float(s.line_width * std::max(1, renderer.height()) / 288.0));
+        draw_frame(s, out, double(ticked_ns - now_ns) * 1e-6, double(SDL_GetTicksNS() - ticked_ns) * 1e-6);
       }
     }
     write_save();

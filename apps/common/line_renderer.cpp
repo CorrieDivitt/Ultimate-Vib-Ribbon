@@ -97,7 +97,24 @@ class Renderer::Impl {
   int height() const { return int(extent_.height); }
   void request_resize() { resize_ = true; }
 
+  FrameTiming timing() const { return timing_; }
+
   void draw(const std::vector<Layer>& layers, float line_width) {
+    const std::uint64_t start_ns = SDL_GetTicksNS();
+    // (Measured at every return, a frame drawn or not; the interval is between frames handed over.)
+    struct Measure {
+      Impl& r;
+      std::uint64_t start, waited = 0;
+      ~Measure() {
+        const std::uint64_t end = SDL_GetTicksNS();
+        r.timing_.wait_ms = double(waited) * 1e-6;
+        r.timing_.submit_ms = double(end - start - waited) * 1e-6;
+        r.timing_.interval_ms = r.last_frame_ns_ ? double(end - r.last_frame_ns_) * 1e-6 : 0.0;
+        r.last_frame_ns_ = end;
+        const SDL_DisplayMode* mode = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(r.window_));
+        r.timing_.period_ms = mode && mode->refresh_rate > 0 ? 1000.0 / double(mode->refresh_rate) : 0.0;
+      }
+    } measure{*this, start_ns};
     if (resize_ || extent_.width == 0) {
       vkDeviceWaitIdle(device_);
       create_swapchain();
@@ -110,6 +127,7 @@ class Renderer::Impl {
     if (r == VK_ERROR_OUT_OF_DATE_KHR) { resize_ = true; return; }
     if (r != VK_SUBOPTIMAL_KHR) check(r, "vkAcquireNextImageKHR");
     vkResetFences(device_, 1, &frame_fence_);
+    measure.waited = SDL_GetTicksNS() - start_ns;  // the fence and the next image: vsync's wait
 
     // Every layer's lines go into the one buffer, back to back.
     std::vector<std::uint32_t> firsts, counts;
@@ -547,6 +565,8 @@ class Renderer::Impl {
   }
 
   SDL_Window* window_;
+  FrameTiming timing_;
+  std::uint64_t last_frame_ns_ = 0;
   VkInstance instance_ = VK_NULL_HANDLE;
   VkDebugUtilsMessengerEXT messenger_ = VK_NULL_HANDLE;
   VkSurfaceKHR surface_ = VK_NULL_HANDLE;
@@ -586,5 +606,6 @@ void Renderer::draw(const std::vector<LineInstance>& lines, const Mat4& view, fl
   impl_->draw({Layer{&lines, view, fov_y}}, line_width);
 }
 void Renderer::draw(const std::vector<Layer>& layers, float line_width) { impl_->draw(layers, line_width); }
+FrameTiming Renderer::timing() const { return impl_->timing(); }
 
 }  // namespace vibr

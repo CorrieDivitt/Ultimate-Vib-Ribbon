@@ -20,6 +20,7 @@ add_library(vibcore STATIC
   src/title_intro.cpp
   src/kiosk_movie.cpp
   src/settings_panel.cpp
+  src/perf_overlay.cpp
 )
 target_include_directories(vibcore PUBLIC include)
 target_link_libraries(vibcore PRIVATE vib_warnings)

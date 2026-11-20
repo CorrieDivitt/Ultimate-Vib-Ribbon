@@ -67,6 +67,7 @@ struct GameEvent {
   Type type;
   int road = 0;
   int value = 0;
+  std::int32_t time = 0;  // Hit and Miss: the part's time (samples, as heard), to show how early or late a press was
 };
 
 enum class Outcome { Playing, Clear, GameOver };
@@ -148,7 +149,7 @@ class Gameplay {
   void hit(Part& p);
   void miss(Part& p);
   int stray(int road, int part_road);
-  void emit(GameEvent::Type t, int road = 0, int value = 0) { events_.push_back({t, road, value}); }
+  void emit(GameEvent::Type t, int road = 0, int value = 0, std::int32_t time = 0) { events_.push_back({t, road, value, time}); }
 
   struct Interval {
     bool set = false;

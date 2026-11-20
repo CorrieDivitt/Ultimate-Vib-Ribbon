@@ -20,6 +20,7 @@
 #include "vib/title_intro.h"
 #include "vib/kiosk_movie.h"
 #include "vib/settings_panel.h"
+#include "vib/perf_overlay.h"
 #include "vib/course_script.h"
 #include "vib/motion.h"
 #include "vib/sound_bank.h"
@@ -586,7 +587,7 @@ TEST(disc_sces02873_settings_panel) {
   using A = SettingsPanel::Action;
   const std::vector<I> all = {I::Continue, I::WobbleSize, I::WobbleHold, I::Smooth, I::LineWidth, I::Zoom, I::ViewAngle,
                               I::SeeAhead, I::SeeBehind, I::Recentre, I::SoundEffects, I::Vibration, I::SoundTiming, I::QuitSong,
-                              I::ResumeStyle};
+                              I::ResumeStyle, I::Performance};
   for (int language = 0; language < 5; ++language) {
     const Pak game(iso.read("GAME/" + language_prefix(language) + "FILES.PAK"));
     SettingsPanel p(game, language, &words);
@@ -600,6 +601,11 @@ TEST(disc_sces02873_settings_panel) {
       o.resume_countdown = countdown;
       CHECK(p.value(I::ResumeStyle, o, true).find('?') == std::string::npos);
     }
+    for (int level = 0; level < 3; ++level) {
+      o.perf_overlay = level;
+      CHECK(!p.value(I::Performance, o, true).empty() && p.value(I::Performance, o, true).find('?') == std::string::npos);
+    }
+    o.perf_overlay = 0;
     for (const bool vr : {false, true}) {
       const Hud::Layer layer = p.draw(o, vr, 1234);
       CHECK(layer.lines.size() > 100);
@@ -616,7 +622,15 @@ TEST(disc_sces02873_settings_panel) {
     while (p.current() != item) p.tick(down, 0.02, o, true);
   };
   CHECK(p.tick(confirm, 0.02, o, true) == A::Close);  // Continue
-  CHECK(p.tick(up, 0.02, o, true) == A::Moved && p.current() == I::ResumeStyle);  // wraps in play
+  CHECK(p.tick(up, 0.02, o, true) == A::Moved && p.current() == I::Performance);  // wraps in play
+  // The performance overlay: confirm or right steps it off, on, detailed, round again; left goes back.
+  CHECK(o.perf_overlay == 0 && p.tick(confirm, 0.02, o, true) == A::Changed && o.perf_overlay == 1 && p.value(I::Performance, o, true) == "On");
+  CHECK(p.tick(right, 0.02, o, true) == A::Changed && o.perf_overlay == 2 && p.value(I::Performance, o, true) == "Detailed");
+  CHECK(p.tick(right, 0.02, o, true) == A::Changed && o.perf_overlay == 0);
+  CHECK(p.tick(left, 0.02, o, true) == A::Changed && o.perf_overlay == 2);
+  o.perf_overlay = 0;
+  p.tick(up, 0.02, o, true);
+  CHECK(p.current() == I::ResumeStyle);
   CHECK(!o.resume_countdown && p.tick(confirm, 0.02, o, true) == A::Changed && o.resume_countdown);
   CHECK(p.value(I::ResumeStyle, o, true) == "Countdown");
   p.tick(up, 0.02, o, true);
@@ -658,4 +672,42 @@ TEST(disc_sces02873_settings_panel) {
   const std::size_t three = p.draw(o, true, 1).lines.size();
   p.set_place(0.5f, 14);
   CHECK(three > 0 && three < p.draw(o, true, 1).lines.size());
+}
+
+TEST(disc_sces02873_performance_overlay_draws_its_rows_and_graph) {
+  const std::string cue = test_cue();
+  if (cue.empty()) SKIP("set VIB_TEST_CUE to your SCES-02873 .cue to run");
+  DiscImage disc = DiscImage::open(path_from_utf8(cue));
+  Iso9660 iso(disc);
+  const GameText words = GameText::from_exe(iso.read("MAIN_G.EXE"));
+  FrameStats st;
+  std::uint64_t t = 0;
+  for (int i = 0; i < 90; ++i) {
+    FrameSample f;
+    f.ns = t += 12'500'000, f.interval_ms = i == 40 ? 30.0 : 12.5, f.period_ms = 12.5;
+    st.add(f);
+  }
+  st.add_press(-8);
+  const auto rows = perf_rows(st.summary(t), 2, 45);
+  const auto graph = st.intervals(t);
+  for (int language = 0; language < 5; ++language) {
+    const Pak game(iso.read("GAME/" + language_prefix(language) + "FILES.PAK"));
+    PerfOverlay overlay(game, language, &words);
+    for (const bool vr : {false, true}) {
+      const Hud::Layer text_only = overlay.draw(rows, {}, 12.5, vr, 16.0f / 9.0f);
+      const Hud::Layer with_graph = overlay.draw(rows, graph, 12.5, vr, 16.0f / 9.0f);
+      CHECK(text_only.lines.size() > 200);  // every row written
+      CHECK(with_graph.lines.size() == text_only.lines.size() + 2 + graph.size());
+      // Nothing wobbles, and it all stays on its side of the view: left of the centre,
+      // in a headset below the eyes' level too.
+      float right = -1e9f, top = 1e9f;
+      for (const SceneLine& l : with_graph.lines) {
+        CHECK(l.shake_a == 0 && l.shake_b == 0);
+        right = std::max({right, l.a.x, l.b.x});
+        top = std::min({top, l.a.y, l.b.y});
+      }
+      CHECK(right < 0);
+      if (vr) CHECK(top > 100);  // (y down: more than 0.1 m below the eyes at 1 m)
+    }
+  }
 }

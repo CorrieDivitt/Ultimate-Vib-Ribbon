@@ -179,7 +179,7 @@ int Gameplay::stray(int road, int part_road) {
 
 void Gameplay::hit(Part& p) {
   p.done = true;
-  emit(GameEvent::Type::Hit, p.road);
+  emit(GameEvent::Type::Hit, p.road, 0, p.time);
   int f = level_ / 3;
   if (!auto_ && !speed_course_ && f != 0) {
     if (++combo_ == 18) {
@@ -207,7 +207,7 @@ void Gameplay::hit(Part& p) {
 
 void Gameplay::miss(Part& p) {
   p.done = p.missed = true;
-  emit(GameEvent::Type::Miss, p.road);
+  emit(GameEvent::Type::Miss, p.road, 0, p.time);
   combo_ = 0;
   const int f = level_ / 3;
   if (f == 0) {

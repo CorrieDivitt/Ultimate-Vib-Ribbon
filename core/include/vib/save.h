@@ -34,6 +34,7 @@ struct Options {
   double vr_jitter_scale = 1.0; // the same in a headset
   int vr_refresh_hz = 0;        // the headset's refresh rate to ask for; 0: the highest it offers
   bool resume_countdown = false;  // after a pause: count in at the same place, instead of rewinding a little
+  int perf_overlay = 0;           // ours: the performance overlay, 0 off, 1 one line, 2 detailed
   double vr_angle = 45.0;       // and where around her, degrees: 0 behind, 90 to her right, -90 to her left
   double audio_offset_ms = 0;  // added to the estimated output latency
   float music_volume = 1.0f, effects_volume = 1.0f;

@@ -10,28 +10,28 @@ namespace vib {
 namespace {
 
 constexpr double kTau = 6.28318530717958647692;
-constexpr int kItemCount = 15;
+constexpr int kItemCount = 16;
 constexpr int kLanguages = 5;  // German, English, Spanish, French, Italian (the PAL menus)
 
 // Our own words. Order as SettingsPanel::Item.
 const char* const kLabels[kLanguages][kItemCount] = {
     // German
     {"Weiter", "Wackelgröße", "Wackeltakt", "Weiche Bewegung", "Linienstärke", "Zoom", "Blickwinkel", "Sicht nach vorn",
-     "Sicht nach hinten", "Ansicht zentrieren", "Soundeffekte", "Vibration", "Tonversatz", "Lied beenden", "Fortsetzen"},
+     "Sicht nach hinten", "Ansicht zentrieren", "Soundeffekte", "Vibration", "Tonversatz", "Lied beenden", "Fortsetzen", "Leistung"},
     // English
     {"Continue", "Wobble size", "Wobble hold", "Smooth motion", "Line width", "Zoom", "View angle", "See ahead", "See behind",
-     "Recentre view", "Sound effects", "Vibration", "Sound timing", "Quit song", "Resume"},
+     "Recentre view", "Sound effects", "Vibration", "Sound timing", "Quit song", "Resume", "Performance"},
     // Spanish
     {"Continuar", "Tamaño del temblor", "Ritmo del temblor", "Movimiento suave", "Grosor de línea", "Zoom", "Ángulo de vista",
-     "Ver adelante", "Ver atrás", "Centrar vista", "Efectos de sonido", "Vibración", "Desfase de sonido", "Salir de la canción", "Reanudar"},
+     "Ver adelante", "Ver atrás", "Centrar vista", "Efectos de sonido", "Vibración", "Desfase de sonido", "Salir de la canción", "Reanudar", "Rendimiento"},
     // French
     {"Continuer", "Taille du tremblement", "Rythme du tremblement", "Mouvement fluide", "Épaisseur des lignes", "Zoom",
      "Angle de vue", "Voir devant", "Voir derrière", "Recentrer la vue", "Effets sonores", "Vibration", "Décalage du son",
-     "Quitter la chanson", "Reprise"},
+     "Quitter la chanson", "Reprise", "Performances"},
     // Italian
     {"Continua", "Ampiezza del tremolio", "Ritmo del tremolio", "Movimento fluido", "Spessore delle linee", "Zoom",
      "Angolo di vista", "Vista avanti", "Vista indietro", "Ricentra la vista", "Effetti sonori", "Vibrazione", "Ritardo audio",
-     "Esci dalla canzone", "Ripresa"},
+     "Esci dalla canzone", "Ripresa", "Prestazioni"},
 };
 const char* const kMore[kLanguages] = {"Weitere Einstellungen (Select)", "More options (Select)", "Más ajustes (Select)", "Autres réglages (Select)",
                                        "Altre impostazioni (Select)"};
@@ -39,6 +39,7 @@ const char* const kRewind[kLanguages] = {"Zurückspulen", "Rewind", "Rebobinar",
 const char* const kCountIn[kLanguages] = {"Countdown", "Countdown", "Cuenta atrás", "Compte à rebours", "Conto alla rovescia"};
 const char* const kOn[kLanguages] = {"An", "On", "Sí", "Oui", "Sì"};
 const char* const kOff[kLanguages] = {"Aus", "Off", "No", "Non", "No"};
+const char* const kDetailed[kLanguages] = {"Ausführlich", "Detailed", "Detallado", "Détaillé", "Dettagliato"};
 
 int table_language(int language) { return language >= 0 && language < kLanguages ? language : 1; }  // Japanese: English
 
@@ -114,6 +115,7 @@ std::string SettingsPanel::value(Item item, const Options& o, bool vr) const {
     case Item::Vibration: return on_off(o.vibration);
     case Item::SoundTiming: std::snprintf(buf, sizeof buf, "%.0f ms", o.audio_offset_ms); break;
     case Item::ResumeStyle: return to_font_text(o.resume_countdown ? kCountIn[l] : kRewind[l]);
+    case Item::Performance: return to_font_text(o.perf_overlay == 0 ? kOff[l] : o.perf_overlay == 1 ? kOn[l] : kDetailed[l]);
     default: return {};
   }
   return buf;
@@ -151,6 +153,7 @@ bool SettingsPanel::change(Item item, int d, Options& o, bool vr) {
     case Item::Vibration: o.vibration = !o.vibration; return true;
     case Item::SoundTiming: return step(o.audio_offset_ms, 5.0 * d, -500.0, 500.0);
     case Item::ResumeStyle: o.resume_countdown = !o.resume_countdown; return true;
+    case Item::Performance: o.perf_overlay = (o.perf_overlay + (d > 0 ? 1 : 2)) % 3; return true;  // round: off, on, detailed
     default: return false;
   }
 }
@@ -172,7 +175,7 @@ SettingsPanel::Action SettingsPanel::tick(const Input& in, double seconds, Optio
       case Item::Continue: return Action::Close;
       case Item::Recentre: return Action::Recentre;
       case Item::QuitSong: return Action::QuitSong;
-      case Item::Smooth: case Item::SoundEffects: case Item::Vibration: case Item::ResumeStyle:
+      case Item::Smooth: case Item::SoundEffects: case Item::Vibration: case Item::ResumeStyle: case Item::Performance:
         change(item, 1, o, vr);
         return Action::Changed;
       default: return Action::None;

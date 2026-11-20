@@ -35,6 +35,7 @@ class XrDisplay : public Display {
   void recentre() override;
   float zoom() const override;
   void set_zoom(float z) override;
+  FrameTiming timing() const override;
 
   const char* runtime_name() const;
   void set_scale(float metres_per_unit);

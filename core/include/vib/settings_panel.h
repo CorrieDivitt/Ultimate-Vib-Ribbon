@@ -43,6 +43,7 @@ class SettingsPanel {
     SoundTiming,   // audio_offset_ms
     QuitSong,      // an action: leave the song, as Start does
     ResumeStyle,   // resume_countdown: after a pause, rewind a little or count in
+    Performance,   // perf_overlay: off, one line, detailed
   };
   enum class Action { None, Moved, Changed, Close, Recentre, QuitSong, LeaveTop };
 
