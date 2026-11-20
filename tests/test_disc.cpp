@@ -1,6 +1,7 @@
 // Checks against the owner's real disc image. Skipped unless VIB_TEST_CUE is set,
 // so CI and anyone without the game can still run the suite.
 
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <string>
