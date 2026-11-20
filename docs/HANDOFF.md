@@ -246,6 +246,8 @@ Owner's next test: lines better, no breaks; recentring works; but changing langu
 
 Owner: no more crashes on changing language. Asked for L3 to toggle smoothing mid-game: the menus "look like they might be doubling". L3 (gamepad left stick click) now flips Clip::smooth() in play, menus and title, for the run only (not saved). It turns off the pose blending and the menus' between-frame blending; the headset's per-frame jitter stays. Two suspects for the doubling: the per-display-frame jitter (at 72-120 Hz the eye can fuse two jitter positions into a doubled line; L3 does not change it), or the menus' blending pairing lines by index across a frame where they do not correspond (L3 removes it). The owner's L3 comparison decides which.
 
+Owner's L3 test: the doubling stays with smoothing off, so it is the per-frame jitter; smoothing itself is "a huge improvement" (confirmed keeper in VR). Now the headset jitter's frame number is display_frame / vr_jitter_hold (save.txt, 1-3, default 2), in play and the menus; in VR L3 cycles the hold 1, 2, 3 (click, saved), on the monitor it still toggles smoothing. To be judged by the owner.
+
 ## 2c. Gameplay rules (session 2, 2026-11-19)
 
 `core/include/vib/gameplay.h`, `core/src/gameplay.cpp`, `core/include/vib/fixed.h` (16.16 arithmetic with the original's rounding, including its 8-bit-precision divide). Written after re-reading revib's Gameplay and Score sources for behaviour; nothing copied. `tests/test_gameplay.cpp` has 12 tests on hand-made courses. `vibtool play <cue> <round>` runs a perfect player through the real pipeline (generator 1,379 blocks ahead of the heard position, gameplay updated once per block).
