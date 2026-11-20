@@ -403,8 +403,8 @@ TEST(disc_sces02873_title_language_and_mode_menus) {
   DiscImage disc = DiscImage::open(path_from_utf8(cue));
   Iso9660 iso(disc);
   const Pak title_pak(iso.read("TITLE/FILES.PAK"));
-  for (const char* lang : {"01_", "02_", "04_", "08_", "10_"}) TitleIntro check(title_pak, lang);  // each language's menu loads
-  TitleIntro t(title_pak, "02_");
+  for (int lang = 0; lang < 6; ++lang) TitleIntro check(title_pak, lang);  // each language's menu loads
+  TitleIntro t(title_pak, 1);
   using C = TitleIntro::Choice;
   using M = TitleIntro::Menu;
   TitleIntro::Input none, right, down, confirm, cancel;
@@ -455,12 +455,10 @@ TEST(disc_sces02873_every_language_loads) {
   Iso9660 iso(disc);
   const GameText words = GameText::from_exe(iso.read("MAIN_G.EXE"));
   for (int language = 0; language < 5; ++language) {
-    char prefix[4];
-    std::snprintf(prefix, sizeof prefix, "%02X_", 1u << language);
-    const Pak pak(iso.read(std::string("GAME/") + prefix + "FILES.PAK"));
-    TitleScreens t(pak, prefix);
+    const Pak pak(iso.read("GAME/" + language_prefix(language) + "FILES.PAK"));
+    TitleScreens t(pak, language);
     t.set_text(&words, language);
-    Hud hud(pak, prefix);
+    Hud hud(pak, language);
     Scene scene(pak);
     t.go_to(TitleScreens::Screen::Main);
     for (int i = 0; i < 40; ++i) t.tick({});
@@ -469,4 +467,23 @@ TEST(disc_sces02873_every_language_loads) {
     CHECK(lines > 0);
     CHECK(!words.get(GameText::List::Comments, 0, language).empty());
   }
+}
+
+TEST(disc_sces02873_language_files_named_as_the_original) {
+  const std::string cue = test_cue();
+  if (cue.empty()) SKIP("set VIB_TEST_CUE to your SCES-02873 .cue to run");
+  // German 04, English 02, Spanish 08, French 10, Italian 20, Japanese 01.
+  CHECK(language_prefix(0) == "04_" && language_prefix(1) == "02_" && language_prefix(2) == "08_");
+  CHECK(language_prefix(3) == "10_" && language_prefix(4) == "20_" && language_prefix(5) == "01_");
+  DiscImage disc = DiscImage::open(path_from_utf8(cue));
+  Iso9660 iso(disc);
+  for (int language = 0; language < 6; ++language) {
+    const Pak pak(iso.read("GAME/" + language_prefix(language) + "FILES.PAK"));
+    // The font shared by every language but Japanese, which has its own.
+    CHECK(localized(pak, "FONT/FONT.TMD", language) == (language == 5 ? "FONT/01_FONT.TMD" : "FONT/FE_FONT.TMD"));
+    CHECK(localized(pak, "FONT/MARK.TMD", language) == "FONT/MARK.TMD");  // one for all
+  }
+  const Pak title(iso.read("TITLE/FILES.PAK"));
+  CHECK(localized(title, "MENU/MODE/MODE.TMD", 0) == "MENU/MODE/04_MODE.TMD");
+  CHECK(localized(title, "MENU/MODE/MODE.TMD", 4) == "MENU/MODE/20_MODE.TMD");
 }

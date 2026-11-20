@@ -43,17 +43,10 @@ void TitleScreens::Model::hide(int object, bool hidden) {
   look.colour[std::size_t(object)] = hidden ? std::optional<Rgb>(kHidden) : std::nullopt;
 }
 
-int TitleScreens::load_model(const Pak& pak, const char* language, const char* name) {
-  // Models with words on them carry the language before their file name.
-  std::string path = std::string("TITLE/") + name;
-  const std::size_t slash = path.rfind('/');
-  const std::string localised = path.substr(0, slash + 1) + language + path.substr(slash + 1);
+int TitleScreens::load_model(const Pak& pak, int language, const char* name) {
+  // Models with words on them carry their languages before their file name.
   Model m;
-  try {
-    m.tmd = parse_tmd(pak.view(localised));
-  } catch (const std::exception&) {
-    m.tmd = parse_tmd(pak.view(path));
-  }
+  m.tmd = parse_tmd(pak.view(localized(pak, std::string("TITLE/") + name, language)));
   m.reset_look();
   models_.push_back(std::move(m));
   return int(models_.size()) - 1;
@@ -73,12 +66,9 @@ int TitleScreens::load_camera(const Pak& pak, const char* name, bool loop) {
   return int(cameras_.size()) - 1;
 }
 
-TitleScreens::TitleScreens(const Pak& pak, const char* language) {
-  // The line font: German has its own (FONT/01_FONT.TMD), the others share FE_FONT.
-  const std::string own_font = std::string("FONT/") + language + "FONT.TMD";
-  bool has_own_font = false;
-  for (const auto& e : pak.entries()) has_own_font |= e.name == own_font;
-  font_ = parse_tmd(pak.view(has_own_font ? own_font : std::string("FONT/FE_FONT.TMD")));
+TitleScreens::TitleScreens(const Pak& pak, int language) {
+  // The line font: Japanese has its own, the others share one.
+  font_ = parse_tmd(pak.view(localized(pak, "FONT/FONT.TMD", language)));
   m_vibri_ = load_model(pak, language, "VIBRI/VIBRI.TMD");
   m_main_ = load_model(pak, language, "MA/MA.TMD");
   m_psj_ = load_model(pak, language, "MODE/MDV.TMD");

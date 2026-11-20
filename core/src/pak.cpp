@@ -1,6 +1,7 @@
 #include "vib/pak.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <cctype>
 
 namespace vib {
@@ -65,6 +66,36 @@ Bytes Pak::build(const std::vector<std::pair<std::string, Bytes>>& files) {
     out.insert(out.end(), bytes.begin(), bytes.end());
   }
   return out;
+}
+
+std::uint8_t language_bit(int language) {
+  static const std::uint8_t bits[6] = {0x04, 0x02, 0x08, 0x10, 0x20, 0x01};
+  require(language >= 0 && language < 6, "no such language");
+  return bits[language];
+}
+
+std::string language_prefix(int language) {
+  char prefix[4];
+  std::snprintf(prefix, sizeof prefix, "%02X_", unsigned(language_bit(language)));
+  return prefix;
+}
+
+std::string localized(const Pak& pak, const std::string& name, int language) {
+  static const unsigned groups[] = {0xFF, 0x00, 0xFE, 0x03, 0xFB};
+  const unsigned bit = language_bit(language);
+  const std::size_t slash = name.rfind('/');
+  const std::size_t at = slash == std::string::npos ? 0 : slash + 1;
+  for (const unsigned g : groups) {
+    const unsigned mask = (g | bit) & 0xFF;
+    std::string candidate = name;
+    if (mask != 0xFF) {
+      char prefix[4];
+      std::snprintf(prefix, sizeof prefix, "%02X_", mask);
+      candidate.insert(at, prefix);
+    }
+    if (pak.find(candidate)) return candidate;
+  }
+  throw FormatError("not in PAK for this language: " + name);
 }
 
 }  // namespace vib

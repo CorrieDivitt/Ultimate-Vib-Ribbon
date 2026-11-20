@@ -17,6 +17,20 @@ struct PakEntry {
   std::uint32_t size = 0;
 };
 
+// The original's languages by number (0 German, 1 English, 2 Spanish, 3 French,
+// 4 Italian, 5 Japanese) and the bit its files are tagged with for each:
+// German 04, English 02, Spanish 08, French 10, Italian 20, Japanese 01.
+std::uint8_t language_bit(int language);
+// "GAME/" + language_prefix(1) + "FILES.PAK" = "GAME/02_FILES.PAK".
+std::string language_prefix(int language);
+
+class Pak;
+// The name `name` has in `pak` for `language`, looked for as the original does: the
+// file for every language, the language's own, then the versions shared by groups
+// of languages (FE all but Japanese, 03 Japanese and English, FB all but German).
+// Throws FormatError if there is none.
+std::string localized(const Pak& pak, const std::string& name, int language);
+
 class Pak {
  public:
   explicit Pak(Bytes data);

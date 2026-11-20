@@ -16,9 +16,8 @@ namespace vib {
 
 class TitleIntro {
  public:
-  // `language`: the archive prefix of the language in use ("02_" English), for the
-  // mode menu's words.
-  explicit TitleIntro(const Pak& title_pak, const char* language = "02_");
+  // `language`: the original's number (1 English), for the mode menu's words.
+  explicit TitleIntro(const Pak& title_pak, int language = 1);
 
   // The European version's menus at the title (the original's LanguageSelect): the
   // five languages, then "play / demo / back". Shown over the title's own scene.

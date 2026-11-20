@@ -710,15 +710,13 @@ int run(int argc, char** argv) {
     }
     std::printf("Save file: %s\n", save_path.c_str());
   }
-  // The language's own archive: GAME/<bit of the language, two hex digits>_FILES.PAK
-  // (01 German, 02 English, 04 Spanish, 08 French, 10 Italian), as the original names them.
+  // The language's own archive: GAME/<its bit>_FILES.PAK (04 German, 02 English,
+  // 08 Spanish, 10 French, 20 Italian), as the original names them.
   const int language = save.options.language < 0 ? GameText::kEnglish : save.options.language;
-  char prefix[4];
-  std::snprintf(prefix, sizeof prefix, "%02X_", 1u << language);
-  const Pak pak(iso.read(std::string("GAME/") + prefix + "FILES.PAK"));
+  const Pak pak(iso.read("GAME/" + language_prefix(language) + "FILES.PAK"));
   const CourseScript script = parse_course_script(pak.view("SCRIPT/SYSTEM3.FSL"));
   Scene scene(pak);
-  Hud hud(pak, prefix);
+  Hud hud(pak, language);
   auto write_save = [&]() {
     if (save_path.empty()) return;
     std::ofstream out(path_from_utf8(save_path), std::ios::binary);
@@ -834,7 +832,7 @@ int run(int argc, char** argv) {
       play_course(opt.course, opt.song);  // straight into play, as before
     } else {
       // The menus, run at the original's 50 frames a second whatever the display does.
-      TitleScreens title(pak, prefix);
+      TitleScreens title(pak, language);
       // The screens' words come from the game's own program on the disc.
       std::optional<GameText> words;
       try {
@@ -854,7 +852,7 @@ int run(int argc, char** argv) {
       // First the title (the original's MAIN_T): its intro, then the title waiting for a
       // button, which leads to the main menu.
       const Pak title_pak(iso.read("TITLE/FILES.PAK"));
-      TitleIntro intro(title_pak, prefix);
+      TitleIntro intro(title_pak, language);
       Effects title_fx(iso, audio, "TITLE/AUDIO/TITLE");
       constexpr int kTitleVoice = 2;  // the title's voices 0, 1 and 5 play on 2, 3 and 7
       bool at_title = true, menus_shown = false;

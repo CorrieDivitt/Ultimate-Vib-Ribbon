@@ -124,8 +124,8 @@ class LineBuilder {
 // as a row of circling marks, the time meter, and the "Round 1/2" sign.
 class Hud {
  public:
-  // `language`: the archive's language prefix for text models, "02_" for English.
-  explicit Hud(const Pak& game_pak, const char* language = "02_");
+  // `language`: the original's number (1 English), for the models with words on them.
+  explicit Hud(const Pak& game_pak, int language = 1);
 
   // A round of the game's own courses begins; `index` 0 or 1 picks the sign.
   void start_round(int index, bool show_sign);

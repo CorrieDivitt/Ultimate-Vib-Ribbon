@@ -570,7 +570,7 @@ std::array<int, 7> Hud::marks(int score) {
   return out;
 }
 
-Hud::Hud(const Pak& pak, const char* language) {
+Hud::Hud(const Pak& pak, int language) {
   mark_model_ = parse_tmd(pak.view("FONT/MARK.TMD"));
   score_anim_ = parse_anm(pak.view("METERS/SCORE.ANM"));
   score_ = Clip(int(score_anim_.frames.size()), score_anim_.rate, true);
@@ -578,7 +578,7 @@ Hud::Hud(const Pak& pak, const char* language) {
   time_anim_ = parse_anm(pak.view("METERS/TIME.ANM"));
   time_camera_ = parse_anc(pak.view("METERS/TIME.ANC"));
   time_ = Clip(int(time_anim_.frames.size()), time_anim_.rate, false);
-  sign_model_ = parse_tmd(pak.view(std::string("MESSAGE/") + language + "ROUND.TMD"));
+  sign_model_ = parse_tmd(pak.view(localized(pak, "MESSAGE/ROUND.TMD", language)));
   sign_anims_[0] = parse_anm(pak.view("MESSAGE/ROUND01.ANM"));
   sign_anims_[1] = parse_anm(pak.view("MESSAGE/ROUND02.ANM"));
   sign_camera_ = parse_anc(pak.view("MESSAGE/ROUND.ANC"));

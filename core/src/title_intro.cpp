@@ -36,11 +36,11 @@ TitleIntro::Movie TitleIntro::load_menu_movie(const Pak& pak, const std::string&
   return m;
 }
 
-TitleIntro::TitleIntro(const Pak& pak, const char* language) {
+TitleIntro::TitleIntro(const Pak& pak, int language) {
   // The menus: the language grid (one model for all languages) and "play / demo /
   // back" in the language in use; each with a clip per item and one zooming it.
   menu_models_[0] = parse_tmd(pak.view("MENU/LANG/LANG.TMD"));
-  menu_models_[1] = parse_tmd(pak.view(std::string("MENU/MODE/") + language + "MODE.TMD"));
+  menu_models_[1] = parse_tmd(pak.view(localized(pak, "MENU/MODE/MODE.TMD", language)));
   select_[0] = load_menu_movie(pak, "MENU/LANG/SELECT.ANM");
   select_[1] = load_menu_movie(pak, "MENU/MODE/SELECT.ANM");
   scale_[0] = load_menu_movie(pak, "MENU/LANG/SCALE.ANM");

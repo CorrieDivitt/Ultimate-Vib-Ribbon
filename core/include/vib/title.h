@@ -57,7 +57,8 @@ class TitleScreens {
 
   static constexpr double kFrameRate = 49.759;
 
-  explicit TitleScreens(const Pak& game_pak, const char* language = "02_");
+  // `language`: the original's number (1 English), for the models with words on them.
+  explicit TitleScreens(const Pak& game_pak, int language = 1);
 
   // The score said in Japanese, as the original builds it from syllables: the
   // sounds in order, and the same laid out on a beat grid with rests first.
@@ -128,7 +129,7 @@ class TitleScreens {
     bool confirm = false, up = false, down = false, left = false, right = false, back = false, changed = false;
   };
 
-  int load_model(const Pak& pak, const char* language, const char* name);
+  int load_model(const Pak& pak, int language, const char* name);
   int load_movie(const Pak& pak, int model, const char* name, bool loop = false);
   int load_camera(const Pak& pak, const char* name, bool loop = false);
   MenuRead read(Cursor& c, const Input& in, bool wrap, bool active);
