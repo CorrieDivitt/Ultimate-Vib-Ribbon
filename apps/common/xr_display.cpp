@@ -140,6 +140,8 @@ class XrDisplay::Impl {
   const char* runtime_name() const { return runtime_name_.c_str(); }
   int height() const { return eyes_[0].height; }
   void recentre() { recentre_ = true; }
+  // In a moment: a head just arrived moves before it settles.
+  void recentre_soon() { recentre_at_ns_ = SDL_GetTicksNS() + 700'000'000; }
   float zoom() const { return zoom_; }
   void set_zoom(float z) { zoom_ = std::clamp(z, kZoomOut, kZoomIn); }
   float scale() const { return scale_; }
@@ -171,6 +173,10 @@ class XrDisplay::Impl {
       for (XrView& v : views) v.type = XR_TYPE_VIEW;
       std::uint32_t count = 0;
       xr_check(xrLocateViews(session_, &locate, &view_state, 2, &count, views.data()), "xrLocateViews");
+      if (recentre_at_ns_ && SDL_GetTicksNS() >= recentre_at_ns_) {
+        recentre_at_ns_ = 0;
+        recentre_ = true;
+      }
       if (recentre_) place_scene(state.predictedDisplayTime);
       if ((view_state.viewStateFlags & XR_VIEW_STATE_POSITION_VALID_BIT) &&
           (view_state.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT)) {
@@ -220,14 +226,24 @@ class XrDisplay::Impl {
   }
 
   void create_instance() {
-    const char* exts[] = {XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME};
+    // Vulkan, and (where the runtime has it) word of the headset being put on.
+    std::uint32_t n = 0;
+    xrEnumerateInstanceExtensionProperties(nullptr, 0, &n, nullptr);
+    std::vector<XrExtensionProperties> available(n, {XR_TYPE_EXTENSION_PROPERTIES});
+    xrEnumerateInstanceExtensionProperties(nullptr, n, &n, available.data());
+    std::vector<const char*> exts = {XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME};
+    for (const auto& e : available)
+      if (std::strcmp(e.extensionName, XR_EXT_USER_PRESENCE_EXTENSION_NAME) == 0) {
+        exts.push_back(XR_EXT_USER_PRESENCE_EXTENSION_NAME);
+        presence_ = true;
+      }
     XrInstanceCreateInfo info{XR_TYPE_INSTANCE_CREATE_INFO};
     std::strncpy(info.applicationInfo.applicationName, "Vib-Ribbon VR", XR_MAX_APPLICATION_NAME_SIZE - 1);
     info.applicationInfo.applicationVersion = 1;
     std::strncpy(info.applicationInfo.engineName, "vibcore", XR_MAX_ENGINE_NAME_SIZE - 1);
     info.applicationInfo.apiVersion = XR_API_VERSION_1_0;
-    info.enabledExtensionCount = 1;
-    info.enabledExtensionNames = exts;
+    info.enabledExtensionCount = std::uint32_t(exts.size());
+    info.enabledExtensionNames = exts.data();
     const XrResult r = xrCreateInstance(&info, &instance_);
     if (XR_FAILED(r))
       throw std::runtime_error(
@@ -235,6 +251,7 @@ class XrDisplay::Impl {
     XrInstanceProperties props{XR_TYPE_INSTANCE_PROPERTIES};
     xrGetInstanceProperties(instance_, &props);
     runtime_name_ = props.runtimeName;
+    std::printf("Headset wear sensor: %s\n", presence_ ? "yes (recentres when the headset is put on)" : "not offered by this runtime");
     XrSystemGetInfo sys{XR_TYPE_SYSTEM_GET_INFO};
     sys.formFactor = XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY;
     xr_check(xrGetSystem(instance_, &sys, &system_), "xrGetSystem (is the headset on and connected?)");
@@ -700,7 +717,9 @@ class XrDisplay::Impl {
     while (xrPollEvent(instance_, &ev) == XR_SUCCESS) {
       if (ev.type == XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED) {
         const auto& sc = *reinterpret_cast<XrEventDataSessionStateChanged*>(&ev);
+        const bool was_focused = focused_;
         focused_ = sc.state == XR_SESSION_STATE_FOCUSED;
+        if (focused_ && !was_focused) recentre_soon();  // the player has the game in front of them
         switch (sc.state) {
           case XR_SESSION_STATE_READY: {
             XrSessionBeginInfo bi{XR_TYPE_SESSION_BEGIN_INFO};
@@ -724,6 +743,9 @@ class XrDisplay::Impl {
           }
           default: break;
         }
+      } else if (ev.type == XR_TYPE_EVENT_DATA_USER_PRESENCE_CHANGED_EXT) {
+        // The headset has just been put on: recentre once it has settled on the head.
+        if (reinterpret_cast<XrEventDataUserPresenceChangedEXT*>(&ev)->isUserPresent) recentre_soon();
       } else if (ev.type == XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED) {
         // Which controllers the runtime says are in use (for the console, while the input is tested).
         for (const char* hand : {"/user/hand/left", "/user/hand/right"}) {
@@ -832,9 +854,13 @@ class XrDisplay::Impl {
   XrSession session_ = XR_NULL_HANDLE;
   XrSpace space_ = XR_NULL_HANDLE, head_ = XR_NULL_HANDLE;
   Mat4 scene_place_;  // the scene in the headset's starting space (identity until recentred)
-  // Recentred as soon as the headset is tracked: at start (and so after a change of
-  // language, which starts the game again).
+  // Recentred as soon as the headset is tracked at start (after a change of
+  // language too, which starts the game again), and a moment after the game gets
+  // the headset's focus or the headset is put on, so the scene is in front of the
+  // player however long the game ran before they put it on.
   bool recentre_ = true;
+  std::uint64_t recentre_at_ns_ = 0;
+  bool presence_ = false;
   XrAction recentre_action_ = XR_NULL_HANDLE, zoom_stick_ = XR_NULL_HANDLE;
   float zoom_ = 1.0f;
   bool zooming_ = false;

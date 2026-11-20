@@ -303,3 +303,32 @@ TEST(a_part_built_further_ahead_is_drawn_where_play_will_put_it) {
   camera.type = CourseEvent::Type::Camera;
   CHECK(!r.g.preview(camera, r.now, ahead));
 }
+
+TEST(a_joint_stays_joined_when_jittered_afresh) {
+  // Two pieces, the first jittering hard (a missed piece), joined as the road is.
+  TmdObject piece;
+  piece.vertices = {{0, 0, 0}, {0, -100, 300}, {0, 0, 600}};
+  piece.lines = {TmdLine{0, 1, {255, 255, 255}, {255, 255, 255}}, TmdLine{1, 2, {255, 255, 255}, {255, 255, 255}}};
+  LineBuilder b;
+  b.seed(1234);
+  std::vector<SceneLine> out;
+  Vec3f join{0, 0, -600};
+  b.object(piece, {}, 300, 0, &join, out);  // hard
+  b.object(piece, {}, 5, 600, &join, out);  // calm
+  // The second piece's join line starts at the first piece's last vertex: the same
+  // vertex number, and the same place once each end's own jitter is taken off.
+  const SceneLine* last_of_first = nullptr;
+  const SceneLine* joint = nullptr;
+  for (const SceneLine& l : out) {
+    if (l.vertex_b == 3) last_of_first = &l;  // vertices 1-3 are the first piece's
+    if (l.vertex_a == 3 && l.vertex_b == 4) joint = &l;
+  }
+  CHECK(last_of_first && joint);
+  if (last_of_first && joint) {
+    const Vec3f p{last_of_first->b.x - last_of_first->jitter_b.x, last_of_first->b.y - last_of_first->jitter_b.y,
+                  last_of_first->b.z - last_of_first->jitter_b.z};
+    const Vec3f q{joint->a.x - joint->jitter_a.x, joint->a.y - joint->jitter_a.y, joint->a.z - joint->jitter_a.z};
+    CHECK(std::abs(p.x - q.x) < 0.01f && std::abs(p.y - q.y) < 0.01f && std::abs(p.z - q.z) < 0.01f);
+    CHECK(joint->shake_a == last_of_first->shake_b && joint->shake_a > 200.0f);
+  }
+}

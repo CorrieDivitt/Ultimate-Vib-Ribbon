@@ -388,11 +388,14 @@ void LineBuilder::object(const TmdObject& obj, const Xform& xf, int range, std::
     // A line from the previous object's last vertex (kept in its own local
     // coordinates, as the original does) to this object's first.
     const Rgb colour = obj.lines.empty() ? Rgb{255, 255, 255} : obj.lines.front().colour_a;
-    out.push_back({world(*join), world(work.front()), colour, {}, shake.front(), join_vertex_ ? join_vertex_ : first, first,
-                   join_vertex_ ? join_shake_ : 0.0f, reach});
+    // Its start is the previous object's last vertex, jitter and all: say so, so a
+    // display that jitters afresh moves both ends of the joint together.
+    out.push_back({world(*join), world(work.front()), colour, join_vertex_ ? join_jitter_ : Vec3f{}, shake.front(),
+                   join_vertex_ ? join_vertex_ : first, first, join_vertex_ ? join_shake_ : 0.0f, reach});
     *join = work.back();
     join_vertex_ = first + std::uint32_t(obj.vertices.size()) - 1;
     join_shake_ = reach;
+    join_jitter_ = shake.back();
   }
 }
 

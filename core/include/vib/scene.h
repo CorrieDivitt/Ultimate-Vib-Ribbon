@@ -97,6 +97,7 @@ class LineBuilder {
     random_ = s;
     next_vertex_ = 1;
     join_vertex_ = 0;
+    join_jitter_ = {};
   }
   void set_view(const SceneView& v) { view_ = v; }
   // One object: each vertex moved by a random offset in [-range, range) on each
@@ -127,6 +128,7 @@ class LineBuilder {
   std::int32_t offset(int range);
   std::uint32_t next_vertex_ = 1, join_vertex_ = 0;
   float join_shake_ = 0;
+  Vec3f join_jitter_{};  // the jitter the join point carries (the previous object's last vertex's)
   std::uint32_t random_ = 0;
   SceneView view_;
 };
