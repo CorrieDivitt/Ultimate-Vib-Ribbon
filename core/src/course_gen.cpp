@@ -121,18 +121,83 @@ CourseGenerator::CourseGenerator(const CourseScript& script, int cue_interval_bl
 
 CourseGenerator::~CourseGenerator() = default;
 
+std::vector<int> random_picks(int lo, int hi, int count, std::uint32_t seed) {
+  std::vector<int> picks;
+  if (count <= 0 || hi < lo) return picks;
+  for (int i = 0; i < 7; ++i) seed = next_random(seed);
+  const int range = hi - lo + 1;
+  std::vector<int> taken;  // this round's numbers so far, in order
+  while (int(picks.size()) < count) {
+    taken.clear();
+    const int in_round = std::min(range, count - int(picks.size()));
+    for (int left = range; int(taken.size()) < in_round; --left) {
+      seed = next_random(seed);
+      // The n-th of the numbers not yet taken, counting from lo.
+      int pick = lo + static_cast<int>((std::uint64_t(std::uint32_t(left)) * seed) >> 32);
+      for (const int t : taken) {
+        if (pick < t) break;
+        ++pick;
+      }
+      taken.insert(std::lower_bound(taken.begin(), taken.end(), pick), pick);
+      picks.push_back(pick);
+    }
+  }
+  return picks;
+}
+
 void CourseGenerator::start_round(int round, std::int32_t start_time, std::uint32_t script_seed) {
   require(round >= 1 && std::size_t(round) <= script_.round_tracks.size(), "no such round in the course script");
+  round_ = round;
+  script_seed_ = script_seed;
+  offset_ = 0;
+  track_ = &script_.tracks[script_.round_tracks[std::size_t(round - 1)]];
+  begin(start_time);
+}
+
+void CourseGenerator::prepare_disc(const std::vector<std::int32_t>& track_samples, std::uint32_t key) {
+  require(!script_.medley_tracks.empty(), "the course script has no medley track");
+  const int count = std::min(int(track_samples.size()), 100);
+  require(count > 0, "a disc needs at least one track");
+  disc_key_ = key;
+  track_ = &script_.tracks[script_.medley_tracks[0]];
+  std::int32_t end = std::max(track_->patterns.back().start, track_->control.back().start);
+  if (!track_->events.empty()) end = std::max(end, track_->events.back().start);
+  // Each track gets a slot; the slots follow one another through the script, with
+  // the time left over shared out at random as gaps before them.
+  disc_order_ = random_picks(0, count - 1, count, key);
+  std::vector<std::int32_t> slot_length(std::size_t(count), 0);
+  for (int t = 0; t < count; ++t) slot_length[std::size_t(disc_order_[std::size_t(t)])] = track_samples[std::size_t(t)];
+  std::int32_t rest = end;
+  for (const std::int32_t l : slot_length) rest -= l;
+  rest = std::max(rest, 0);
+  std::vector<int> gaps = random_picks(0, rest, count, key);
+  std::sort(gaps.begin(), gaps.end());
+  std::vector<std::int32_t> slot_start(static_cast<std::size_t>(count), 0);
+  std::int32_t before = 0;
+  for (int s = 0; s < count; ++s) {
+    slot_start[std::size_t(s)] = before + gaps[std::size_t(s)];
+    before += slot_length[std::size_t(s)];
+  }
+  disc_starts_.assign(std::size_t(count), 0);
+  for (int t = 0; t < count; ++t) disc_starts_[std::size_t(t)] = slot_start[std::size_t(disc_order_[std::size_t(t)])];
+}
+
+void CourseGenerator::start_track(int track, std::int32_t start_time) {
+  require(!disc_starts_.empty() && track >= 1 && track <= int(disc_starts_.size()), "no such track on the disc");
+  round_ = std::min(track, 100);
+  script_seed_ = disc_key_;
+  offset_ = disc_starts_[std::size_t(track - 1)];
+  track_ = &script_.tracks[script_.medley_tracks[0]];
+  begin(start_time);
+}
+
+void CourseGenerator::begin(std::int32_t start_time) {
   for (auto& s : fixed_selectors_) s.reset();
   for (auto& s : distribution_selectors_) s.reset();
   tempo_.reset();
-  round_ = round;
-  script_seed_ = script_seed;
   start_time_ = start_time;
-  offset_ = 0;
   playing_ = true;
   effect_index_ = 0;
-  track_ = &script_.tracks[script_.round_tracks[std::size_t(round - 1)]];
   require(!track_->control.empty() && !track_->patterns.empty(), "course track has no segments");
   end_ = std::max(track_->patterns.back().start, track_->control.back().start);
   if (!track_->events.empty()) end_ = std::max(end_, track_->events.back().start);
@@ -205,7 +270,9 @@ CourseGenerator::Cue CourseGenerator::next_cue(std::int32_t time) {
 
   const PatternSegment& part = track_->patterns[find_segment(track_->patterns, now_)];
   std::shared_ptr<Selector> selector;
-  if (part.type == PatternType::Fixed) {
+  if (!select_) {
+    // (no obstacles while gameplay has turned selection off)
+  } else if (part.type == PatternType::Fixed) {
     auto& slot = fixed_selectors_[std::size_t(part.index)];
     if (!slot) {
       slot = std::make_shared<Selector>();

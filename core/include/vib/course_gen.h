@@ -54,6 +54,16 @@ struct CourseEvent {
   std::int32_t scale = 0;   // Part: tempo scale, 16.16
 };
 
+// An audio CD's key, from its table of contents: where the lead-out starts (in
+// sectors) and the last track's number.
+inline std::uint32_t disc_key(std::uint32_t lead_out_sector, std::uint32_t last_track) {
+  return ((lead_out_sector << 7) | last_track) ^ 0xCBF633B1u;
+}
+
+// `count` numbers from `lo` to `hi`, at random from `seed`: all different until
+// every number has come up, then the same again.
+std::vector<int> random_picks(int lo, int hi, int count, std::uint32_t seed);
+
 // The 32-bit generator used everywhere in the game.
 inline std::uint32_t next_random(std::uint32_t seed) { return seed * 1664525u + 1013904223u; }
 
@@ -79,6 +89,21 @@ class CourseGenerator {
   // Begins a round on the game's own disc: `round` counts from 1 and selects the
   // script track; `start_time` is the stream position of the track's first sample.
   void start_round(int round, std::int32_t start_time, std::uint32_t script_seed = 0);
+
+  // An audio CD (or the player's own music, taken as one): every track uses the
+  // script's medley track, each from its own place in it. The tracks are put in an
+  // order, and the script's spare time is shared out between them as gaps, both at
+  // random from the disc's key, so the same disc always gives the same courses.
+  // `track_samples`: each track's whole seconds at 22,050 Hz, in disc order.
+  void prepare_disc(const std::vector<std::int32_t>& track_samples, std::uint32_t disc_key);
+  // Begins disc track `track` (from 1); `start_time` as for start_round.
+  void start_track(int track, std::int32_t start_time);
+  // Where each disc track starts in the medley script (after prepare_disc).
+  const std::vector<std::int32_t>& track_offsets() const { return disc_starts_; }
+
+  // While false the script places no obstacles (gameplay turns it off for seconds
+  // 52 to 59 of every minute of an audio CD).
+  void set_select(bool on) { select_ = on; }
 
   // Feeds the next block, whose first sample is at stream position `time`.
   void process(std::int32_t time, const Block& block);
@@ -106,12 +131,17 @@ class CourseGenerator {
   };
 
   Cue next_cue(std::int32_t time);
+  void begin(std::int32_t start_time);
   void send_effects();
   void send_effect(const EventSegment& e, bool tempo, bool reverse, bool screw, bool camera);
   void end_window(std::int32_t time);
   void take_candidate();
   void place();
 
+  std::vector<int> disc_order_;            // disc track (from 0) -> its slot in the medley
+  std::vector<std::int32_t> disc_starts_;  // disc track (from 0) -> script offset
+  std::uint32_t disc_key_ = 0;
+  bool select_ = true;
   const CourseScript& script_;
   int cue_interval_;
   int blocks_since_cue_ = 0;

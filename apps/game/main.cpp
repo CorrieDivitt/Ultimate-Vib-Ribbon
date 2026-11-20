@@ -51,6 +51,7 @@
 
 #include "audio.h"
 #include "line_renderer.h"
+#include "music_file.h"
 #ifdef VIB_VR
 #include "xr_display.h"
 #endif
@@ -200,6 +201,7 @@ struct Args {
   int song = 0;  // 1-6 for a single song; 0 = the course's two
   bool fixed = false;
   bool smooth = false;
+  std::string music_file;     // one of the player's own MP3 or FLAC files, played as a one-track audio CD
   bool vr = false;            // in a headset (OpenXR)
   float vr_scale = 0.001f;    // metres per unit of the original's world in the headset
   double last_seconds = 0;  // > 0: start each song this long before its end (testing)
@@ -231,6 +233,11 @@ struct Session {
   int song = 0;                    // 1-6 when practising one song
   int final_score = 0, final_bonus = 0, final_form = 1;  // the last song cleared
   bool zooming = false, turning = false;                  // the sticks are moving the view (headset)
+  // The player's own music, played as a one-track audio CD: its course follows the
+  // original's audio-CD rules (the medley script, placed by the disc's key).
+  const vibr::Music* music = nullptr;
+  std::uint32_t music_key = 0;
+  std::int32_t music_samples = 0;  // its whole seconds at 22,050 Hz, as the original counts a CD track
 };
 
 // In a headset, play is seen from down beside Vibri instead of from the original's
@@ -322,7 +329,8 @@ std::uint8_t trigger_pulled(Session& s, const SDL_GamepadAxisEvent& a) {
 Result play_song(Session& s, int song, int track_index, int& points, std::uint32_t seed) {
   // Timing: like the original, a little different on every play, unless --fixed.
   const CourseTiming timing = s.fixed ? CourseTiming::consistent() : CourseTiming::like_original(seed);
-  const std::vector<std::int16_t> pcm = s.disc.read_audio_track(song + 1);
+  const std::vector<std::int16_t> disc_pcm = s.music ? std::vector<std::int16_t>{} : s.disc.read_audio_track(song + 1);
+  const std::vector<std::int16_t>& pcm = s.music ? s.music->pcm : disc_pcm;
   const std::vector<Block> blocks = make_blocks(pcm, timing.lead);
   const auto total = static_cast<std::int32_t>(blocks.size() * kBlockSize);
 
@@ -351,10 +359,19 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
 
   CourseGenerator gen(s.script);
   gen.set_timing(timing);
-  gen.start_round(song, 0);
+  // Starts a generator on this song: the game's own round, or the player's track on its "disc".
+  auto start = [&](CourseGenerator& g) {
+    if (s.music) {
+      g.prepare_disc({s.music_samples}, s.music_key);
+      g.start_track(1, 0);
+    } else {
+      g.start_round(song, 0);
+    }
+  };
+  start(gen);
   Gameplay game;
   RoundSetup setup;
-  setup.course = s.song ? Course::Bronze : s.course;
+  setup.course = s.music ? Course::OneTrack : s.song ? Course::Bronze : s.course;
   setup.course_seconds = total / kSampleRate;
   setup.points = points;
   setup.track_index = track_index;
@@ -367,12 +384,12 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   // so its parts become play's own as play reaches them.
   CourseGenerator far(s.script);
   far.set_timing(timing);
-  far.start_round(song, 0);
+  start(far);
   std::size_t far_block = 0;
   const auto far_extra = static_cast<std::int32_t>(std::max(0.0, s.save.options.vr_ahead_seconds - 8.0) * kSampleRate);
   bool far_warned = false;
   s.scene.reset(true, false);
-  s.hud.start_round(track_index, !s.song);  // the "Round 1/2" sign belongs to the two-song courses
+  s.hud.start_round(track_index, !s.song && !s.music);  // the "Round 1/2" sign belongs to the two-song courses
 
   std::printf("\nSong %d: %d s, %s course (lead %d, frame phase %.0f)\n", song, total / kSampleRate,
               s.fixed ? "fixed" : "original-style", timing.lead, double(timing.frame_phase_q16) / 65536.0);
@@ -451,6 +468,9 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
           break;
         case GameEvent::Type::Camera: s.scene.camera().event(e.value); break;
         case GameEvent::Type::CameraBreak: s.scene.camera().cut(); break;
+        // Audio CDs: no obstacles in seconds 52 to 59 of every minute.
+        case GameEvent::Type::SelectOff: gen.set_select(false); break;
+        case GameEvent::Type::SelectOn: gen.set_select(true); break;
         default: break;
       }
     }
@@ -540,11 +560,18 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     f.road = game.road(s.opt.vr);
     if (s.opt.vr && far_extra > 0) {
       while (far_block < blocks.size() && std::int32_t(far_block * kBlockSize) <= heard + kDelay + far_extra) {
-        far.process(static_cast<std::int32_t>(far_block * kBlockSize), blocks[far_block]);
+        const auto t = static_cast<std::int32_t>(far_block * kBlockSize);
+        if (s.music) {
+          // The break as play will have it when this block is heard (play switches it as the music is heard).
+          const int seconds = (t - kDelay) / kSampleRate;
+          far.set_select((seconds + setup.stream_delay_seconds) % 60 < 52 || seconds + setup.stream_delay_seconds < 0);
+        }
+        far.process(t, blocks[far_block]);
         ++far_block;
       }
       const auto& ahead = far.events();
-      if (!far_warned && fed > 0 && fed <= ahead.size()) {
+      // (With the player's music the breaks can differ by a part at their edges: play's decides.)
+      if (!far_warned && !s.music && fed > 0 && fed <= ahead.size()) {
         const CourseEvent &a = ahead[fed - 1], &b = gen.events()[fed - 1];
         if (a.type != b.type || a.time != b.time || a.value != b.value || a.length != b.length) {
           std::printf("Warning: the course drawn ahead differs from play's own (from event %zu); report this.\n", fed - 1);
@@ -637,6 +664,7 @@ int run(int argc, char** argv) {
     else if (a == "--fixed") opt.fixed = true;
     else if (a == "--smooth") opt.smooth = true;
     else if (a == "--vr") opt.vr = true;
+    else if (a == "--music") opt.music_file = value();
     else if (a == "--vr-scale") opt.vr_scale = std::clamp(float(std::atof(value())), 0.0001f, 0.1f);
     else if (a == "--last") opt.last_seconds = std::max(1.0, std::atof(value()));
     else if (a == "--seed") opt.seed = std::uint32_t(std::strtoul(value(), nullptr, 10)), opt.seed_given = true;
@@ -649,7 +677,7 @@ int run(int argc, char** argv) {
   }
   if (opt.cue.empty()) {
     std::fputs("usage: vibplay <disc.cue> [bronze|silver|gold | --song 1-6] [--fixed] [--smooth] [--seed N]\n"
-               "               [--vr] [--vr-scale metres] [--last seconds] [--offset ms] [--sfx 0-1] [--music 0-1] [--width x]\n",
+               "               [--music file.mp3|file.flac] [--vr] [--vr-scale metres] [--last seconds] [--offset ms] [--sfx 0-1] [--music 0-1] [--width x]\n",
                stderr);
     return 2;
   }
@@ -777,7 +805,23 @@ int run(int argc, char** argv) {
       return true;
     };
 
-    if (opt.song || opt.course_given) {
+    std::optional<vibr::Music> own_music;
+    if (!opt.music_file.empty()) {
+      // One of the player's own files, as a one-track audio CD. Its table of contents
+      // (the track from sector 150, its length rounded up to whole sectors) gives the
+      // disc's key, so the same file always gives the same course.
+      own_music = vibr::load_music(opt.music_file);
+      const auto frames = std::uint32_t(own_music->pcm.size() / 2);
+      const std::uint32_t sectors = (frames + 587) / 588;  // 588 frames a sector at 75 a second
+      s.music = &*own_music;
+      s.music_key = disc_key(150 + sectors, 1);
+      s.music_samples = std::int32_t(sectors / 75) * kSampleRate;
+      std::printf("Music: %s (%u Hz, %u channels, %u:%02u)\n", opt.music_file.c_str(), own_music->source_rate, own_music->source_channels,
+                  sectors / 75 / 60, sectors / 75 % 60);
+      int points = 0;
+      const Result r = play_song(s, 0, 0, points, seed ? seed : std::uint32_t(SDL_GetTicksNS()));
+      std::printf("%s, score %d\n", r == Result::Clear ? "Cleared" : r == Result::GameOver ? "Game over" : "Left", s.final_score);
+    } else if (opt.song || opt.course_given) {
       play_course(opt.course, opt.song);  // straight into play, as before
     } else {
       // The menus, run at the original's 50 frames a second whatever the display does.

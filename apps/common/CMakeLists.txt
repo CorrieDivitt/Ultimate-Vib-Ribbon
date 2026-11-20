@@ -35,6 +35,24 @@ add_library(vib_render STATIC line_renderer.cpp ${shader_incs})
 target_include_directories(vib_render PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}" PRIVATE "${shader_out}")
 target_link_libraries(vib_render PUBLIC SDL3::SDL3-static PRIVATE vib_warnings Vulkan::Vulkan)
 
+# The player's own music: MP3 and FLAC (dr_mp3 and dr_flac by David Reid, public
+# domain or MIT-0), pinned to one commit.
+FetchContent_Declare(dr_libs
+  GIT_REPOSITORY https://github.com/mackron/dr_libs.git
+  GIT_TAG e381981afa52800b9a3864df548353ff67252fbc
+  SOURCE_SUBDIR no-build)  # headers only: fetched, not built
+FetchContent_MakeAvailable(dr_libs)
+add_library(vib_music STATIC music_file.cpp decoders.cpp)
+target_include_directories(vib_music PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+target_include_directories(vib_music SYSTEM PRIVATE "${dr_libs_SOURCE_DIR}")
+target_link_libraries(vib_music PRIVATE vib_warnings)
+# Their code is not ours to warn about.
+if(MSVC)
+  set_source_files_properties(decoders.cpp PROPERTIES COMPILE_OPTIONS "/W0;/WX-")
+else()
+  set_source_files_properties(decoders.cpp PROPERTIES COMPILE_OPTIONS "-w;-Wno-error")
+endif()
+
 # Headsets through OpenXR (the Khronos loader, built static). On by default on
 # Windows, where PC headsets run; the Quest's own build comes later.
 if(WIN32)

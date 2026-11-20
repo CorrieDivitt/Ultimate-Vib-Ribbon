@@ -353,3 +353,42 @@ TEST(disc_sces02873_title_intro) {
   t.tick(false);
   CHECK(t.intro_over());
 }
+
+TEST(disc_sces02873_audio_cd_tracks_laid_out_in_the_medley) {
+  const std::string cue = test_cue();
+  if (cue.empty()) SKIP("set VIB_TEST_CUE to your SCES-02873 .cue to run");
+  DiscImage disc = DiscImage::open(path_from_utf8(cue));
+  Iso9660 iso(disc);
+  const Pak game(iso.read("GAME/02_FILES.PAK"));
+  const CourseScript script = parse_course_script(game.view("SCRIPT/SYSTEM3.FSL"));
+  // A made-up CD of five tracks, 3 to 5 minutes.
+  const std::vector<std::int32_t> lengths = {180 * 22050, 240 * 22050, 200 * 22050, 300 * 22050, 260 * 22050};
+  CourseGenerator a(script), b(script);
+  a.prepare_disc(lengths, disc_key(150000, 5));
+  b.prepare_disc(lengths, disc_key(150000, 5));
+  CHECK(a.track_offsets() == b.track_offsets());  // the same disc, the same layout
+  // Each track has its own span of the 74-minute script, none overlapping.
+  std::vector<std::pair<std::int32_t, std::int32_t>> spans;
+  for (std::size_t t = 0; t < lengths.size(); ++t) spans.push_back({a.track_offsets()[t], a.track_offsets()[t] + lengths[t]});
+  std::sort(spans.begin(), spans.end());
+  for (std::size_t i = 0; i < spans.size(); ++i) {
+    CHECK(spans[i].first >= 0 && spans[i].second <= 74 * 60 * 22050 + 22050);
+    if (i) CHECK(spans[i - 1].second <= spans[i].first);
+  }
+  b.prepare_disc(lengths, disc_key(150001, 5));
+  CHECK(a.track_offsets() != b.track_offsets());  // another disc, another layout
+  // A track's course: parts come, and a second run gives the same ones.
+  const auto blocks = make_blocks(disc.read_audio_track(2));
+  auto run = [&](CourseGenerator& g) {
+    g.start_track(2, 0);
+    for (std::size_t i = 0; i < blocks.size(); ++i) g.process(std::int32_t(i * kBlockSize), blocks[i]);
+    std::size_t parts = 0;
+    for (const auto& e : g.events()) parts += e.type == CourseEvent::Type::Part;
+    return parts;
+  };
+  CourseGenerator c(script), d(script);
+  c.prepare_disc(lengths, disc_key(150000, 5));
+  d.prepare_disc(lengths, disc_key(150000, 5));
+  const std::size_t n = run(c);
+  CHECK(n > 20 && n == run(d));
+}

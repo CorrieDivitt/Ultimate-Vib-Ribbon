@@ -1,5 +1,8 @@
 // The course generator on synthetic input. No game data needed.
 
+#include <algorithm>
+#include <vector>
+
 #include "test.h"
 #include "vib/course_gen.h"
 
@@ -126,4 +129,29 @@ TEST(original_style_timing_is_seeded_and_in_range) {
   CHECK(differs);
   const CourseTiming c = CourseTiming::consistent();
   CHECK(c.lead == 0 && c.frame_period_q16 == 0);
+}
+
+TEST(random_picks_take_every_number_before_any_twice) {
+  for (std::uint32_t seed : {0u, 1u, 0xCBF633B1u, 123456789u}) {
+    std::vector<int> p = random_picks(0, 9, 10, seed);
+    CHECK(p.size() == 10);
+    std::vector<int> sorted = p;
+    std::sort(sorted.begin(), sorted.end());
+    for (int i = 0; i < 10; ++i) CHECK(sorted[std::size_t(i)] == i);
+    // More picks than numbers: each round of ten is again all ten.
+    p = random_picks(5, 9, 12, seed);
+    CHECK(p.size() == 12);
+    std::vector<int> first(p.begin(), p.begin() + 5), second(p.begin() + 5, p.begin() + 10);
+    std::sort(first.begin(), first.end());
+    std::sort(second.begin(), second.end());
+    CHECK(first == std::vector<int>({5, 6, 7, 8, 9}) && second == first);
+    for (int v : p) CHECK(v >= 5 && v <= 9);
+    CHECK(random_picks(0, 9, 10, seed) == random_picks(0, 9, 10, seed));  // the same seed, the same picks
+  }
+  CHECK(random_picks(0, 9, 10, 1) != random_picks(0, 9, 10, 2));
+}
+
+TEST(disc_key_from_the_table_of_contents) {
+  CHECK(disc_key(0, 0) == 0xCBF633B1u);
+  CHECK(disc_key(1, 3) == ((128u | 3u) ^ 0xCBF633B1u));
 }
