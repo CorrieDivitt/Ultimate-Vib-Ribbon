@@ -1,5 +1,7 @@
 #include "vib/save.h"
 
+#include <algorithm>
+
 #include <cstdio>
 #include <cstdlib>
 #include <sstream>
@@ -43,7 +45,8 @@ Options original_options() {
   o.line_width = o.vr_line_width = 1.0;  // one pixel on the original's 288 lines
   o.vr_jitter_hold = 1;                  // a new jitter every frame
   o.jitter_scale = o.vr_jitter_scale = 1.0;
-  o.vr_ahead_seconds = o.vr_behind_seconds = 8.0;
+  o.vr_ahead_seconds = 8.0;   // what play builds ahead
+  o.vr_behind_seconds = 2.0;  // the original erases passed parts about 4.25 lengths back: some 2 s
   o.audio_offset_ms = 0;
   o.perf_overlay = 0;
   return o;
@@ -131,7 +134,7 @@ SaveData SaveData::from_text(const std::string& text) {
     else if (key == "vr_jitter_scale" && number >= 0 && number <= 2) d.options.vr_jitter_scale = number;
     else if (key == "vr_refresh_hz" && number >= 0 && number <= 240) d.options.vr_refresh_hz = int(number);
     else if (key == "vr_menu_zoom" && number > 0) d.options.vr_menu_zoom = number;
-    else if (key == "vr_behind_seconds" && number >= 0) d.options.vr_behind_seconds = number;
+    else if (key == "vr_behind_seconds" && number >= 0) d.options.vr_behind_seconds = std::max(2.0, number);  // (2 s at least)
     else if (key == "vr_ahead_seconds" && number >= 0) d.options.vr_ahead_seconds = number;
     else if (key == "audio_offset_ms") d.options.audio_offset_ms = number;
     else if (key == "music_volume" && number >= 0) d.options.music_volume = float(number);

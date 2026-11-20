@@ -99,8 +99,7 @@ std::string SettingsPanel::label(Item item, bool vr) const {
   std::string text = to_font_text(kLabels[table_language(language_)][int(item)]);
   switch (item) {
     case Item::WobbleSize: case Item::WobbleHold: case Item::Smooth: case Item::LineWidth: case Item::Zoom:
-    case Item::ViewAngle: case Item::SeeAhead: case Item::SeeBehind: case Item::SoundTiming: case Item::ResumeStyle:
-    case Item::Performance:
+    case Item::ViewAngle: case Item::SeeAhead: case Item::SeeBehind: case Item::SoundTiming:
       text += " (" + value(item, original_options(), vr) + ")";  // the original game's value
       break;
     default: break;
@@ -183,7 +182,7 @@ bool SettingsPanel::change(Item item, int d, Options& o, bool vr) {
     }
     case Item::ViewAngle: o.vr_angle = std::remainder(std::round(o.vr_angle / 15.0) * 15.0 + 15.0 * d, 360.0); return true;
     case Item::SeeAhead: return step_seconds(o.vr_ahead_seconds, d, 8.0);
-    case Item::SeeBehind: return step_seconds(o.vr_behind_seconds, d, 0.0);
+    case Item::SeeBehind: return step_seconds(o.vr_behind_seconds, d, 2.0);  // (at least 2 s: about what the original keeps)
     case Item::SoundEffects: o.sound_effects = !o.sound_effects; return true;
     case Item::Vibration: o.vibration = !o.vibration; return true;
     case Item::SoundTiming: return step(o.audio_offset_ms, 5.0 * d, -500.0, 500.0);

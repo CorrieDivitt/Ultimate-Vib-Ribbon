@@ -640,6 +640,7 @@ void Hud::draw(const Frame& f, std::vector<Layer>& layers) {
     lines_.set_view(l.view);
     const double gone = std::clamp(1.0 - f.time_left, 0.0, 1.0);
     lines_.animated(time_model_, time_anim_, static_cast<int>(gone * (time_.frames() - 1)), {}, 3, l.lines);
+    l.time = true;
     layers.push_back(std::move(l));
   }
   if (f.demo) {

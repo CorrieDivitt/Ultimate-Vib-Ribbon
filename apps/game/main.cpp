@@ -572,14 +572,20 @@ std::vector<std::int16_t> rewind_sound(const std::vector<std::int16_t>& out, std
 // (owner: 25% lower than the first 1,850, which was too high): just over the tallest
 // obstacle (1,378, pit and loop). Only the angel's block move (1,721) reaches higher;
 // every other move and form stays under 1,360. Game units, y down.
+// Level, from the eye towards Vibri: what the score and the progress bar turn to face.
+void facing(float vibri_z, Vec3f eye, float& fx, float& fz) {
+  fx = 0.0f - eye.x, fz = vibri_z - eye.z;
+  const float len = std::sqrt(fx * fx + fz * fz);
+  if (len < 1.0f) fx = 0.0f, fz = 1.0f;
+  else fx /= len, fz /= len;
+}
+
 void score_above_vibri(const std::vector<SceneLine>& marks, float vibri_z, Vec3f eye, std::vector<SceneLine>& out) {
   constexpr float kBottom = -1388.0f;              // its lowest point (1,850 less 25%)
   constexpr float kMarksBottom = -439.0f;          // the marks' lowest point, in their own space (measured)
   constexpr Vec3f kMarksCentre{0.0f, 0.0f, 636.0f};  // and the middle of their depth
-  float fx = 0.0f - eye.x, fz = vibri_z - eye.z;   // facing: from the eye to her, level
-  const float len = std::sqrt(fx * fx + fz * fz);
-  if (len < 1.0f) fx = 0.0f, fz = 1.0f;
-  else fx /= len, fz /= len;
+  float fx, fz;
+  facing(vibri_z, eye, fx, fz);
   auto place = [&](Vec3f p) {  // marks' space to the world
     const float x = p.x - kMarksCentre.x, z = p.z - kMarksCentre.z;
     return Vec3f{fz * x + fx * z, kBottom + (p.y - kMarksBottom), vibri_z - fx * x + fz * z};
@@ -594,6 +600,33 @@ void score_above_vibri(const std::vector<SceneLine>& marks, float vibri_z, Vec3f
     if (w.vertex_b) w.vertex_b += 0x40000000u;
     out.push_back(w);
   }
+}
+
+// In a headset the song's progress is a straight bar below Vibri (ours, task 4.9, in
+// place of the original's time meter), placed as the score is above her: centred on
+// her, upright, turned to face `eye`, at a fixed height so it never moves when she
+// jumps. 1,200 units long (1.2 m), at 900 below the road: under the deepest part of
+// any obstacle (a pit, 559) and about as far below the eye as the score is above it.
+// A dim line the whole length with a tick at each end, and over it, from the left, a
+// bright one as far as the song has gone; a small upright mark rides its end.
+void progress_below_vibri(double progress, float vibri_z, Vec3f eye, std::vector<SceneLine>& out) {
+  constexpr float kHalf = 600.0f, kY = 900.0f, kTick = 60.0f;
+  float fx, fz;
+  facing(vibri_z, eye, fx, fz);
+  auto at = [&](float across, float y) { return Vec3f{fz * across, y, vibri_z - fx * across}; };  // across: to the viewer's right
+  auto line = [&](Vec3f a, Vec3f b, Rgb colour) {
+    SceneLine l;
+    l.a = a, l.b = b, l.colour = colour;
+    out.push_back(l);
+  };
+  out.clear();
+  const Rgb dim{90, 90, 90}, bright{255, 255, 255};
+  const float done = -kHalf + 2.0f * kHalf * float(std::clamp(progress, 0.0, 1.0));
+  line(at(-kHalf, kY), at(kHalf, kY), dim);
+  line(at(-kHalf, kY - kTick), at(-kHalf, kY + kTick), dim);
+  line(at(kHalf, kY - kTick), at(kHalf, kY + kTick), dim);
+  if (done > -kHalf) line(at(-kHalf, kY), at(done, kY), bright);
+  line(at(done, kY - kTick), at(done, kY + kTick), bright);
 }
 
 Result play_song(Session& s, int song, int track_index, int& points, std::uint32_t seed) {
@@ -1068,6 +1101,15 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     s.hud.draw(h, hud_layers);
     hud_lines.resize(hud_layers.size());
     for (std::size_t i = 0; i < hud_layers.size(); ++i) {
+      if (s.opt.vr && hud_layers[i].time) {
+        // In a headset the song's progress is a bar below Vibri (task 4.9), moving smoothly.
+        const double progress = double(std::max(0, view_at)) / std::max(1.0, double(setup.course_seconds) * kSampleRate);
+        std::vector<SceneLine> bar;
+        progress_below_vibri(progress, s.scene.vibri_z(), view.eye, bar);
+        convert(bar, hud_lines[i]);
+        layers.push_back({&hud_lines[i], matrix(view), view.fov_y});
+        continue;
+      }
       if (s.opt.vr && hud_layers[i].score) {
         // In a headset the score floats above Vibri in the world (task 4.8), not in
         // front of the player: at a fixed height, turned to face the view.

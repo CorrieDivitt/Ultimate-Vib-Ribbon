@@ -30,7 +30,7 @@ struct Options {
   double line_width = 0.3;     // relative to the original's one pixel on a 288-line picture
   double vr_line_width = 0.15;  // the same, in a headset (an eye's picture is much taller)
   double vr_zoom = 1.0;         // in a headset, how close the view stands to Vibri in play (larger: closer)
-  double vr_behind_seconds = 30.0;  // in a headset, how long passed parts stay on the line (kWholeSongSeconds: all of them)
+  double vr_behind_seconds = 30.0;  // in a headset, how long passed parts stay on the line, 2 s at least (kWholeSongSeconds: all of them)
   double vr_ahead_seconds = 30.0;   // and how far ahead it is drawn (play itself builds 8 s ahead; kWholeSongSeconds: to the end)
   double vr_menu_zoom = 1.0;    // in a headset, the menus' cameras moved towards what they look at (larger: closer)
   int vr_jitter_hold = 3;       // in a headset the jitter changes every this many of its frames (1-3; the owner's choice)
@@ -46,7 +46,7 @@ struct Options {
 
 // What the original game itself would have for each of our settings (its one-pixel
 // lines, its jitter changing every frame, nothing smoothed, 8 s of course ahead and
-// behind, no sound offset, no overlay). The settings show these after each name, so a
+// about 2 s behind, no sound offset, no overlay). The settings show these after each name, so a
 // player can find the original's look again; they are not our defaults. Settings
 // with no counterpart in the original (zoom, view angle, the pause's resume) keep ours.
 Options original_options();

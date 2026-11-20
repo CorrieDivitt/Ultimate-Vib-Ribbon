@@ -89,7 +89,7 @@ class SettingsPanel {
   // The label and the value as shown (font codes), for tests and the console. Our own
   // settings show the original game's value after the name, "Line width (1.000)"
   // (original_options()), so players can find the original's look again; the
-  // original's two options and the actions show none.
+  // original's two options, the actions, Resume and Performance show none.
   std::string label(Item item, bool vr = false) const;
   std::string value(Item item, const Options& o, bool vr) const;
 
