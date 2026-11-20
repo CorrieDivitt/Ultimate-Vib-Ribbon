@@ -382,7 +382,7 @@ Found while checking: obstacles ahead also cross on songs 3, 5 and 6 (a faster e
 ## 2s. Progress meter locked in (4.9 done); combo dots nearer the viewer (session 3)
 
 - Owner: the original meter below Vibri "looks good now"; locked in. **Task 4.9 done.**
-- **Combo dots (the evolution meter around Vibri):** measured: a flat ring in the road's own upright plane (x within +-8), about 1.3 m across (z +-650 around her), from 1,078 above the road to 218 below it, so in stereo it ran straight through the road. Owner asked for it a little closer to the camera, for some depth and so it does not run through the road. In the headset `evo_nearer()` (vibplay) moves those lines 300 units (0.3 m) towards the eye, level, in play and in the settings preview; `Scene::evo_first()` gives where its lines start in draw()'s output (it is drawn last). The monitor is unchanged. Not yet seen in the headset.
+- **Combo dots (the evolution meter around Vibri):** measured: a flat ring in the road's own upright plane (x within +-8), about 1.3 m across (z +-650 around her), from 1,078 above the road to 218 below it, so in stereo it ran straight through the road. Owner asked for it a little closer to the camera, for some depth and so it does not run through the road. In the headset `evo_behind_road()` (vibplay) moves those lines 300 units (0.3 m) level along the line from the eye to Vibri, in play and in the settings preview: first towards the eye (in front of the road), then at the owner's request away from it (0.3 m behind the road); `Scene::evo_first()` gives where its lines start in draw()'s output (it is drawn last). The monitor is unchanged. Not yet seen in the headset.
 
 ## 2o. Idea dropped: Vibri speaking English (session 3, 2026-11-20)
 

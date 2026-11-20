@@ -265,12 +265,12 @@ struct Session {
 };
 
 // In a headset the evolution meter (the dots around Vibri that show the run of hits)
-// is moved a little towards the viewer, level (owner, session 3): in the original
-// it is a flat ring in the road's own upright plane, about 1.3 m across and dipping
-// 0.2 m below the road, so in stereo it ran straight through the road. 300 units
-// (0.3 m) towards the eye gives it a little depth of its own, in front of the road.
-void evo_nearer(std::vector<SceneLine>& lines, std::size_t first, float vibri_z, Vec3f eye) {
-  constexpr float kNearer = 300.0f;
+// is moved a little away from the road, level (owner, session 3): in the original it
+// is a flat ring in the road's own upright plane, about 1.3 m across and dipping
+// 0.2 m below the road, so in stereo it ran straight through the road. The owner
+// tried it 0.3 m in front (towards the eye), then chose 0.3 m behind the road.
+void evo_behind_road(std::vector<SceneLine>& lines, std::size_t first, float vibri_z, Vec3f eye) {
+  constexpr float kNearer = -300.0f;  // towards the eye; negative: behind the road, seen from the eye
   float dx = eye.x, dz = eye.z - vibri_z;  // level, from her towards the eye
   const float len = std::sqrt(dx * dx + dz * dz);
   if (len < 1.0f) return;
@@ -526,7 +526,7 @@ struct PlayPreview {
     s.scene.draw(f, lines, view);
     if (s.opt.vr) {
       view = vr_play_view(s.scene.vibri_z(), float(o.vr_zoom), o.vr_angle);
-      evo_nearer(lines, s.scene.evo_first(), s.scene.vibri_z(), view.eye);
+      evo_behind_road(lines, s.scene.evo_first(), s.scene.vibri_z(), view.eye);
     }
   }
 };
@@ -1139,7 +1139,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     s.scene.draw(f, scene_lines, view);
     if (s.opt.vr) {
       view = vr_play_view(s.scene.vibri_z(), float(s.save.options.vr_zoom), s.save.options.vr_angle);
-      evo_nearer(scene_lines, s.scene.evo_first(), s.scene.vibri_z(), view.eye);
+      evo_behind_road(scene_lines, s.scene.evo_first(), s.scene.vibri_z(), view.eye);
     }
     ++display_frame;
     auto convert = [&](const std::vector<SceneLine>& in, std::vector<vibr::LineInstance>& dst) {
