@@ -37,6 +37,18 @@ int SaveData::record(Course course, int score) {
   return 0;
 }
 
+Options original_options() {
+  Options o;
+  o.smooth_animation = false;
+  o.line_width = o.vr_line_width = 1.0;  // one pixel on the original's 288 lines
+  o.vr_jitter_hold = 1;                  // a new jitter every frame
+  o.jitter_scale = o.vr_jitter_scale = 1.0;
+  o.vr_ahead_seconds = o.vr_behind_seconds = 8.0;
+  o.audio_offset_ms = 0;
+  o.perf_overlay = 0;
+  return o;
+}
+
 std::string SaveData::to_text() const {
   std::ostringstream out;
   out << "# Vib-Ribbon VR save file. One setting per line; delete a line to get its default back.\n";

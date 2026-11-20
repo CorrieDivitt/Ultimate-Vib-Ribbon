@@ -568,12 +568,12 @@ std::vector<std::int16_t> rewind_sound(const std::vector<std::int16_t>& out, std
 // fixed distance in front of the player, so zoomed out they hung halfway between the
 // player and her. The marks' own space (the HUD camera's: x right, y down, z away) is
 // set upright above her and turned about the vertical to face `eye`, at their own
-// size. Their lowest point is 1,850 above the road: over the tallest obstacle (1,378,
-// pit and loop) and the highest Vibri reaches in any move or form (1,721, the angel's
-// block), so it never moves when she jumps and stays clear of the road seen from a
-// little below. Game units, y down.
+// size, so it never moves when she jumps. Their lowest point is 1,388 above the road
+// (owner: 25% lower than the first 1,850, which was too high): just over the tallest
+// obstacle (1,378, pit and loop). Only the angel's block move (1,721) reaches higher;
+// every other move and form stays under 1,360. Game units, y down.
 void score_above_vibri(const std::vector<SceneLine>& marks, float vibri_z, Vec3f eye, std::vector<SceneLine>& out) {
-  constexpr float kBottom = -1850.0f;              // its lowest point
+  constexpr float kBottom = -1388.0f;              // its lowest point (1,850 less 25%)
   constexpr float kMarksBottom = -439.0f;          // the marks' lowest point, in their own space (measured)
   constexpr Vec3f kMarksCentre{0.0f, 0.0f, 636.0f};  // and the middle of their depth
   float fx = 0.0f - eye.x, fz = vibri_z - eye.z;   // facing: from the eye to her, level

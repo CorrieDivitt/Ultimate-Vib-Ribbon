@@ -44,6 +44,13 @@ struct Options {
   float music_volume = 1.0f, effects_volume = 1.0f;
 };
 
+// What the original game itself would have for each of our settings (its one-pixel
+// lines, its jitter changing every frame, nothing smoothed, 8 s of course ahead and
+// behind, no sound offset, no overlay). The settings show these after each name, so a
+// player can find the original's look again; they are not our defaults. Settings
+// with no counterpart in the original (zoom, view angle, the pause's resume) keep ours.
+Options original_options();
+
 struct SaveData {
   // Three per course, best first. Speed courses keep seconds: fewer is better.
   std::array<std::array<int, 3>, kCourseCount> high_scores{};

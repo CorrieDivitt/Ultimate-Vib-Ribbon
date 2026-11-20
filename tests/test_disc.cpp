@@ -664,11 +664,14 @@ TEST(disc_sces02873_settings_panel) {
   for (int i = 0; i < 80; ++i) p.tick(left, 0.02, o, true);
   CHECK(o.vr_behind_seconds == 0.0);
   o.vr_ahead_seconds = o.vr_behind_seconds = 30.0;
-  // Our settings show their default after the name; the original's options and the actions do not.
-  CHECK(p.label(I::Zoom, true) == "Zoom (1.00)" && p.label(I::SeeAhead, true) == "See ahead (30 s)");
-  CHECK(p.label(I::LineWidth, true) == "Line width (0.150)" && p.label(I::LineWidth, false) == "Line width (0.300)");
-  CHECK(p.label(I::ResumeStyle) == "Resume (Rewind)" && p.label(I::Performance) == "Performance (Off)");
-  CHECK(p.label(I::WobbleHold, true) == "Wobble hold (3)" && p.label(I::ViewAngle, true) == "View angle (45)");
+  // Our settings show the original game's value after the name; the original's options and the actions do not.
+  CHECK(p.label(I::SeeAhead, true) == "See ahead (8 s)" && p.label(I::SeeBehind, true) == "See behind (8 s)");
+  CHECK(p.label(I::LineWidth, true) == "Line width (1.000)" && p.label(I::LineWidth, false) == "Line width (1.000)");
+  CHECK(p.label(I::WobbleHold, true) == "Wobble hold (1)" && p.label(I::WobbleSize, true) == "Wobble size (1.0)");
+  CHECK(p.label(I::Smooth) == "Smooth motion (Off)" && p.label(I::SoundTiming) == "Sound timing (0 ms)");
+  CHECK(p.label(I::Performance) == "Performance (Off)");
+  // No counterpart in the original: ours.
+  CHECK(p.label(I::Zoom, true) == "Zoom (1.00)" && p.label(I::ViewAngle, true) == "View angle (45)" && p.label(I::ResumeStyle) == "Resume (Rewind)");
   CHECK(p.label(I::SoundEffects) == "Sound effects" && p.label(I::Continue) == "Continue" && p.label(I::Recentre, true) == "Recentre view");
   go_to(I::ViewAngle);
   o.vr_angle = 180;

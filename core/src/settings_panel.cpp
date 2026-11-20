@@ -101,7 +101,7 @@ std::string SettingsPanel::label(Item item, bool vr) const {
     case Item::WobbleSize: case Item::WobbleHold: case Item::Smooth: case Item::LineWidth: case Item::Zoom:
     case Item::ViewAngle: case Item::SeeAhead: case Item::SeeBehind: case Item::SoundTiming: case Item::ResumeStyle:
     case Item::Performance:
-      text += " (" + value(item, Options{}, vr) + ")";  // the default
+      text += " (" + value(item, original_options(), vr) + ")";  // the original game's value
       break;
     default: break;
   }
