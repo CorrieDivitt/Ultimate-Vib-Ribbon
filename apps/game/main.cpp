@@ -68,6 +68,7 @@
 #include "vib/sound_bank.h"
 #include "vib/title.h"
 #include "vib/title_intro.h"
+#include "vib/kiosk_movie.h"
 
 namespace {
 
@@ -955,6 +956,26 @@ int run(int argc, char** argv) {
       std::vector<std::vector<vibr::LineInstance>> menu_lines;
       std::vector<Hud::Layer> prev_layers;
       std::uint32_t menu_display_frame = 0;
+      // The kiosk movie (the menu's "demo", and every fourth demo), loaded when first wanted.
+      std::optional<Pak> kiosk_pak;
+      std::optional<KioskMovie> kiosk;
+      std::optional<Effects> kiosk_fx;
+      constexpr int kKioskVoice = 8;  // its voices 0 and 1 play on 8 and 9
+      bool in_kiosk = false;
+      auto start_kiosk = [&]() {
+        if (!kiosk) {
+          kiosk_pak.emplace(iso.read("KIOSK/" + language_prefix(language) + "FILES.PAK"));
+          kiosk.emplace(*kiosk_pak, language);
+          kiosk_fx.emplace(iso, audio, "KIOSK/AUDIO/KIOSK");
+        }
+        for (int v : {0, 1, 5}) title_fx.stop(kTitleVoice + v);
+        music.stop();
+        voices.stop();
+        kiosk->start();
+        in_kiosk = true;
+        prev_layers.clear();
+        std::printf("Demo: the kiosk movie\n");
+      };
       std::uint64_t last_ns = SDL_GetTicksNS();
       double behind = 0;
       bool course_chosen = false, running = true, replay = false;
@@ -1040,12 +1061,31 @@ int run(int argc, char** argv) {
         last_ns = now_ns;
         while (behind >= 1.0 / TitleScreens::kFrameRate) {
           behind -= 1.0 / TitleScreens::kFrameRate;
-          prev_layers = at_title ? intro.layers() : title.layers();  // for blending between this frame and the next
+          prev_layers = in_kiosk ? kiosk->layers() : at_title ? intro.layers() : title.layers();  // for blending
           TitleScreens::Input in = pressed;
           in.held_up = held.up, in.held_down = held.down, in.held_left = held.left, in.held_right = held.right;
           pressed = {};
           in.voices_playing = voices.playing();
           in.music_playing = music.playing();
+          if (in_kiosk) {
+            KioskMovie::Input ki;
+            ki.confirm = in.confirm || in.cancel;
+            ki.music_playing = kiosk_fx->is_playing(kKioskVoice);
+            ki.confirm_sound_playing = kiosk_fx->is_playing(kKioskVoice + 1);
+            kiosk->tick(ki);
+            for (const KioskMovie::Sound& snd : kiosk->take_sounds()) kiosk_fx->number(snd.number, 64, kKioskVoice + snd.voice);
+            if (kiosk->finished()) {
+              // Back to the title's menu, its lines gathering in.
+              kiosk_fx->stop(kKioskVoice);
+              kiosk_fx->stop(kKioskVoice + 1);
+              in_kiosk = false;
+              intro.start(true);
+              intro.close_menus();
+              idle_ticks = 0;
+              prev_layers.clear();
+            }
+            continue;
+          }
           if (at_title) {
             TitleIntro::Input ti;
             ti.up = in.up, ti.down = in.down, ti.left = in.left, ti.right = in.right;
@@ -1086,9 +1126,9 @@ int run(int argc, char** argv) {
                 break;
               }
               case C::Back: intro.show(M::Language); break;
-              case C::Demo:
-                std::printf("The demo comes later.\n");
+              case C::Demo:  // the kiosk movie, as the original's kiosk program
                 intro.show(M::Mode);
+                start_kiosk();
                 break;
               case C::Play:
                 intro.show(M::Start);
@@ -1149,9 +1189,12 @@ int run(int argc, char** argv) {
         if (!running) break;
         if (demo_start) {
           demo_start = false;
-          static const int kDemoLevels[8] = {1, 2, 3, 0, 4, 5, 6, 0};  // 0: the kiosk movie (not built yet: passed over)
-          int level = 0;
-          for (int tries = 0; tries < 8 && level == 0; ++tries) level = kDemoLevels[g_demo_count++ % 8];
+          static const int kDemoLevels[8] = {1, 2, 3, 0, 4, 5, 6, 0};  // 0: the kiosk movie
+          const int level = kDemoLevels[g_demo_count++ % 8];
+          if (level == 0) {
+            start_kiosk();
+            continue;
+          }
           for (int v : {0, 1, 5}) title_fx.stop(kTitleVoice + v);
           music.stop();
           voices.stop();
@@ -1194,7 +1237,7 @@ int run(int argc, char** argv) {
           continue;
         }
         // Draw the last frame the title or the menus made.
-        const auto& layers = at_title ? intro.layers() : title.layers();
+        const auto& layers = in_kiosk ? kiosk->layers() : at_title ? intro.layers() : title.layers();
         menu_lines.resize(layers.size());
         std::vector<vibr::Layer> out;
         // With smooth animation the menus move at the display's rate, not only the

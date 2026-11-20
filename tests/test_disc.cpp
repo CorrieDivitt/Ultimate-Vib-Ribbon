@@ -18,6 +18,7 @@
 #include "vib/scene.h"
 #include "vib/title.h"
 #include "vib/title_intro.h"
+#include "vib/kiosk_movie.h"
 #include "vib/course_script.h"
 #include "vib/motion.h"
 #include "vib/sound_bank.h"
@@ -531,5 +532,45 @@ TEST(disc_sces02873_demo_sign_shows_in_the_demo) {
     f.demo = true;
     hud.draw(f, demo);
     CHECK(demo.size() == plain.size() + 1 && !demo.back().lines.empty());
+  }
+}
+
+TEST(disc_sces02873_kiosk_movie_plays_and_ends) {
+  const std::string cue = test_cue();
+  if (cue.empty()) SKIP("set VIB_TEST_CUE to your SCES-02873 .cue to run");
+  DiscImage disc = DiscImage::open(path_from_utf8(cue));
+  Iso9660 iso(disc);
+  for (int language = 0; language < 5; ++language) {
+    const Pak pak(iso.read("KIOSK/" + language_prefix(language) + "FILES.PAK"));
+    KioskMovie k(pak, language);
+    KioskMovie::Input in;
+    k.tick(in);
+    auto sounds = k.take_sounds();
+    CHECK(sounds.size() == 1 && sounds[0].number == 0x100 && sounds[0].voice == 0);  // the music
+    in.music_playing = true;
+    std::size_t most = 0;
+    int ticks = 1;
+    for (; ticks < 6000 && !k.finished(); ++ticks) {
+      if (ticks == 5000) in.music_playing = false;  // (the music has ended by then)
+      k.tick(in);
+      std::size_t n = 0;
+      for (const auto& l : k.layers()) n += l.lines.size();
+      most = std::max(most, n);
+    }
+    CHECK(most > 100);
+    CHECK(k.finished() && ticks > TitleIntro::game_frames(3025));  // it played to its end (about 100 s)
+    // A button ends it once the confirm sound has sounded.
+    k.start();
+    KioskMovie::Input button;
+    button.confirm = true;
+    k.tick(button);
+    sounds = k.take_sounds();
+    CHECK(!sounds.empty() && sounds.back().number == 0x00 && sounds.back().voice == 1);
+    KioskMovie::Input sounding;
+    sounding.confirm_sound_playing = true;
+    k.tick(sounding);
+    CHECK(!k.finished());
+    k.tick({});
+    CHECK(k.finished());
   }
 }
