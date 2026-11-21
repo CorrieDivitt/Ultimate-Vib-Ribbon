@@ -602,6 +602,21 @@ Hud::Hud(const Pak& pak, int language) {
   sign_anims_[0] = parse_anm(pak.view("MESSAGE/ROUND01.ANM"));
   sign_anims_[1] = parse_anm(pak.view("MESSAGE/ROUND02.ANM"));
   sign_camera_ = parse_anc(pak.view("MESSAGE/ROUND.ANC"));
+  // The speed courses' dial (dial, target mark, needle) and their three level labels.
+  speed_model_ = parse_tmd(pak.view("METERS/SPEED.TMD"));
+  dial_anim_ = parse_anm(pak.view("METERS/SPEED.ANM"));
+  target_anim_ = parse_anm(pak.view("METERS/SPD_TRGT.ANM"));
+  needle_anim_ = parse_anm(pak.view("METERS/SPD_NEDL.ANM"));
+  speed_camera_ = parse_anc(pak.view("METERS/SPEED_01.ANC"));
+  speed_label_model_ = parse_tmd(pak.view(localized(pak, "METERS/SPD_LBL.TMD", language)));
+  for (int i = 0; i < 3; ++i) speed_label_anims_[i] = parse_anm(pak.view("METERS/SPD_LBL" + std::to_string(i + 1) + ".ANM"));
+}
+
+void Hud::start_speed(int course) {
+  speed_label_index_ = std::clamp(course, 1, 3) - 1;
+  const ModelAnimation& a = speed_label_anims_[speed_label_index_];
+  speed_label_ = Clip(int(a.frames.size()), a.rate, false);
+  speed_label_.rewind();
 }
 
 void Hud::start_round(int index, bool show_sign) {
@@ -614,7 +629,29 @@ void Hud::start_round(int index, bool show_sign) {
 void Hud::draw(const Frame& f, std::vector<Layer>& layers) {
   layers.clear();
   lines_.seed(f.jitter_seed);
-  if (f.show_score) {
+  if (f.speed_course > 0) {
+    // A speed course shows the dial instead of the marks, through its own camera: the
+    // dial held on its first pose, the target mark at the level's top speed and the
+    // needle at the speed the course is heading for, both on one scale for all three
+    // levels (1.5 to the gold level's 6.2 beats a second), and the level's label
+    // playing once. Jitter 3. (Behaviour from the original's meters; our own code.)
+    constexpr double kLow = 1.5, kHigh = 6.2;
+    static const double kTop[3] = {3.5, 5.0, 6.2};
+    auto frame_for = [&](const ModelAnimation& a, double speed) {
+      const int n = int(a.frames.size());
+      return std::clamp(int(double(n) * (speed - kLow) / (kHigh - kLow)), 0, std::max(0, n - 1));
+    };
+    Layer l;
+    l.view = fixed_view(speed_camera_);
+    lines_.set_view(l.view);
+    lines_.animated(speed_model_, dial_anim_, 0, {}, 3, l.lines);
+    lines_.animated(speed_model_, target_anim_, frame_for(target_anim_, kTop[std::clamp(f.speed_course, 1, 3) - 1]), {}, 3, l.lines);
+    lines_.animated(speed_model_, needle_anim_, frame_for(needle_anim_, f.target_speed), {}, 3, l.lines);
+    if (!speed_label_anims_[speed_label_index_].frames.empty())
+      lines_.animated(speed_label_model_, speed_label_anims_[speed_label_index_], speed_label_.pose(), {}, 3, l.lines);
+    speed_label_.advance(f.seconds);
+    layers.push_back(std::move(l));
+  } else if (f.show_score) {
     // The marks ride one looping clip, 20 frames apart, the first one moving it on.
     // It runs backwards, faster as the run of hits grows: 1 + 9 x (run / 18)^2.
     Layer l;

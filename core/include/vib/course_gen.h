@@ -105,6 +105,12 @@ class CourseGenerator {
   // 52 to 59 of every minute of an audio CD).
   void set_select(bool on) { select_ = on; }
 
+  // Speed courses: from now on the cue's period is `period` samples (one beat at the
+  // course's target speed) and its select period three of them, whatever the script's
+  // speed list says; the script still chooses the obstacles. 0 goes back to the script.
+  // Gameplay gives the period every update (Gameplay::fixed_period()).
+  void set_fixed_cue(std::int32_t period) { fixed_cue_period_ = period; }
+
   // Feeds the next block, whose first sample is at stream position `time`.
   void process(std::int32_t time, const Block& block);
 
@@ -146,6 +152,7 @@ class CourseGenerator {
   int cue_interval_;
   int blocks_since_cue_ = 0;
   std::int64_t frame_period_ = 0, frame_phase_ = 0, last_frame_ = -1;
+  std::int32_t fixed_cue_period_ = 0;
   Cue current_cue_;
 
   // script position

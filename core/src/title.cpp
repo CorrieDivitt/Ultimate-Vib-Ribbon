@@ -95,6 +95,12 @@ TitleScreens::TitleScreens(const Pak& pak, int language) {
   for (std::size_t i = 0; i < 6; ++i) unknown_steps_[i] = load_movie(pak, m_unknown_, unknown_steps[i]);
   unknown_open_ = load_movie(pak, m_unknown_, "MODE/MDU_OP.ANM");
   unknown_close_ = load_movie(pak, m_unknown_, "MODE/MDU_CL.ANM");
+  // MODE SPEED SELECT: the three speed levels and back.
+  m_speed_ = load_model(pak, language, "SPEED/MD_SPD.TMD");
+  const char* speed_steps[4] = {"SPEED/SPD01_02.ANM", "SPEED/SPD02_03.ANM", "SPEED/SPD03_04.ANM", "SPEED/SPD04_01.ANM"};
+  for (std::size_t i = 0; i < 4; ++i) speed_steps_[i] = load_movie(pak, m_speed_, speed_steps[i]);
+  speed_open_ = load_movie(pak, m_speed_, "SPEED/OPEN.ANM");
+  speed_close_ = load_movie(pak, m_speed_, "SPEED/CLOSE.ANM");
   // CD CHANGE: change the CD, this CD, back.
   m_cd_ = load_model(pak, language, "CD/CD.TMD");
   const char* cd_steps[3] = {"CD/CD-12.ANM", "CD/CD-23.ANM", "CD/CD-31.ANM"};
@@ -155,7 +161,7 @@ namespace {
 // Which screens have the menu music: all but the results and the course itself.
 bool has_music(TitleScreens::Screen s) {
   using S = TitleScreens::Screen;
-  return s == S::Main || s == S::PsjModeSelect || s == S::UnknownModeSelect || s == S::CdChange || s == S::TrackSelect ||
+  return s == S::Main || s == S::PsjModeSelect || s == S::UnknownModeSelect || s == S::SpeedSelect || s == S::CdChange || s == S::TrackSelect ||
          s == S::Option || s == S::PsjHiscore;
 }
 }  // namespace
@@ -202,6 +208,7 @@ TitleScreens::Result TitleScreens::tick(const Input& in) {
     case Screen::Main: r = main_menu(in); break;
     case Screen::PsjModeSelect: r = psj_mode_select(in); break;
     case Screen::UnknownModeSelect: r = unknown_mode_select(in); break;
+    case Screen::SpeedSelect: r = speed_select(in); break;
     case Screen::CdChange: r = cd_change(in); break;
     case Screen::TrackSelect: r = track_select(in); break;
     case Screen::Option: r = options(in); break;
@@ -734,6 +741,87 @@ TitleScreens::Result TitleScreens::unknown_mode_select(const Input& in) {
       return results[i];
     }
     menu_movie_ = unknown_close_;
+    leaving_ = true;
+    speed_ = 1;
+  }
+  return Result::None;
+}
+
+// MODE SPEED SELECT (own-CD side): the three speed levels and back, Vibri lying, the
+// levels named as the game-disc courses are (bronze, silver, gold); built as the other
+// menus are. Behaviour read from the original's TitleDraw; our own code.
+TitleScreens::Result TitleScreens::speed_select(const Input& in) {
+  static const Result results[4] = {Result::Speed1, Result::Speed2, Result::Speed3, Result::SpeedBack};
+  static const int voices[4] = {114, 113, 112, 96};
+  constexpr int kBack = 3;
+  const bool still = fade_frame_ == 0;
+  if (arrived_) {
+    if (previous_ == Screen::UnknownModeSelect) {
+      speed_cursor_.index = 0;
+      camera_cue_ = 2;
+      entering_ = true;
+    } else {
+      camera_cue_ = 1;
+      entering_ = false;
+    }
+    vibri_ = Vibri::Lying;
+    play_music();
+    menu_movie_ = speed_steps_[std::size_t(speed_cursor_.index)];
+    rewind_movies();
+    set_camera(camera_cue_);
+    speed_ = 0;
+    leaving_ = false;
+  }
+  const MenuRead r = read(speed_cursor_, in, true, still && !entering_ && !leaving_);
+  int jitter = kMenuJitter * kGteOne;
+  if (next_ == Screen::Done) jitter += fade_jitter();
+  models_[std::size_t(m_speed_)].jitter_all(jitter / kGteOne);
+  const int i = speed_cursor_.index;
+  if (r.changed) {
+    if (r.up || r.down) say({voices[i]}, 90, Vibri::LyingSpeaking);
+    if (r.up) {
+      menu_movie_ = speed_steps_[std::size_t(i)];
+      movies_[std::size_t(menu_movie_)].clip.rewind(true);
+      speed_ = -1;
+    } else if (r.down) {
+      menu_movie_ = speed_steps_[std::size_t((i + 3) % 4)];
+      movies_[std::size_t(menu_movie_)].clip.rewind();
+      speed_ = 1;
+    }
+  }
+  if (r.back) {
+    menu_movie_ = speed_steps_[std::size_t(i)];
+    movies_[std::size_t(menu_movie_)].clip.rewind();
+    say({voices[i]}, 90, Vibri::LyingSpeaking);
+    speed_ = 0;
+  }
+  Hud::Layer vibri, menu;
+  vibri.view = vibri_view();
+  lines_.set_view(vibri.view);
+  draw_vibri(jitter, vibri.lines);
+  view_ = camera_view(cam_menu_);
+  cameras_[std::size_t(cam_menu_)].clip.advance(kTick);
+  if (next_ != Screen::Done && !still) update_camera(camera_cue_);
+  menu.view = view_;
+  lines_.set_view(menu.view);
+  if (entering_) draw_menu_movie(speed_open_, menu.lines);
+  else draw_movie(menu_movie_, speed_, menu.lines);
+  layers_.push_back(std::move(vibri));
+  layers_.push_back(std::move(menu));
+  if (leaving_ && movies_[std::size_t(speed_close_)].clip.finished()) {
+    leaving_ = false;
+    camera_cue_ = 3;
+    set_camera(3);
+    return results[i];
+  }
+  if (r.confirm) {
+    say({1}, 90, Vibri::Hidden);
+    if (i != kBack) {
+      camera_cue_ = 0;
+      set_camera(0);
+      return results[i];
+    }
+    menu_movie_ = speed_close_;
     leaving_ = true;
     speed_ = 1;
   }

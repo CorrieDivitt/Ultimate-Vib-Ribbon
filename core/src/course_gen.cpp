@@ -300,6 +300,10 @@ CourseGenerator::Cue CourseGenerator::next_cue(std::int32_t time) {
     cue.period = speed.period + ((speed.period_slope * since) >> 12);
     cue.select_period = speed.select_period + ((speed.select_period_slope * since) >> 12);
   }
+  if (fixed_cue_period_ > 0) {  // a speed course: one beat, and three for the select period
+    cue.period = fixed_cue_period_;
+    cue.select_period = fixed_cue_period_ * 3;
+  }
   cue.period = std::max(1, cue.period);
   cue.select_period = std::max(1, cue.select_period);
   cue.selector = std::move(selector);

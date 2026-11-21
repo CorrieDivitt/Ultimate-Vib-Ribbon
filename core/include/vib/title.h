@@ -24,7 +24,7 @@ namespace vib {
 
 class TitleScreens {
  public:
-  enum class Screen { None, Main, PsjModeSelect, UnknownModeSelect, CdChange, TrackSelect, Option, PsjHiscore, Results, Clear, Again, AgainSelect, Done };
+  enum class Screen { None, Main, PsjModeSelect, UnknownModeSelect, SpeedSelect, CdChange, TrackSelect, Option, PsjHiscore, Results, Clear, Again, AgainSelect, Done };
   enum class Result {
     None,
     PsjModes, UnknownModes, Options, Leave,          // main
@@ -34,6 +34,7 @@ class TitleScreens {
     ResultsDone,                                     // high scores shown after a course; AGAIN is over
     PlayAgain, AgainBack,                            // AGAIN SELECT: try the song again, or leave
     OneTrack, AllTracks, SpeedModes, InOrder, UnknownHiscores, UnknownBack,  // own-CD mode select
+    Speed1, Speed2, Speed3, SpeedBack,               // MODE SPEED SELECT: the three levels, or leave
     ChangeCd, CdReady, CdChangeBack,                 // CD CHANGE: change the CD, play this one, or leave
     TrackChosen, TrackBack,                          // TRACK SELECT: play `track`, or leave
   };
@@ -157,6 +158,7 @@ class TitleScreens {
   Result main_menu(const Input& in);
   Result psj_mode_select(const Input& in);
   Result unknown_mode_select(const Input& in);
+  Result speed_select(const Input& in);
   Result cd_change(const Input& in);
   Result track_select(const Input& in);
   // Text at (x, y) in the original's text space (as draw_text's), `scale` times its size.
@@ -188,7 +190,9 @@ class TitleScreens {
   int psj_open_ = 0, psj_close_ = 0;
   std::array<int, 6> unknown_steps_{};  // the own-CD mode select's items, one to the next
   int unknown_open_ = 0, unknown_close_ = 0;
-  int m_cd_ = 0, m_trk_ = 0;
+  int m_cd_ = 0, m_trk_ = 0, m_speed_ = 0;
+  std::array<int, 4> speed_steps_{};  // the speed select's items, one to the next
+  int speed_open_ = 0, speed_close_ = 0;
   std::array<int, 3> cd_steps_{};  // CD CHANGE's items, one to the next
   int cd_open_ = 0, cd_close_ = 0, trk_left_ = 0, trk_right_ = 0, trk_exit_ = 0;
   int trk_wait_ = 0;  // frames since leaving the track select began
@@ -219,7 +223,7 @@ class TitleScreens {
   int fade_jitter() const { return fade_frame_ * 200 * 4096; }
 
   // screen state
-  Cursor main_cursor_{0, 4, 3}, psj_cursor_{0, 5, 4}, unknown_cursor_{0, 6, 5}, cd_cursor_{1, 3, 2}, trk_cursor_{0, 2, 1}, option_cursor_{0, 3, 2}, back_cursor_{0, 2, 1};
+  Cursor main_cursor_{0, 4, 3}, psj_cursor_{0, 5, 4}, unknown_cursor_{0, 6, 5}, speed_cursor_{0, 4, 3}, cd_cursor_{1, 3, 2}, trk_cursor_{0, 2, 1}, option_cursor_{0, 3, 2}, back_cursor_{0, 2, 1};
   int menu_movie_ = 0, camera_cue_ = -1, wait_frame_ = 0, hiscore_course_ = 0, results_frame_ = 0;
   int result_frame_ = 0, leave_frame_ = 0, hiscore_frame_ = 0, comment_ = 0;
   std::uint32_t random_ = 12345;

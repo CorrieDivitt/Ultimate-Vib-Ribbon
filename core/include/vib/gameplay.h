@@ -151,6 +151,10 @@ class Gameplay {
   int music_volume() const { return volume_; }  // 0-256; the demo fades out
   // Speed courses: the cue the course generator must use (period, select period); 0 when none.
   std::int32_t fixed_period() const { return fixed_period_; }
+  // Speed courses: the speed the course is heading for now (beats a second; it rises
+  // with points), as the speed dial's needle shows it.
+  Fixed target_speed() const { return range_speed_; }
+  bool speed_course() const { return speed_course_; }
 
  private:
   void hit(Part& p);

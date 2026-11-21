@@ -337,6 +337,7 @@ struct Session {
   Course course = Course::Bronze;  // being played
   int song = 0;                    // 1-6 when practising one song
   int final_score = 0, final_bonus = 0, final_form = 1;  // the last song cleared
+  bool final_time_up = false;  // a speed course's music ran out before the top speed
   bool zooming = false, turning = false;                  // the sticks are moving the view (headset)
   bool demo = false;  // the title's demo: the game plays itself (missing now and then), any button ends it
   // The player's own music, played as a one-track audio CD: its course follows the
@@ -886,6 +887,10 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   bool far_warned = false;
   s.scene.reset(true, false);
   s.hud.start_round(track_index, !s.song && !s.music && !s.demo);  // the "Round 1/2" sign belongs to the two-song courses
+  // A speed course: its level (1-3) for the dial's label; the generator follows the
+  // course's beat (Gameplay::fixed_period) instead of the script's speed list.
+  const int speed_level = game.speed_course() ? int(setup.course) - int(Course::Speed1) + 1 : 0;
+  if (speed_level) s.hud.start_speed(speed_level);
 
   std::printf("\nSong %d: %d s, %s course (lead %d, frame phase %.0f)\n", song, total / kSampleRate,
               fixed ? "fixed" : "original-style", timing.lead, double(timing.frame_phase_q16) / 65536.0);
@@ -898,7 +903,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
       const auto t = static_cast<std::int32_t>(next_block * kBlockSize);
       gen.process(t, blocks[next_block++]);
       for (; fed < gen.events().size(); ++fed) game.add_event(gen.events()[fed]);
-      if (was_selecting && !gen.selecting()) game.quiet(t);
+      if (was_selecting && !gen.selecting() && !speed_level) game.quiet(t);  // (not in speed courses, as the original)
       was_selecting = gen.selecting();
     }
     if (!ended && next_block >= blocks.size()) {
@@ -1203,6 +1208,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     }
     if (outcome == Outcome::Playing && !frozen) {
       outcome = game.update(heard, 0, s.scene.move_done(0.5));
+      if (speed_level) gen.set_fixed_cue(game.fixed_period());
       last_position = heard;
       handle(game.events());
     }
@@ -1219,7 +1225,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     f.jitter_seed = next_random(static_cast<std::uint32_t>(double(now_ns - start_ns) * 1e-9 * kOriginalRefresh) * 2654435761u);
     f.speed = game.speed();
     f.road = frozen ? game.road_at(view_at, s.opt.vr) : game.road(s.opt.vr);
-    if (s.opt.vr && far_extra() > 0) {
+    if (s.opt.vr && far_extra() > 0 && !speed_level) {  // (a speed course's beat changes as the player scores)
       // At most about 2 ms of analysis a frame: with the whole song asked for, the far
       // course fills in over the first second or so instead of in one long frame.
       const std::uint64_t far_budget_end = SDL_GetTicksNS() + 2'000'000;
@@ -1291,6 +1297,8 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     h.demo = s.demo;
     const int seconds = view_at >= 0 ? view_at / kSampleRate : 0;  // whole seconds, as the original counts
     h.time_left = 1.0 - double(seconds) / std::max(1, setup.course_seconds);
+    h.speed_course = speed_level;
+    h.target_speed = game.target_speed().to_double();
     s.hud.draw(h, hud_layers);
     hud_lines.resize(hud_layers.size());
     for (std::size_t i = 0; i < hud_layers.size(); ++i) {
@@ -1352,6 +1360,16 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
 
     if (outcome == Outcome::Clear) {
       std::printf("Song %d clear: score %d + end bonus %d\n", song, game.score(), game.bonus());
+      if (game.speed_course()) {
+        // A speed course is won on time: the seconds it took to reach the top speed.
+        std::printf("Speed course clear in %d s\n", game.seconds());
+        points = game.seconds();
+        s.final_score = game.seconds();
+        s.final_bonus = 0;
+        s.final_form = game.form();
+        result = Result::Clear;
+        break;
+      }
       if (game.score() == 0) return Result::GameOver;  // the original counts 0 as a loss
       points = game.score() + game.bonus();
       s.final_score = game.score();
@@ -1362,6 +1380,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     }
     if (outcome == Outcome::GameOver) {
       std::printf("Game over on song %d: score %d\n", song, game.score());
+      s.final_time_up = game.time_up();
       points = game.score();
       result = Result::GameOver;
       break;
@@ -2049,7 +2068,13 @@ int run(int argc, char** argv) {
               break;
             case R::TrackBack: title.go_to(S::CdChange); break;
             case R::CdChangeBack: title.go_to(S::UnknownModeSelect); break;
-            case R::SpeedModes: std::printf("Speed courses come in the next stage.\n"); break;
+            // The speed courses: the original's level select, then our picker for the
+            // track(s) to race on.
+            case R::SpeedModes: title.go_to(S::SpeedSelect); break;
+            case R::Speed1: own_course = Course::Speed1, open_picker(false); break;
+            case R::Speed2: own_course = Course::Speed2, open_picker(false); break;
+            case R::Speed3: own_course = Course::Speed3, open_picker(false); break;
+            case R::SpeedBack: title.go_to(S::UnknownModeSelect); break;
             case R::UnknownHiscores: std::printf("High scores for your own music come later.\n"); break;
             case R::UnknownBack: title.go_to(S::Main); break;
             case R::Options: title.go_to(S::Option); break;
@@ -2151,7 +2176,10 @@ int run(int argc, char** argv) {
             auto decode = [&paths](std::size_t k) { return std::async(std::launch::async, [path = paths[k]]() { return vibr::load_music(path); }); };
             std::future<vibr::Music> next = decode(0);
             int points = 0;
-            for (std::size_t k = 0; k < names.size() && r == Result::Clear; ++k) {
+            const bool speed = is_speed_course(own_course);
+            // (A speed course: each picked track is a try, the next one starting when the
+            // music runs out first; reaching the top speed ends the run.)
+            for (std::size_t k = 0; k < names.size() && (r == Result::Clear || (speed && r == Result::GameOver && s.final_time_up)); ++k) {
               std::future<vibr::Music> current = std::move(next);
               const std::string& name = names[k].first;
               const bool loaded = show_loading([&]() { return name; },
@@ -2178,6 +2206,13 @@ int run(int argc, char** argv) {
               std::printf("Track %zu of %zu: %s\n", k + 1, names.size(), name.c_str());
               r = play_song(s, 0, int(k), points, seed);
               seed = next_random(seed);
+              if (speed && r == Result::Clear) {
+                const int place = save.record(own_course, points);
+                write_save();
+                std::printf("Speed record: %d s%s\n", points, place ? (" (place " + std::to_string(place) + ")").c_str() : "");
+                points = 0;
+                break;
+              }
               if (own_course != Course::AllTracks) points = 0;
               s.music = nullptr;
             }
@@ -2188,8 +2223,8 @@ int run(int argc, char** argv) {
             running = false;
             break;
           }
-          // Back to the own-CD mode select.
-          title.go_to(S::UnknownModeSelect);
+          // Back to the own-CD mode select (or the speed select, after a speed course).
+          title.go_to(is_speed_course(own_course) ? S::SpeedSelect : S::UnknownModeSelect);
           prev_layers.clear();
           last_ns = SDL_GetTicksNS();
           behind = 0;

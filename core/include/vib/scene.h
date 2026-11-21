@@ -142,6 +142,8 @@ class Hud {
 
   // A round of the game's own courses begins; `index` 0 or 1 picks the sign.
   void start_round(int index, bool show_sign);
+  // A speed course (1 to 3) begins: its level's label plays (call after start_round).
+  void start_speed(int course);
 
   struct Frame {
     double seconds = 0;
@@ -150,6 +152,10 @@ class Hud {
     int combo = 0;          // hits toward the next form: the marks circle faster
     double time_left = 1;   // 1 at the start of the round, 0 at its end
     bool show_score = true, show_time = true;
+    // A speed course (1 to 3): the speed dial instead of the score marks, its needle at
+    // `target_speed` (beats a second: the speed the course is heading for now).
+    int speed_course = 0;
+    double target_speed = 0;
     bool demo = false;      // the title's demo: its sign, looping, over the round
   };
   struct Layer {
@@ -166,7 +172,11 @@ class Hud {
 
  private:
   LineBuilder lines_;
-  TmdModel mark_model_, time_model_, sign_model_, demo_model_;
+  TmdModel mark_model_, time_model_, sign_model_, demo_model_, speed_model_, speed_label_model_;
+  ModelAnimation dial_anim_, target_anim_, needle_anim_, speed_label_anims_[3];
+  CameraAnimation speed_camera_;
+  Clip speed_label_;
+  int speed_label_index_ = 0;
   ModelAnimation score_anim_, time_anim_, sign_anims_[2], demo_anim_;
   CameraAnimation time_camera_, sign_camera_, demo_camera_;
   Clip score_, time_, sign_, demo_;
