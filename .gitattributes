@@ -1,0 +1,14 @@
+# Text files are stored with LF in the repository and checked out with the
+# platform's own line endings, so a Windows checkout no longer shows files as
+# changed when only their line endings differ.
+* text=auto
+
+# Shell scripts must keep LF even on Windows.
+*.sh text eol=lf
+
+# Binary files (none of the game's data is ever committed; see .gitignore).
+*.png binary
+*.jpg binary
+*.ico binary
+*.mp3 binary
+*.flac binary
