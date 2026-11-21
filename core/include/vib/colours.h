@@ -74,14 +74,17 @@ inline bool light_background(const std::array<std::uint8_t, kColourSlots>& choic
 inline Rgb shown_colour(Rgb colour, std::uint8_t part, const std::array<std::uint8_t, kColourSlots>& choices) {
   if (part == line_part::kMenu) {
     // Menu items in the chosen colour (the chosen row full, the others dimmer, as
-    // their own brightness is kept), but never lost in the background: on a light one
-    // a light colour is darkened, on a dark one a dark colour is lightened.
+    // their own brightness is kept), but never the background's own colour: then it
+    // is darkened (light background) or lightened (dark), so it still shows.
     Rgb c = colour;
     if (!light_background(choices) || choices[std::size_t(kColourMenu)] != 0) c = tinted(colour, part, choices);
     else c = {std::uint8_t(255 - colour.r), std::uint8_t(255 - colour.g), std::uint8_t(255 - colour.b)};  // (white on white: inverted, as before)
     const Rgb b = background_colour(choices);
     auto lum = [](Rgb x) { return (299 * x.r + 587 * x.g + 114 * x.b) / 1000; };
-    if (std::abs(lum(c) - lum(b)) < 90) {
+    // Only when it is the background's own colour, near enough (owner: black menus
+    // turned grey on every dark background; now only black on black, white on white).
+    const int dr = int(c.r) - b.r, dg = int(c.g) - b.g, db = int(c.b) - b.b;
+    if (dr * dr + dg * dg + db * db < 40 * 40) {
       const bool light = lum(b) > 128;
       c = light ? Rgb{std::uint8_t(c.r * 35 / 100), std::uint8_t(c.g * 35 / 100), std::uint8_t(c.b * 35 / 100)}
                 : Rgb{std::uint8_t(255 - (255 - c.r) * 35 / 100), std::uint8_t(255 - (255 - c.g) * 35 / 100), std::uint8_t(255 - (255 - c.b) * 35 / 100)};

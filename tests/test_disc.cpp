@@ -212,8 +212,10 @@ TEST(disc_sces02873_scene_draws) {
         for (std::uint8_t bc = 0; bc < kBackgroundColours; ++bc) {
           m[kColourMenu] = mc, m[kColourBackground] = bc;
           const Rgb b = background_colour(m), c = shown_colour({255, 255, 255}, line_part::kMenu, m);
-          auto lum = [](Rgb x) { return (299 * x.r + 587 * x.g + 114 * x.b) / 1000; };
-          CHECK(std::abs(lum(c) - lum(b)) >= 60);
+          const int dr = int(c.r) - b.r, dg = int(c.g) - b.g, db = int(c.b) - b.b;
+          CHECK(dr * dr + dg * dg + db * db >= 40 * 40);  // (never the background's own colour)
+          // Black is black on every background but black (owner).
+          if (mc == 8 && bc != 0) CHECK((c.r == 0 && c.g == 0 && c.b == 0));
         }
     }
     for (std::uint8_t bgc = 0; bgc < kBackgroundColours; ++bgc) {  // every background: both rows differ from it
