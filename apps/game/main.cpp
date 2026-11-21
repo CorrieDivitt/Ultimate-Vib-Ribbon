@@ -499,16 +499,16 @@ std::vector<SettingsPanel::Item> pause_items(bool vr) {
   using I = SettingsPanel::Item;
   if (vr)
     return {I::Continue, I::WobbleSize, I::WobbleHold, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind,
-            I::Recentre, I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::ScoreNumbers, I::QuitSong};
+            I::Recentre, I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses, I::QuitSong};
   return {I::Continue, I::WobbleSize, I::Smooth, I::LineWidth, I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle,
-          I::Performance, I::ScoreNumbers, I::QuitSong};
+          I::Performance, I::ScoreNumbers, I::FixedCourses, I::QuitSong};
 }
 std::vector<SettingsPanel::Item> menu_items(bool vr) {
   using I = SettingsPanel::Item;
   if (vr)
     return {I::WobbleSize, I::WobbleHold, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind, I::Recentre,
-            I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::ScoreNumbers};
-  return {I::WobbleSize, I::Smooth, I::LineWidth, I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::ScoreNumbers};
+            I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses};
+  return {I::WobbleSize, I::Smooth, I::LineWidth, I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses};
 }
 
 // Scene lines to the renderer's, jittered as play does: in a headset afresh every
@@ -809,8 +809,10 @@ void number_below_vibri(const std::vector<SceneLine>& text, float vibri_z, Vec3f
 }
 
 Result play_song(Session& s, int song, int track_index, int& points, std::uint32_t seed) {
-  // Timing: like the original, a little different on every play, unless --fixed.
-  const CourseTiming timing = s.fixed ? CourseTiming::consistent() : CourseTiming::like_original(seed);
+  // Timing: like the original, a little different on every play, unless consistent
+  // mode is on (--fixed, or the Consistent courses setting, read at each song's start).
+  const bool fixed = s.opt.fixed || s.save.options.fixed_courses;
+  const CourseTiming timing = fixed ? CourseTiming::consistent() : CourseTiming::like_original(seed);
   const std::vector<std::int16_t> disc_pcm = s.music ? std::vector<std::int16_t>{} : s.disc.read_audio_track(song + 1);
   const std::vector<std::int16_t>& pcm = s.music ? s.music->pcm : disc_pcm;
   const std::vector<Block> blocks = make_blocks(pcm, timing.lead);
@@ -879,7 +881,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   s.hud.start_round(track_index, !s.song && !s.music && !s.demo);  // the "Round 1/2" sign belongs to the two-song courses
 
   std::printf("\nSong %d: %d s, %s course (lead %d, frame phase %.0f)\n", song, total / kSampleRate,
-              s.fixed ? "fixed" : "original-style", timing.lead, double(timing.frame_phase_q16) / 65536.0);
+              fixed ? "fixed" : "original-style", timing.lead, double(timing.frame_phase_q16) / 65536.0);
 
   std::size_t next_block = 0, fed = 0;
   bool was_selecting = gen.selecting(), ended = false;

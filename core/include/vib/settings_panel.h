@@ -45,6 +45,7 @@ class SettingsPanel {
     ResumeStyle,   // resume_countdown: after a pause, rewind a little or count in
     Performance,   // perf_overlay: off, one line, detailed
     ScoreNumbers,  // score_numbers: the score in numbers too, during play
+    FixedCourses,  // fixed_courses: consistent mode, the same course every play of a song
   };
   enum class Action { None, Moved, Changed, Close, Recentre, QuitSong, LeaveTop };
 

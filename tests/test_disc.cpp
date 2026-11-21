@@ -675,6 +675,7 @@ TEST(disc_sces02873_settings_panel) {
   CHECK(p.label(I::Smooth) == "Smooth motion (Off)" && p.label(I::SoundTiming) == "Sound timing (0 ms)");
   CHECK(p.label(I::Performance) == "Performance" && p.label(I::ResumeStyle) == "Resume");  // (owner: none for these)
   CHECK(p.label(I::ScoreNumbers) == "Score in numbers");  // (owner: none)
+  CHECK(p.label(I::FixedCourses) == "Consistent courses (Off)" && p.value(I::FixedCourses, o, true) == "Off");  // the original varies
   // The score in numbers: the font's digits, centred, and on the monitor a layer of its own.
   {
     const auto digits = p.text_lines("116279", 1.0f, 3, 4);
@@ -800,7 +801,7 @@ TEST(disc_sces02873_settings_labels_with_defaults_fit_beside_their_values) {
   using I = SettingsPanel::Item;
   const std::vector<I> all = {I::WobbleSize, I::WobbleHold, I::Smooth, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead,
                               I::SeeBehind, I::Recentre, I::SoundEffects, I::Vibration, I::SoundTiming, I::QuitSong,
-                              I::ResumeStyle, I::Performance, I::ScoreNumbers, I::Continue};
+                              I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses, I::Continue};
   Options longest;
   longest.vr_ahead_seconds = longest.vr_behind_seconds = kWholeSongSeconds;
   longest.resume_countdown = true;
