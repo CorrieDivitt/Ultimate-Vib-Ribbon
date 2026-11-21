@@ -12,7 +12,7 @@ namespace vib {
 namespace {
 
 constexpr double kTau = 6.28318530717958647692;
-constexpr int kItemCount = 50;
+constexpr int kItemCount = 51;
 constexpr int kLanguages = 5;  // German, English, Spanish, French, Italian (the PAL menus)
 
 // Our own words. Order as SettingsPanel::Item.
@@ -21,29 +21,29 @@ const char* const kLabels[kLanguages][kItemCount] = {
     {"Weiter", "Wackelgröße", "Wackeltakt", "Weiche Bewegung", "Linienstärke", "Zoom", "Blickwinkel", "Sicht nach vorn",
      "Sicht nach hinten", "Ansicht zentrieren", "Soundeffekte", "Vibration", "Tonversatz", "Lied beenden", "Fortsetzen", "Leistung", "Punkte als Zahl", "Gleiche Strecke", "Effektlautstärke", "Scrolltempo", "Timing-Anzeige", "FC-Jubel", "Strecke um dich", "Kreisgröße", "Grafik", "Modifikatoren", "Eigene Farben", "Zurück",
      "Linie", "Block", "Grube", "Schleife", "Welle", "Block + Grube", "Block + Schleife", "Block + Welle", "Grube + Schleife",
-     "Grube + Welle", "Schleife + Welle", "Vibri Engel", "Vibri Hase", "Vibri Frosch", "Vibri Wurm", "Hintergrund", "Farben zurücksetzen", "Kalibrierung", "Ton kalibrieren", "Bildversatz", "Bild kalibrieren", "Leuchten"},
+     "Grube + Welle", "Schleife + Welle", "Vibri Engel", "Vibri Hase", "Vibri Frosch", "Vibri Wurm", "Hintergrund", "Menü", "Farben zurücksetzen", "Kalibrierung", "Ton kalibrieren", "Bildversatz", "Bild kalibrieren", "Leuchten"},
     // English
     {"Continue", "Wobble size", "Wobble hold", "Smooth motion", "Line width", "Zoom", "View angle", "See ahead", "See behind",
      "Recenter view", "Sound effects", "Vibration", "Sound timing", "Quit song", "Resume", "Performance", "Score in numbers", "Consistent courses", "Effects volume", "Scroll speed", "Timing feedback", "FC celebration", "Course around you", "Circle size", "Visual", "Modifiers", "Custom colors", "Back",
      "Road line", "Block", "Pit", "Loop", "Wave", "Block + Pit", "Block + Loop", "Block + Wave", "Pit + Loop", "Pit + Wave",
-     "Loop + Wave", "Vibri angel", "Vibri rabbit", "Vibri frog", "Vibri worm", "Background", "Reset colors", "Calibration", "Sound calibration", "Picture timing", "Picture calibration", "Glow"},
+     "Loop + Wave", "Vibri angel", "Vibri rabbit", "Vibri frog", "Vibri worm", "Background", "Menu", "Reset colors", "Calibration", "Sound calibration", "Picture timing", "Picture calibration", "Glow"},
     // Spanish
     {"Continuar", "Tamaño del temblor", "Ritmo del temblor", "Movimiento suave", "Grosor de línea", "Zoom", "Ángulo de vista",
      "Ver adelante", "Ver atrás", "Centrar vista", "Efectos de sonido", "Vibración", "Desfase de sonido", "Salir de la canción", "Reanudar", "Rendimiento", "Puntos en números", "Recorridos fijos", "Volumen de efectos", "Velocidad de avance", "Precisión en ms", "Celebrar FC", "Recorrido alrededor", "Tamaño del círculo", "Imagen", "Modificadores", "Colores propios", "Volver",
      "Línea", "Bloque", "Foso", "Rizo", "Onda", "Bloque + Foso", "Bloque + Rizo", "Bloque + Onda", "Foso + Rizo", "Foso + Onda",
-     "Rizo + Onda", "Vibri ángel", "Vibri conejo", "Vibri rana", "Vibri gusano", "Fondo", "Restablecer colores", "Calibración", "Calibrar sonido", "Desfase de imagen", "Calibrar imagen", "Resplandor"},
+     "Rizo + Onda", "Vibri ángel", "Vibri conejo", "Vibri rana", "Vibri gusano", "Fondo", "Menú", "Restablecer colores", "Calibración", "Calibrar sonido", "Desfase de imagen", "Calibrar imagen", "Resplandor"},
     // French
     {"Continuer", "Taille du tremblement", "Rythme du tremblement", "Mouvement fluide", "Épaisseur des lignes", "Zoom",
      "Angle de vue", "Voir devant", "Voir derrière", "Recentrer la vue", "Effets sonores", "Vibration", "Décalage du son",
      "Quitter la chanson", "Reprise", "Performances", "Score en chiffres", "Parcours fixes", "Volume des effets", "Vitesse de défilement", "Précision en ms", "Fête du FC", "Parcours autour de toi", "Taille du cercle", "Visuel", "Modificateurs", "Couleurs perso", "Retour",
      "Ligne", "Bloc", "Fosse", "Boucle", "Vague", "Bloc + Fosse", "Bloc + Boucle", "Bloc + Vague", "Fosse + Boucle", "Fosse + Vague",
-     "Boucle + Vague", "Vibri ange", "Vibri lapin", "Vibri grenouille", "Vibri ver", "Fond", "Réinitialiser couleurs", "Calibrage", "Calibrer le son", "Décalage de l'image", "Calibrer l'image", "Halo"},
+     "Boucle + Vague", "Vibri ange", "Vibri lapin", "Vibri grenouille", "Vibri ver", "Fond", "Menu", "Réinitialiser couleurs", "Calibrage", "Calibrer le son", "Décalage de l'image", "Calibrer l'image", "Halo"},
     // Italian
     {"Continua", "Ampiezza del tremolio", "Ritmo del tremolio", "Movimento fluido", "Spessore delle linee", "Zoom",
      "Angolo di vista", "Vista avanti", "Vista indietro", "Ricentra la vista", "Effetti sonori", "Vibrazione", "Ritardo audio",
      "Esci dalla canzone", "Ripresa", "Prestazioni", "Punteggio in cifre", "Percorsi fissi", "Volume effetti", "Velocità di scorrimento", "Precisione in ms", "Festa FC", "Percorso intorno a te", "Dimensione del cerchio", "Grafica", "Modificatori", "Colori personalizzati", "Indietro",
      "Linea", "Blocco", "Fossa", "Giro", "Onda", "Blocco + Fossa", "Blocco + Giro", "Blocco + Onda", "Fossa + Giro", "Fossa + Onda",
-     "Giro + Onda", "Vibri angelo", "Vibri coniglio", "Vibri rana", "Vibri verme", "Sfondo", "Ripristina colori", "Calibrazione", "Calibra audio", "Ritardo immagine", "Calibra immagine", "Bagliore"},
+     "Giro + Onda", "Vibri angelo", "Vibri coniglio", "Vibri rana", "Vibri verme", "Sfondo", "Menu", "Ripristina colori", "Calibrazione", "Calibra audio", "Ritardo immagine", "Calibra immagine", "Bagliore"},
 };
 const char* const kMore[kLanguages] = {"Weitere Einstellungen (Start)", "More options (Start)", "Más ajustes (Start)", "Autres réglages (Start)",
                                        "Altre impostazioni (Start)"};
@@ -214,7 +214,7 @@ std::string SettingsPanel::label(Item item, bool vr) const {
     case Item::ColourRoad: case Item::ColourBlock: case Item::ColourPit: case Item::ColourLoop: case Item::ColourWave:
     case Item::ColourBlockPit: case Item::ColourBlockLoop: case Item::ColourBlockWave: case Item::ColourPitLoop:
     case Item::ColourPitWave: case Item::ColourLoopWave: case Item::ColourAngel: case Item::ColourRabbit: case Item::ColourFrog:
-    case Item::ColourWorm: case Item::ColourBackground:
+    case Item::ColourWorm: case Item::ColourBackground: case Item::ColourMenu:
       text += " (" + value(item, original_options(), vr) + ")";  // the original game's value
       break;
     default: break;
@@ -353,7 +353,7 @@ bool SettingsPanel::change(Item item, int d, Options& o, bool vr) {
     case Item::ColourRoad: case Item::ColourBlock: case Item::ColourPit: case Item::ColourLoop: case Item::ColourWave:
     case Item::ColourBlockPit: case Item::ColourBlockLoop: case Item::ColourBlockWave: case Item::ColourPitLoop:
     case Item::ColourPitWave: case Item::ColourLoopWave: case Item::ColourAngel: case Item::ColourRabbit: case Item::ColourFrog:
-    case Item::ColourWorm: case Item::ColourBackground: {  // round the palette, either way
+    case Item::ColourWorm: case Item::ColourBackground: case Item::ColourMenu: {  // round the palette, either way
       const int slot = colour_item_slot(item), n = colour_choices(slot);
       std::uint8_t& c = o.colours[std::size_t(slot)];
       c = std::uint8_t(((int(c) + d) % n + n) % n);
@@ -436,7 +436,7 @@ SettingsPanel::Action SettingsPanel::tick(const Input& in, double seconds, Optio
       case Item::ResetColours: case Item::ColourRoad: case Item::ColourBlock: case Item::ColourPit: case Item::ColourLoop:
       case Item::ColourWave: case Item::ColourBlockPit: case Item::ColourBlockLoop: case Item::ColourBlockWave:
       case Item::ColourPitLoop: case Item::ColourPitWave: case Item::ColourLoopWave: case Item::ColourAngel:
-      case Item::ColourRabbit: case Item::ColourFrog: case Item::ColourWorm: case Item::ColourBackground:
+      case Item::ColourRabbit: case Item::ColourFrog: case Item::ColourWorm: case Item::ColourBackground: case Item::ColourMenu:
         change(item, 1, o, vr);
         return Action::Changed;
       default: return Action::None;
@@ -513,6 +513,7 @@ Hud::Layer SettingsPanel::draw_hint(std::uint32_t seed) {
   const float y = -top_ * half_height + 100.0f;
   const Rgb dim{110, 110, 110};
   write(to_font_text(kMore[table_language(language_)]), label_x_, y, 1.0f, &dim, 4, layer.lines);
+  tag_menu(layer.lines);  // (custom colours: Menu)
   return layer;
 }
 
@@ -526,6 +527,7 @@ Hud::Layer SettingsPanel::draw_scroll_speed(const Options& o, std::uint32_t seed
   const Rgb dim{150, 150, 150};
   const std::string text = scroll_line(o);
   write(text, -0.5f * text_width(text) + 36.0f, 0.86f * half_height, 1.0f, &dim, 4, layer.lines);
+  tag_menu(layer.lines);  // (custom colours: Menu)
   return layer;
 }
 
@@ -533,6 +535,7 @@ Hud::Layer SettingsPanel::draw_big(const std::string& text, std::uint32_t seed) 
   Hud::Layer layer = start_layer(seed);
   constexpr float kScale = 4.0f;
   write(text, -0.5f * text_width(text, kScale) + 36.0f * kScale, 0.0f, kScale, nullptr, 6, layer.lines);
+  tag_menu(layer.lines);  // (custom colours: Menu)
   return layer;
 }
 
@@ -804,6 +807,7 @@ Hud::Layer SettingsPanel::draw(const Options& o, bool vr, std::uint32_t seed) {
   };
   if (first_ > 0) mark(top - row_height * 0.6f, -1.0f);
   if (first_ + shown < int(items_.size())) mark(top + row_height * (float(shown) - 0.4f), 1.0f);
+  tag_menu(layer.lines);  // (custom colours: Menu)
   return layer;
 }
 

@@ -22,7 +22,7 @@ constexpr double kScrollSpeedMin = 0.5, kScrollSpeedMax = 10.0, kScrollSpeedStep
 double clamp_scroll_speed(double v);
 
 // Custom colours: how many slots (see vib/colours.h for what each is).
-constexpr int kColourSlotCount = 16;
+constexpr int kColourSlotCount = 17;
 
 // The headset's line width moves in these steps (owner), from one step to 1.0.
 constexpr double kHeadsetLineStep = 0.005;

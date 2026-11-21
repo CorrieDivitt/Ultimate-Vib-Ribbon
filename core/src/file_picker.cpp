@@ -218,6 +218,7 @@ Hud::Layer FilePicker::draw(float size, std::uint32_t seed) const {
     if (first > 0) put("-", left, y, 1.0f, dim, seed + 100);
     if (first + kRows < count) put("-", left, y + row * float(kRows - 1), 1.0f, dim, seed + 101);
   }
+  tag_menu(layer.lines);  // (custom colours: Menu)
   return layer;
 }
 

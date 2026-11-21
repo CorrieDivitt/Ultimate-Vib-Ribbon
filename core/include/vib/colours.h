@@ -7,6 +7,7 @@
 
 #include <array>
 #include <cstdint>
+#include <cstdlib>
 
 #include "vib/save.h"
 #include "vib/scene.h"
@@ -20,7 +21,8 @@ enum ColourSlot : int {
   kColourObstacle = 1,     // + road 0-9 (block, pit, loop, wave, then the pairs)
   kColourForm = 11,        // + form 0-3 (angel, rabbit, frog, worm)
   kColourBackground = 15,
-  kColourSlots = 16,
+  kColourMenu = 16,        // the menus' and our settings' items (added last: saves keep)
+  kColourSlots = 17,
 };
 static_assert(kColourSlots == kColourSlotCount, "Options::colours has a choice per slot");
 
@@ -46,6 +48,7 @@ constexpr int colour_slot(std::uint8_t part) {
   if (part == line_part::kRoad) return kColourRoad;
   if (part >= line_part::kObstacle && part < line_part::kObstacle + 10) return kColourObstacle + (part - line_part::kObstacle);
   if (part >= line_part::kVibri && part < line_part::kVibri + 4) return kColourForm + (part - line_part::kVibri);
+  if (part == line_part::kMenu) return kColourMenu;
   return -1;
 }
 
@@ -69,6 +72,22 @@ inline bool light_background(const std::array<std::uint8_t, kColourSlots>& choic
 // (the menus, the settings, text, the HUD, the ring) keeps its own, inverted on a light
 // background, so the settings' chosen row (white) and other rows (grey) never match it.
 inline Rgb shown_colour(Rgb colour, std::uint8_t part, const std::array<std::uint8_t, kColourSlots>& choices) {
+  if (part == line_part::kMenu) {
+    // Menu items in the chosen colour (the chosen row full, the others dimmer, as
+    // their own brightness is kept), but never lost in the background: on a light one
+    // a light colour is darkened, on a dark one a dark colour is lightened.
+    Rgb c = colour;
+    if (!light_background(choices) || choices[std::size_t(kColourMenu)] != 0) c = tinted(colour, part, choices);
+    else c = {std::uint8_t(255 - colour.r), std::uint8_t(255 - colour.g), std::uint8_t(255 - colour.b)};  // (white on white: inverted, as before)
+    const Rgb b = background_colour(choices);
+    auto lum = [](Rgb x) { return (299 * x.r + 587 * x.g + 114 * x.b) / 1000; };
+    if (std::abs(lum(c) - lum(b)) < 90) {
+      const bool light = lum(b) > 128;
+      c = light ? Rgb{std::uint8_t(c.r * 35 / 100), std::uint8_t(c.g * 35 / 100), std::uint8_t(c.b * 35 / 100)}
+                : Rgb{std::uint8_t(255 - (255 - c.r) * 35 / 100), std::uint8_t(255 - (255 - c.g) * 35 / 100), std::uint8_t(255 - (255 - c.b) * 35 / 100)};
+    }
+    return c;
+  }
   if (colour_slot(part) >= 0) return tinted(colour, part, choices);
   if (!light_background(choices)) return colour;
   return {std::uint8_t(255 - colour.r), std::uint8_t(255 - colour.g), std::uint8_t(255 - colour.b)};

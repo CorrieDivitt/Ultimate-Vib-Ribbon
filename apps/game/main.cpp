@@ -539,7 +539,8 @@ void setup_panel(SettingsPanel& p, bool vr, bool pause) {
   p.set_group(I::Calibration, {I::SoundCalibration, I::PictureCalibration});
   p.set_group(I::CustomColours, {I::ColourRoad, I::ColourBlock, I::ColourPit, I::ColourLoop, I::ColourWave, I::ColourBlockPit,
                                   I::ColourBlockLoop, I::ColourBlockWave, I::ColourPitLoop, I::ColourPitWave, I::ColourLoopWave,
-                                  I::ColourAngel, I::ColourRabbit, I::ColourFrog, I::ColourWorm, I::ColourBackground, I::ResetColours});
+                                  I::ColourAngel, I::ColourRabbit, I::ColourFrog, I::ColourWorm, I::ColourBackground, I::ColourMenu,
+                                  I::ResetColours});
   std::vector<I> top;
   if (pause) top.push_back(I::Continue);
   top.insert(top.end(), {I::Visual, I::Modifiers, I::CustomColours, I::Calibration});
@@ -1107,6 +1108,7 @@ bool run_calibration(Session& s, SettingsPanel& panel, bool picture) {
         add(x - d, kY, x, kY - d, g), add(x, kY - d, x + d, kY, g), add(x + d, kY, x, kY + d, g), add(x, kY + d, x - d, kY, g);
       }
     }
+    tag_menu(text);  // (custom colours: Menu)
     to_instances(s, text, ++frame, lines);
     std::vector<vibr::Layer> out{{&lines, vibr::look_at({0, 0, 0}, {0, 0, 4730}, {0, -1, 0}), float(682 * 6.28318530717958647692 / 4096.0)}};
     draw_frame(s, out, 0.0, double(SDL_GetTicksNS() - now_ns) * 1e-6);
@@ -2168,6 +2170,7 @@ int run(int argc, char** argv) {
               l.shake_a *= size, l.shake_b *= size;
               layer.lines.push_back(l);
             }
+          tag_menu(layer.lines);  // (custom colours: Menu)
           to_instances(s, layer.lines, ++menu_display_frame, loading_lines);
           std::vector<vibr::Layer> out{{&loading_lines, vibr::look_at({0, 0, 0}, {0, 0, 4730}, {0, -1, 0}), layer.view.fov_y}};
           draw_frame(s, out, 0.0, double(SDL_GetTicksNS() - t0) * 1e-6);
@@ -2925,7 +2928,10 @@ int run(int argc, char** argv) {
               a = scaled_jitter(a, l.jitter_a, save.options.jitter_scale);
               b = scaled_jitter(b, l.jitter_b, save.options.jitter_scale);
             }
-            const Rgb c = shown_colour(l.colour, l.part, save.options.colours);  // (inverted on a light background)
+            // (The original's menu screens' lines are menu items for custom colours, Vibri
+            // apart; the kiosk film keeps its own.)
+            const std::uint8_t part = l.part == line_part::kNone && !in_kiosk ? line_part::kMenu : l.part;
+            const Rgb c = shown_colour(l.colour, part, save.options.colours);
             menu_lines[i].push_back({{a.x, a.y, a.z}, {b.x, b.y, b.z}, {c.r / 255.0f, c.g / 255.0f, c.b / 255.0f, 1.0f}});
           }
           SceneView v = layer.view;

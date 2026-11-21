@@ -200,6 +200,22 @@ TEST(disc_sces02873_scene_draws) {
     const Rgb back = background_colour(choice);
     CHECK(chosen.r != back.r && other.r != back.r && chosen.r != other.r);
     CHECK((shown_colour({255, 255, 255}, std::uint8_t(line_part::kObstacle + 2), choice).g == kLinePalette[1].g));  // (custom: as chosen)
+    // Menu items: the chosen colour (rows keep their brightness), never lost in the
+    // background: every menu colour on every background stays clearly apart from it.
+    {
+      std::array<std::uint8_t, kColourSlots> m{};
+      CHECK((shown_colour({255, 255, 255}, line_part::kMenu, m).g == 255));            // (white on black: as it was)
+      m[kColourMenu] = 1;                                                              // red
+      CHECK((shown_colour({255, 255, 255}, line_part::kMenu, m).g == kLinePalette[1].g));
+      CHECK((shown_colour({110, 110, 110}, line_part::kMenu, m).r < shown_colour({255, 255, 255}, line_part::kMenu, m).r));  // (the other rows dimmer)
+      for (std::uint8_t mc = 0; mc < kLineColours; ++mc)
+        for (std::uint8_t bc = 0; bc < kBackgroundColours; ++bc) {
+          m[kColourMenu] = mc, m[kColourBackground] = bc;
+          const Rgb b = background_colour(m), c = shown_colour({255, 255, 255}, line_part::kMenu, m);
+          auto lum = [](Rgb x) { return (299 * x.r + 587 * x.g + 114 * x.b) / 1000; };
+          CHECK(std::abs(lum(c) - lum(b)) >= 60);
+        }
+    }
     for (std::uint8_t bgc = 0; bgc < kBackgroundColours; ++bgc) {  // every background: both rows differ from it
       choice[kColourBackground] = bgc;
       const Rgb b = background_colour(choice), c1 = shown_colour({255, 255, 255}, 0, choice), c2 = shown_colour({110, 110, 110}, 0, choice);
@@ -945,6 +961,7 @@ TEST(disc_sces02873_settings_panel) {
       Options co;
       CHECK(p.label(I::ColourRoad) == "Road line (White)" && p.label(I::ColourBackground) == "Background (Black)");
       CHECK(p.label(I::ColourPitWave) == "Pit + Wave (White)" && p.label(I::ColourFrog) == "Vibri frog (White)");
+      CHECK(p.label(I::ColourMenu) == "Menu (White)" && p.value(I::ColourMenu, co, true) == "White");
       p.set_items({I::ColourLoop, I::ColourBackground, I::ResetColours});
       SettingsPanel::Input lt, rt, dn2, ok2;
       lt.left = true, rt.right = true, dn2.down = true, ok2.confirm = true;
@@ -1134,7 +1151,7 @@ TEST(disc_sces02873_settings_labels_with_defaults_fit_beside_their_values) {
                               I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses, I::EffectsVolume, I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::WrapCourse, I::WrapSize, I::Visual, I::Modifiers, I::CustomColours, I::Back,
                               I::ColourRoad, I::ColourBlock, I::ColourPit, I::ColourLoop, I::ColourWave, I::ColourBlockPit, I::ColourBlockLoop,
                               I::ColourBlockWave, I::ColourPitLoop, I::ColourPitWave, I::ColourLoopWave, I::ColourAngel, I::ColourRabbit,
-                              I::ColourFrog, I::ColourWorm, I::ColourBackground, I::ResetColours, I::Calibration, I::SoundCalibration, I::PictureTiming, I::PictureCalibration, I::Glow, I::Continue};
+                              I::ColourFrog, I::ColourWorm, I::ColourBackground, I::ColourMenu, I::ResetColours, I::Calibration, I::SoundCalibration, I::PictureTiming, I::PictureCalibration, I::Glow, I::Continue};
   Options longest;
   longest.scroll_speed = 9.75;
   longest.vr_ahead_seconds = longest.vr_behind_seconds = kWholeSongSeconds;

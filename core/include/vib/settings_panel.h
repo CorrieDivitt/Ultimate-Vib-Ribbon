@@ -61,7 +61,7 @@ class SettingsPanel {
     // Custom colors: one per colour slot (vib/colours.h), in its order, then a reset.
     ColourRoad, ColourBlock, ColourPit, ColourLoop, ColourWave,
     ColourBlockPit, ColourBlockLoop, ColourBlockWave, ColourPitLoop, ColourPitWave, ColourLoopWave,
-    ColourAngel, ColourRabbit, ColourFrog, ColourWorm, ColourBackground,
+    ColourAngel, ColourRabbit, ColourFrog, ColourWorm, ColourBackground, ColourMenu,
     ResetColours,  // an action: every colour back to the original's
     Calibration,      // a group: the calibration tools
     SoundCalibration, // an action: the click track to set Sound timing by
