@@ -65,8 +65,10 @@ class SettingsPanel {
     ResetColours,  // an action: every colour back to the original's
     Calibration,      // a group: the calibration tools
     SoundCalibration, // an action: the click track to set Sound timing by
+    PictureTiming,    // picture_offset_ms: the picture drawn ahead of the sound, -300 to 300 ms
+    PictureCalibration, // an action: silent flashes to set Picture timing by
   };
-  enum class Action { None, Moved, Changed, Close, Recentre, QuitSong, LeaveTop, Calibrate };
+  enum class Action { None, Moved, Changed, Close, Recentre, QuitSong, LeaveTop, Calibrate, CalibratePicture };
 
   struct Input {
     bool up = false, down = false, left = false, right = false, confirm = false, cancel = false;

@@ -106,6 +106,8 @@ std::string SaveData::to_text() const {
   out << "vr_angle " << buf << '\n';
   std::snprintf(buf, sizeof buf, "%.1f", options.audio_offset_ms);
   out << "audio_offset_ms " << buf << '\n';
+  std::snprintf(buf, sizeof buf, "%.1f", options.picture_offset_ms);
+  out << "picture_offset_ms " << buf << '\n';
   std::snprintf(buf, sizeof buf, "%.2f", double(options.music_volume));
   out << "music_volume " << buf << '\n';
   std::snprintf(buf, sizeof buf, "%.2f", double(options.effects_volume));
@@ -173,6 +175,7 @@ SaveData SaveData::from_text(const std::string& text) {
     else if (key == "vr_behind_seconds" && number >= 0) d.options.vr_behind_seconds = std::max(2.0, number);  // (2 s at least)
     else if (key == "vr_ahead_seconds" && number >= 0) d.options.vr_ahead_seconds = number;
     else if (key == "audio_offset_ms") d.options.audio_offset_ms = number;
+    else if (key == "picture_offset_ms") d.options.picture_offset_ms = std::clamp(number, -300.0, 300.0);
     else if (key == "music_volume" && number >= 0) d.options.music_volume = float(number);
     else if (key == "effects_volume" && number >= 0) d.options.effects_volume = float(number);
   }

@@ -917,6 +917,15 @@ TEST(disc_sces02873_settings_panel) {
       ok3.confirm = true;
       CHECK(p.label(I::Calibration) == "Calibration" && p.value(I::Calibration, ca, true) == ">");
       CHECK(p.label(I::SoundCalibration) == "Sound calibration" && p.tick(ok3, 0.0, ca, true) == A::Calibrate);
+      p.set_items({I::PictureCalibration, I::PictureTiming});
+      CHECK(p.label(I::PictureCalibration) == "Picture calibration" && p.tick(ok3, 0.0, ca, true) == A::CalibratePicture);
+      CHECK(p.label(I::PictureTiming) == "Picture timing (0 ms)");
+      SettingsPanel::Input dn4, rt4;
+      dn4.down = true, rt4.right = true;
+      p.tick(dn4, 0.0, ca, true);
+      ca.picture_offset_ms = 295;
+      CHECK(p.tick(rt4, 0.0, ca, true) == A::Changed && ca.picture_offset_ms == 300.0);
+      CHECK(p.tick(rt4, 0.0, ca, true) == A::None && p.value(I::PictureTiming, ca, true) == "300 ms");
     }
     // Custom colors: the original's white (black behind) in brackets; left and right go
     // round the palette; Reset puts every colour back.
@@ -1113,7 +1122,7 @@ TEST(disc_sces02873_settings_labels_with_defaults_fit_beside_their_values) {
                               I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses, I::EffectsVolume, I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::WrapCourse, I::WrapSize, I::Visual, I::Modifiers, I::CustomColours, I::Back,
                               I::ColourRoad, I::ColourBlock, I::ColourPit, I::ColourLoop, I::ColourWave, I::ColourBlockPit, I::ColourBlockLoop,
                               I::ColourBlockWave, I::ColourPitLoop, I::ColourPitWave, I::ColourLoopWave, I::ColourAngel, I::ColourRabbit,
-                              I::ColourFrog, I::ColourWorm, I::ColourBackground, I::ResetColours, I::Calibration, I::SoundCalibration, I::Continue};
+                              I::ColourFrog, I::ColourWorm, I::ColourBackground, I::ResetColours, I::Calibration, I::SoundCalibration, I::PictureTiming, I::PictureCalibration, I::Continue};
   Options longest;
   longest.scroll_speed = 9.75;
   longest.vr_ahead_seconds = longest.vr_behind_seconds = kWholeSongSeconds;

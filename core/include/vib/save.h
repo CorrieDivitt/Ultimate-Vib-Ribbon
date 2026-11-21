@@ -69,6 +69,9 @@ struct Options {
   std::string music_folder;       // ours: the player's music folder (UTF-8), picked the first time; empty until then
   double vr_angle = 45.0;       // and where around her, degrees: 0 behind, 90 to her right, -90 to her left
   double audio_offset_ms = 0;  // added to the estimated output latency
+  // Ours: the picture drawn this far ahead of what is heard (ms; negative: behind), to
+  // make up for a display's own delay. Judging stays on the sound.
+  double picture_offset_ms = 0;
   float music_volume = 1.0f, effects_volume = 1.0f;
 };
 

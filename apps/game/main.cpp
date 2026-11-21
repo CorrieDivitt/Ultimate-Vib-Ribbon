@@ -535,7 +535,7 @@ void setup_panel(SettingsPanel& p, bool vr, bool pause) {
     p.set_group(I::Modifiers, {I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::WrapCourse, I::WrapSize, I::ScoreNumbers, I::FixedCourses});
   else
     p.set_group(I::Modifiers, {I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::ScoreNumbers, I::FixedCourses});
-  p.set_group(I::Calibration, {I::SoundCalibration});
+  p.set_group(I::Calibration, {I::SoundCalibration, I::PictureCalibration});
   p.set_group(I::CustomColours, {I::ColourRoad, I::ColourBlock, I::ColourPit, I::ColourLoop, I::ColourWave, I::ColourBlockPit,
                                   I::ColourBlockLoop, I::ColourBlockWave, I::ColourPitLoop, I::ColourPitWave, I::ColourLoopWave,
                                   I::ColourAngel, I::ColourRabbit, I::ColourFrog, I::ColourWorm, I::ColourBackground, I::ResetColours});
@@ -543,7 +543,7 @@ void setup_panel(SettingsPanel& p, bool vr, bool pause) {
   if (pause) top.push_back(I::Continue);
   top.insert(top.end(), {I::Visual, I::Modifiers, I::CustomColours, I::Calibration});
   if (vr) top.push_back(I::Recentre);
-  top.insert(top.end(), {I::SoundEffects, I::EffectsVolume, I::Vibration, I::SoundTiming, I::ResumeStyle});
+  top.insert(top.end(), {I::SoundEffects, I::EffectsVolume, I::Vibration, I::SoundTiming, I::PictureTiming, I::ResumeStyle});
   if (pause) top.push_back(I::QuitSong);
   p.set_items(std::move(top));
 }
@@ -906,11 +906,23 @@ void number_below_vibri(const std::vector<SceneLine>& text, float vibri_z, Vec3f
 // click; each press is placed by the clock play judges with (TapCalibration), and after
 // 16 the screen offers the Sound timing that would centre them. B leaves at any time,
 // changing nothing. Returns false if the window was closed (the quit is passed on).
-bool run_sound_calibration(Session& s, SettingsPanel& panel) {
+// `picture`: the picture calibration instead: silent, a ring flashing on every beat
+// when the picture is drawn for it (with Picture timing), to set Picture timing by. Do
+// the sound one first: both use the same clock, so the picture is then lined up with
+// the sound as this player hears and sees them.
+bool run_calibration(Session& s, SettingsPanel& panel, bool picture) {
   const int l = std::clamp(panel.language(), 0, 4);
-  static const char* const kTitle[5] = {"Ton kalibrieren", "Sound calibration", "Calibrar sonido", "Calibrer le son", "Calibra audio"};
-  static const char* const kHow[5] = {"Bei jedem Klick eine Taste drücken", "Press a button on every click", "Pulsa un botón en cada clic",
-                                      "Appuie sur un bouton à chaque clic", "Premi un tasto a ogni clic"};
+  static const char* const kSoundTitle[5] = {"Ton kalibrieren", "Sound calibration", "Calibrar sonido", "Calibrer le son", "Calibra audio"};
+  static const char* const kPictureTitle[5] = {"Bild kalibrieren", "Picture calibration", "Calibrar imagen", "Calibrer l'image", "Calibra immagine"};
+  static const char* const kSoundHow[5] = {"Bei jedem Klick eine Taste drücken", "Press a button on every click", "Pulsa un botón en cada clic",
+                                           "Appuie sur un bouton à chaque clic", "Premi un tasto a ogni clic"};
+  static const char* const kPictureHow[5] = {"Bei jedem Blinken eine Taste drücken", "Press a button on every flash", "Pulsa un botón en cada destello",
+                                             "Appuie sur un bouton à chaque flash", "Premi un tasto a ogni lampo"};
+  const char* const* kTitle = picture ? kPictureTitle : kSoundTitle;
+  const char* const* kHow = picture ? kPictureHow : kSoundHow;
+  double& setting = picture ? s.save.options.picture_offset_ms : s.save.options.audio_offset_ms;
+  const double lowest = picture ? -300.0 : -500.0, highest = picture ? 300.0 : 500.0;
+  auto suggestion = [&](const TapCalibration& c) { return std::clamp(c.suggested_ms(setting), lowest, highest); };
   static const char* const kPresses[5] = {"Treffer", "Presses", "Pulsaciones", "Appuis", "Pressioni"};
   static const char* const kLast[5] = {"Zuletzt", "Last", "Última", "Dernier", "Ultima"};
   static const char* const kAverage[5] = {"Mittel", "Average", "Media", "Moyenne", "Media"};
@@ -923,9 +935,9 @@ bool run_sound_calibration(Session& s, SettingsPanel& panel) {
                                          "Pocas pulsaciones. A: otra vez   B: volver", "Trop peu d'appuis. A: encore   B: retour",
                                          "Troppo poche. A: ancora   B: indietro"};
   // The click track: a short falling tone on every beat, higher on every fourth.
-  auto make_track = []() {
+  auto make_track = [picture]() {
     std::vector<std::int16_t> pcm(std::size_t(TapCalibration::length_frames()) * 2, 0);
-    for (int k = 0; k < TapCalibration::kClicks; ++k) {
+    for (int k = 0; k < TapCalibration::kClicks && !picture; ++k) {  // (the picture's is silent: the clock only)
       const double hz = k % 4 == 0 ? 1760.0 : 1320.0;
       const std::int64_t at = TapCalibration::click_frame(k);
       for (int i = 0; i < 1323; ++i) {  // 30 ms
@@ -995,9 +1007,11 @@ bool run_sound_calibration(Session& s, SettingsPanel& panel) {
     const bool enough = cal.count() >= 6;
     if (cancel) break;
     if (confirm && finished && enough) {
-      const double v = cal.suggested_ms(s.save.options.audio_offset_ms);
-      s.save.options.audio_offset_ms = v;
-      std::printf("Sound timing %+.0f ms (calibrated: average %+.1f ms, spread %.1f ms over %d presses)\n", v, cal.average_ms(), cal.spread_ms(), cal.count());
+      const double v = suggestion(cal);
+      setting = v;
+      std::printf("%s timing %+.0f ms (calibrated: average %+.1f ms, spread %.1f ms over %d presses)\n", picture ? "Picture" : "Sound", v,
+                  cal.average_ms(), cal.spread_ms(), cal.count());
+      apply_settings(s);
       if (s.write_save) s.write_save();
       s.fx.number(1, 90, 5);
       break;
@@ -1019,8 +1033,8 @@ bool run_sound_calibration(Session& s, SettingsPanel& panel) {
     }
     if (finished && enough) {
       char now_t[16], sug[16];
-      std::snprintf(now_t, sizeof now_t, "%.0f ms", s.save.options.audio_offset_ms);
-      std::snprintf(sug, sizeof sug, "%.0f ms", cal.suggested_ms(s.save.options.audio_offset_ms));
+      std::snprintf(now_t, sizeof now_t, "%.0f ms", setting);
+      std::snprintf(sug, sizeof sug, "%.0f ms", suggestion(cal));
       rows.push_back(std::string(kNow[l]) + ": " + now_t + "   " + kSuggested[l] + ": " + sug);
       rows.push_back(kUse[l]);
     } else if (finished) {
@@ -1036,6 +1050,31 @@ bool run_sound_calibration(Session& s, SettingsPanel& panel) {
         ln.jitter_a = {ln.jitter_a.x * size, ln.jitter_a.y * size, 0}, ln.jitter_b = {ln.jitter_b.x * size, ln.jitter_b.y * size, 0};
         ln.shake_a *= size, ln.shake_b *= size;
         text.push_back(ln);
+      }
+    }
+    if (picture && !finished) {
+      // The flash: a ring round the middle for 70 ms from each beat, as the picture is
+      // drawn (Picture timing ahead of the clock); a small cross always, to look at.
+      const double drawn = s.audio.heard_frame(now_ns) + setting * TapCalibration::kRate / 1000.0;
+      const double into = std::fmod(drawn - double(TapCalibration::kLeadFrames), double(TapCalibration::kPeriod));
+      const bool flash = drawn >= double(TapCalibration::kLeadFrames) && into >= 0 && into < 0.07 * TapCalibration::kRate &&
+                         !TapCalibration::over(drawn);
+      auto add = [&](Vec3f a, Vec3f b) {
+        SceneLine ln;
+        ln.a = {a.x * size, a.y * size, 4000.0f * size}, ln.b = {b.x * size, b.y * size, 4000.0f * size};
+        ln.colour = {255, 255, 255};
+        text.push_back(ln);
+      };
+      const float cy = 700.0f;  // below the text
+      add({-60, cy, 0}, {60, cy, 0});
+      add({0, cy - 60, 0}, {0, cy + 60, 0});
+      if (flash) {
+        constexpr int kSides = 48;
+        for (int k = 0; k < kSides; ++k) {
+          const double a0 = 6.28318530717958647692 * k / kSides, a1 = 6.28318530717958647692 * (k + 1) / kSides;
+          for (const float r : {300.0f, 330.0f, 360.0f})
+            add({r * float(std::cos(a0)), cy + r * float(std::sin(a0)), 0}, {r * float(std::cos(a1)), cy + r * float(std::sin(a1)), 0});
+        }
       }
     }
     to_instances(s, text, ++frame, lines);
@@ -1406,7 +1445,11 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
         case SettingsPanel::Action::Changed: apply_settings(s); break;
         case SettingsPanel::Action::Recentre: s.renderer.recentre(); break;
         case SettingsPanel::Action::Calibrate:
-          if (!run_sound_calibration(s, *s.panel)) return Result::Quit;
+          if (!run_calibration(s, *s.panel, false)) return Result::Quit;
+          last_ns = SDL_GetTicksNS();
+          break;
+        case SettingsPanel::Action::CalibratePicture:
+          if (!run_calibration(s, *s.panel, true)) return Result::Quit;
           last_ns = SDL_GetTicksNS();
           break;
         case SettingsPanel::Action::QuitSong:
@@ -1474,7 +1517,10 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     }
     const bool frozen = paused || going != Going::No;  // the rules stand still
     const std::int32_t heard = frozen ? last_position : std::max(raw, last_position);
-    const std::int32_t view_at = frozen ? std::min(raw, pause_at) : heard;  // where the road is drawn
+    // Where the road is drawn: what is heard, plus Picture timing (ours) to make up for
+    // the display's own delay; judging stays on `heard`.
+    const auto picture_ahead = static_cast<std::int32_t>(s.save.options.picture_offset_ms * kSampleRate / 1000.0);
+    const std::int32_t view_at = frozen ? std::min(raw, pause_at) : heard + picture_ahead;
     if (frozen || celebrating) presses.clear();
     if (s.opt.vr) game.keep_passed(static_cast<std::int32_t>(std::min(s.save.options.vr_behind_seconds, kWholeSongSeconds) * kSampleRate));
 
@@ -1515,7 +1561,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     f.seconds = still_frame ? 0.0 : dt;
     f.jitter_seed = next_random(static_cast<std::uint32_t>(double(now_ns - start_ns) * 1e-9 * kOriginalRefresh) * 2654435761u);
     f.speed = scroll_shown == 1.0 ? game.speed() : Fixed::from(game.speed().to_double() * scroll_shown);  // Vibri runs as fast as the road comes
-    f.road = frozen ? game.road_at(view_at, s.opt.vr) : game.road(s.opt.vr);
+    f.road = frozen || picture_ahead != 0 ? game.road_at(view_at, s.opt.vr) : game.road(s.opt.vr);
     if (s.opt.vr && far_extra() > 0 && !speed_level) {  // (a speed course's beat changes as the player scores)
       // At most about 2 ms of analysis a frame: with the whole song asked for, the far
       // course fills in over the first second or so instead of in one long frame.
@@ -2355,8 +2401,8 @@ int run(int argc, char** argv) {
             panel_sound(s, act);
             if (act == SettingsPanel::Action::Changed) apply_settings(s);
             if (act == SettingsPanel::Action::Recentre) renderer.recentre();
-            if (act == SettingsPanel::Action::Calibrate) {
-              if (!run_sound_calibration(s, panel)) {
+            if (act == SettingsPanel::Action::Calibrate || act == SettingsPanel::Action::CalibratePicture) {
+              if (!run_calibration(s, panel, act == SettingsPanel::Action::CalibratePicture)) {
                 running = false;
                 break;
               }

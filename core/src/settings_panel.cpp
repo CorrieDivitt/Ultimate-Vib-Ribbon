@@ -12,7 +12,7 @@ namespace vib {
 namespace {
 
 constexpr double kTau = 6.28318530717958647692;
-constexpr int kItemCount = 47;
+constexpr int kItemCount = 49;
 constexpr int kLanguages = 5;  // German, English, Spanish, French, Italian (the PAL menus)
 
 // Our own words. Order as SettingsPanel::Item.
@@ -21,29 +21,29 @@ const char* const kLabels[kLanguages][kItemCount] = {
     {"Weiter", "Wackelgröße", "Wackeltakt", "Weiche Bewegung", "Linienstärke", "Zoom", "Blickwinkel", "Sicht nach vorn",
      "Sicht nach hinten", "Ansicht zentrieren", "Soundeffekte", "Vibration", "Tonversatz", "Lied beenden", "Fortsetzen", "Leistung", "Punkte als Zahl", "Gleiche Strecke", "Effektlautstärke", "Scrolltempo", "Timing-Anzeige", "FC-Jubel", "Strecke um dich", "Kreisgröße", "Grafik", "Modifikatoren", "Eigene Farben", "Zurück",
      "Linie", "Block", "Grube", "Schleife", "Welle", "Block + Grube", "Block + Schleife", "Block + Welle", "Grube + Schleife",
-     "Grube + Welle", "Schleife + Welle", "Vibri Engel", "Vibri Hase", "Vibri Frosch", "Vibri Wurm", "Hintergrund", "Farben zurücksetzen", "Kalibrierung", "Ton kalibrieren"},
+     "Grube + Welle", "Schleife + Welle", "Vibri Engel", "Vibri Hase", "Vibri Frosch", "Vibri Wurm", "Hintergrund", "Farben zurücksetzen", "Kalibrierung", "Ton kalibrieren", "Bildversatz", "Bild kalibrieren"},
     // English
     {"Continue", "Wobble size", "Wobble hold", "Smooth motion", "Line width", "Zoom", "View angle", "See ahead", "See behind",
      "Recenter view", "Sound effects", "Vibration", "Sound timing", "Quit song", "Resume", "Performance", "Score in numbers", "Consistent courses", "Effects volume", "Scroll speed", "Timing feedback", "FC celebration", "Course around you", "Circle size", "Visual", "Modifiers", "Custom colors", "Back",
      "Road line", "Block", "Pit", "Loop", "Wave", "Block + Pit", "Block + Loop", "Block + Wave", "Pit + Loop", "Pit + Wave",
-     "Loop + Wave", "Vibri angel", "Vibri rabbit", "Vibri frog", "Vibri worm", "Background", "Reset colors", "Calibration", "Sound calibration"},
+     "Loop + Wave", "Vibri angel", "Vibri rabbit", "Vibri frog", "Vibri worm", "Background", "Reset colors", "Calibration", "Sound calibration", "Picture timing", "Picture calibration"},
     // Spanish
     {"Continuar", "Tamaño del temblor", "Ritmo del temblor", "Movimiento suave", "Grosor de línea", "Zoom", "Ángulo de vista",
      "Ver adelante", "Ver atrás", "Centrar vista", "Efectos de sonido", "Vibración", "Desfase de sonido", "Salir de la canción", "Reanudar", "Rendimiento", "Puntos en números", "Recorridos fijos", "Volumen de efectos", "Velocidad de avance", "Precisión en ms", "Celebrar FC", "Recorrido alrededor", "Tamaño del círculo", "Imagen", "Modificadores", "Colores propios", "Volver",
      "Línea", "Bloque", "Foso", "Rizo", "Onda", "Bloque + Foso", "Bloque + Rizo", "Bloque + Onda", "Foso + Rizo", "Foso + Onda",
-     "Rizo + Onda", "Vibri ángel", "Vibri conejo", "Vibri rana", "Vibri gusano", "Fondo", "Restablecer colores", "Calibración", "Calibrar sonido"},
+     "Rizo + Onda", "Vibri ángel", "Vibri conejo", "Vibri rana", "Vibri gusano", "Fondo", "Restablecer colores", "Calibración", "Calibrar sonido", "Desfase de imagen", "Calibrar imagen"},
     // French
     {"Continuer", "Taille du tremblement", "Rythme du tremblement", "Mouvement fluide", "Épaisseur des lignes", "Zoom",
      "Angle de vue", "Voir devant", "Voir derrière", "Recentrer la vue", "Effets sonores", "Vibration", "Décalage du son",
      "Quitter la chanson", "Reprise", "Performances", "Score en chiffres", "Parcours fixes", "Volume des effets", "Vitesse de défilement", "Précision en ms", "Fête du FC", "Parcours autour de toi", "Taille du cercle", "Visuel", "Modificateurs", "Couleurs perso", "Retour",
      "Ligne", "Bloc", "Fosse", "Boucle", "Vague", "Bloc + Fosse", "Bloc + Boucle", "Bloc + Vague", "Fosse + Boucle", "Fosse + Vague",
-     "Boucle + Vague", "Vibri ange", "Vibri lapin", "Vibri grenouille", "Vibri ver", "Fond", "Réinitialiser couleurs", "Calibrage", "Calibrer le son"},
+     "Boucle + Vague", "Vibri ange", "Vibri lapin", "Vibri grenouille", "Vibri ver", "Fond", "Réinitialiser couleurs", "Calibrage", "Calibrer le son", "Décalage de l'image", "Calibrer l'image"},
     // Italian
     {"Continua", "Ampiezza del tremolio", "Ritmo del tremolio", "Movimento fluido", "Spessore delle linee", "Zoom",
      "Angolo di vista", "Vista avanti", "Vista indietro", "Ricentra la vista", "Effetti sonori", "Vibrazione", "Ritardo audio",
      "Esci dalla canzone", "Ripresa", "Prestazioni", "Punteggio in cifre", "Percorsi fissi", "Volume effetti", "Velocità di scorrimento", "Precisione in ms", "Festa FC", "Percorso intorno a te", "Dimensione del cerchio", "Grafica", "Modificatori", "Colori personalizzati", "Indietro",
      "Linea", "Blocco", "Fossa", "Giro", "Onda", "Blocco + Fossa", "Blocco + Giro", "Blocco + Onda", "Fossa + Giro", "Fossa + Onda",
-     "Giro + Onda", "Vibri angelo", "Vibri coniglio", "Vibri rana", "Vibri verme", "Sfondo", "Ripristina colori", "Calibrazione", "Calibra audio"},
+     "Giro + Onda", "Vibri angelo", "Vibri coniglio", "Vibri rana", "Vibri verme", "Sfondo", "Ripristina colori", "Calibrazione", "Calibra audio", "Ritardo immagine", "Calibra immagine"},
 };
 const char* const kMore[kLanguages] = {"Weitere Einstellungen (Start)", "More options (Start)", "Más ajustes (Start)", "Autres réglages (Start)",
                                        "Altre impostazioni (Start)"};
@@ -200,7 +200,7 @@ std::string SettingsPanel::label(Item item, bool vr) const {
   std::string text = to_font_text(kLabels[table_language(language_)][int(item)]);
   switch (item) {
     case Item::WobbleSize: case Item::WobbleHold: case Item::Smooth: case Item::LineWidth: case Item::Zoom:
-    case Item::ViewAngle: case Item::SeeAhead: case Item::SeeBehind: case Item::SoundTiming: case Item::FixedCourses:
+    case Item::ViewAngle: case Item::SeeAhead: case Item::SeeBehind: case Item::SoundTiming: case Item::PictureTiming: case Item::FixedCourses:
     case Item::EffectsVolume: case Item::ScrollSpeed: case Item::WrapCourse: case Item::WrapSize:
     case Item::ColourRoad: case Item::ColourBlock: case Item::ColourPit: case Item::ColourLoop: case Item::ColourWave:
     case Item::ColourBlockPit: case Item::ColourBlockLoop: case Item::ColourBlockWave: case Item::ColourPitLoop:
@@ -233,6 +233,7 @@ std::string SettingsPanel::value(Item item, const Options& o, bool vr) const {
     case Item::SoundEffects: return on_off(o.sound_effects);
     case Item::Vibration: return on_off(o.vibration);
     case Item::SoundTiming: std::snprintf(buf, sizeof buf, "%.0f ms", o.audio_offset_ms); break;
+    case Item::PictureTiming: std::snprintf(buf, sizeof buf, "%.0f ms", o.picture_offset_ms); break;
     case Item::ResumeStyle: return to_font_text(o.resume_countdown ? kCountIn[l] : kRewind[l]);
     case Item::Performance: return to_font_text(o.perf_overlay == 0 ? kOff[l] : o.perf_overlay == 1 ? kOn[l] : kDetailed[l]);
     case Item::ScoreNumbers: return on_off(o.score_numbers);
@@ -307,6 +308,7 @@ bool SettingsPanel::change(Item item, int d, Options& o, bool vr) {
     case Item::SoundEffects: o.sound_effects = !o.sound_effects; return true;
     case Item::Vibration: o.vibration = !o.vibration; return true;
     case Item::SoundTiming: return step(o.audio_offset_ms, 5.0 * d, -500.0, 500.0);
+    case Item::PictureTiming: return step(o.picture_offset_ms, 5.0 * d, -300.0, 300.0);
     case Item::ResumeStyle: o.resume_countdown = !o.resume_countdown; return true;
     case Item::Performance: o.perf_overlay = (o.perf_overlay + (d > 0 ? 1 : 2)) % 3; return true;  // round: off, on, detailed
     case Item::ScoreNumbers: o.score_numbers = !o.score_numbers; return true;
@@ -406,6 +408,7 @@ SettingsPanel::Action SettingsPanel::tick(const Input& in, double seconds, Optio
       case Item::Recentre: return Action::Recentre;
       case Item::QuitSong: return Action::QuitSong;
       case Item::SoundCalibration: return Action::Calibrate;
+      case Item::PictureCalibration: return Action::CalibratePicture;
       case Item::Smooth: case Item::SoundEffects: case Item::Vibration: case Item::ResumeStyle: case Item::Performance: case Item::ScoreNumbers: case Item::FixedCourses: case Item::TimingFeedback: case Item::FcCelebration: case Item::WrapCourse:
       case Item::ResetColours: case Item::ColourRoad: case Item::ColourBlock: case Item::ColourPit: case Item::ColourLoop:
       case Item::ColourWave: case Item::ColourBlockPit: case Item::ColourBlockLoop: case Item::ColourBlockWave:
