@@ -1596,7 +1596,7 @@ int run(int argc, char** argv) {
       title.sound_effects = save.options.sound_effects;
       title.vibration = save.options.vibration;
       auto show_scores = [&]() {
-        for (std::size_t c = 0; c < 3; ++c) title.psj_high_scores[c] = save.high_scores[c];
+        for (std::size_t c = 0; c < title.high_scores.size(); ++c) title.high_scores[c] = save.high_scores[c];
       };
       show_scores();
       // First the title (the original's MAIN_T): its intro, then the title waiting for a
@@ -1719,6 +1719,10 @@ int run(int argc, char** argv) {
       std::string own_folder;
       Course own_course = Course::OneTrack;
       std::vector<int> own_order;  // the tracks to play next (from 1)
+      // "Again?" after losing on the player's music: the track to start from and, for
+      // all tracks, the score carried into it.
+      std::size_t own_start = 0;
+      int own_start_points = 0;
       // What the picker is for (owner's flow): picking tracks to play, or a folder whose
       // tracks all play in order.
       bool picking_folder = false;
@@ -1726,6 +1730,8 @@ int run(int argc, char** argv) {
         own_order.clear();
         for (int k = 1; k <= int(own_files.size()); ++k) own_order.push_back(k);  // (the files picked: they decode as they play)
         if (own_order.empty()) return;
+        own_start = 0;
+        own_start_points = 0;
         own_play = true;
         title.go_to(S::Done);
       };
@@ -2075,7 +2081,7 @@ int run(int argc, char** argv) {
             case R::Speed2: own_course = Course::Speed2, open_picker(false); break;
             case R::Speed3: own_course = Course::Speed3, open_picker(false); break;
             case R::SpeedBack: title.go_to(S::UnknownModeSelect); break;
-            case R::UnknownHiscores: std::printf("High scores for your own music come later.\n"); break;
+            case R::UnknownHiscores: title.go_to(S::UnknownHiscore); break;
             case R::UnknownBack: title.go_to(S::Main); break;
             case R::Options: title.go_to(S::Option); break;
             // The original's "leave" goes back to its title screen (close the window to quit).
@@ -2095,21 +2101,28 @@ int run(int argc, char** argv) {
             case R::PsjHiscores: title.go_to(S::PsjHiscore); break;
             case R::PsjBack: title.go_to(S::Main); break;
             case R::OptionBack: title.go_to(S::Main); break;
-            case R::HiscoreBack: title.go_to(S::PsjModeSelect); break;
+            case R::HiscoreBack: title.go_to(title.screen() == S::UnknownHiscore ? S::UnknownModeSelect : S::PsjModeSelect); break;
             case R::ResultsDone:
-              if (title.results_speed > 0) {
-                title.results_speed = 0;
-                title.go_to(S::SpeedSelect);
-              } else {
-                title.go_to(title.screen() == S::Again ? S::AgainSelect : S::PsjModeSelect);
-              }
+              if (title.screen() == S::Again) title.go_to(S::AgainSelect);
+              else if (title.results_course >= int(Course::OneTrack)) title.go_to(is_speed_course(Course(title.results_course)) ? S::SpeedSelect : S::UnknownModeSelect);
+              else title.go_to(S::PsjModeSelect);
               break;
-            case R::PlayAgain:  // the original's own courses start again from the song that was lost
-              replay = true;
-              course_chosen = true;
+            case R::PlayAgain:
+              if (title.results_course >= int(Course::OneTrack)) {
+                // The player's music: the same files again, from the track that was lost
+                // (a speed course from its first track).
+                if (is_speed_course(own_course)) own_start = 0, own_start_points = 0;
+                own_play = true;
+              } else {
+                replay = true;  // the original's own courses start again from the song that was lost
+                course_chosen = true;
+              }
               title.go_to(S::Done);
               break;
-            case R::AgainBack: title.go_to(S::PsjModeSelect); break;
+            case R::AgainBack:
+              if (title.results_course >= int(Course::OneTrack)) title.go_to(is_speed_course(Course(title.results_course)) ? S::SpeedSelect : S::UnknownModeSelect);
+              else title.go_to(S::PsjModeSelect);
+              break;
             default: break;
           }
           if (title.sound_effects != save.options.sound_effects || title.vibration != save.options.vibration) {
@@ -2163,6 +2176,10 @@ int run(int argc, char** argv) {
           }
           Result r = Result::Clear;
           int speed_seconds = -1;  // a speed course cleared: its time
+          int own_rank = 0;        // the place of the last result recorded (0: none)
+          bool own_cleared = false;
+          std::size_t own_lost_track = 0;
+          int own_lost_points = 0;
           if (read_all && names.empty()) {
             // Nothing playable after all (every file unreadable or under 10 s): back to
             // the picker with the message, as for a folder with no music files.
@@ -2182,12 +2199,16 @@ int run(int argc, char** argv) {
             s.music_disc = cd.track_samples();
             s.course = own_course;
             auto decode = [&paths](std::size_t k) { return std::async(std::launch::async, [path = paths[k]]() { return vibr::load_music(path); }); };
-            std::future<vibr::Music> next = decode(0);
-            int points = 0;
+            const std::size_t first = own_start < names.size() ? own_start : 0;
+            own_start = 0;
+            std::future<vibr::Music> next = decode(first);
+            int points = own_course == Course::AllTracks ? own_start_points : 0;
+            own_start_points = 0;
             const bool speed = is_speed_course(own_course);
+            const bool scored = own_course == Course::OneTrack || own_course == Course::AllTracks;
             // (A speed course: each picked track is a try, the next one starting when the
             // music runs out first; reaching the top speed ends the run.)
-            for (std::size_t k = 0; k < names.size() && (r == Result::Clear || (speed && r == Result::GameOver && s.final_time_up)); ++k) {
+            for (std::size_t k = first; k < names.size() && (r == Result::Clear || (speed && r == Result::GameOver && s.final_time_up)); ++k) {
               std::future<vibr::Music> current = std::move(next);
               const std::string& name = names[k].first;
               const bool loaded = show_loading([&]() { return name; },
@@ -2212,15 +2233,29 @@ int run(int argc, char** argv) {
               s.music = &track;
               s.music_track = int(k) + 1;
               std::printf("Track %zu of %zu: %s\n", k + 1, names.size(), name.c_str());
+              const int before = points;
               r = play_song(s, 0, int(k), points, seed);
               seed = next_random(seed);
+              if (scored && r == Result::GameOver) {
+                own_lost_track = k;
+                own_lost_points = before;
+              }
               if (speed && r == Result::Clear) {
-                const int place = save.record(own_course, points);
+                own_rank = save.record(own_course, points);
                 write_save();
-                std::printf("Speed record: %d s%s\n", points, place ? (" (place " + std::to_string(place) + ")").c_str() : "");
+                std::printf("Speed record: %d s%s\n", points, own_rank ? (" (place " + std::to_string(own_rank) + ")").c_str() : "");
                 speed_seconds = points;
                 points = 0;
                 break;
+              }
+              // One track: each track cleared is a result of its own (its score and bonus);
+              // all tracks: the whole run once its last track is cleared.
+              if (r == Result::Clear && (own_course == Course::OneTrack || (own_course == Course::AllTracks && k + 1 == names.size()))) {
+                own_rank = save.record(own_course, points);
+                write_save();
+                own_cleared = true;
+                std::printf("%s: %d%s\n", own_course == Course::OneTrack ? "Track score" : "All tracks total", points,
+                            own_rank ? (" (place " + std::to_string(own_rank) + ")").c_str() : "");
               }
               if (own_course != Course::AllTracks) points = 0;
               s.music = nullptr;
@@ -2234,13 +2269,34 @@ int run(int argc, char** argv) {
           }
           // A speed course ends on the original's speed clear or time-up screen, then the
           // speed select; the other own-CD courses go back to the own-CD mode select.
+          // One track and all tracks end on the clear or game-over screens as the game
+          // disc's courses do, then "again?" (from the lost track) after a loss.
           title.results_speed = 0;
+          title.results_time_up = false;
+          title.results_course = int(own_course);
+          show_scores();
           if (is_speed_course(own_course) && (speed_seconds >= 0 || (r == Result::GameOver && s.final_time_up))) {
             title.results_speed = int(own_course) - int(Course::Speed1) + 1;
             title.results_time_up = speed_seconds < 0;
             title.results_score = std::max(0, speed_seconds);
-            title.results_rank = 0;  // (the speed high-score tables come with stage 3)
+            title.results_rank = speed_seconds >= 0 ? own_rank : 0;
             title.go_to(speed_seconds >= 0 ? S::Clear : S::Again);
+          } else if (is_speed_course(own_course) && r == Result::GameOver) {
+            title.results_score = 0;  // lost on the way: Vibri's reaction, then "again?"
+            title.results_rank = 0;
+            title.go_to(S::Again);
+          } else if ((own_course == Course::OneTrack || own_course == Course::AllTracks) && r == Result::GameOver) {
+            own_start = own_lost_track;
+            own_start_points = own_lost_points;
+            title.results_score = std::min(s.final_score, Hud::kMaxScore);
+            title.results_rank = 0;
+            title.go_to(S::Again);
+          } else if (own_cleared && r == Result::Clear) {
+            title.results_score = std::min(s.final_score, Hud::kMaxScore);
+            title.results_bonus = s.final_bonus;
+            title.results_form = s.final_form;
+            title.results_rank = own_rank;
+            title.go_to(S::Clear);
           } else {
             title.go_to(is_speed_course(own_course) ? S::SpeedSelect : S::UnknownModeSelect);
           }

@@ -176,7 +176,7 @@ namespace {
 bool has_music(TitleScreens::Screen s) {
   using S = TitleScreens::Screen;
   return s == S::Main || s == S::PsjModeSelect || s == S::UnknownModeSelect || s == S::SpeedSelect || s == S::CdChange || s == S::TrackSelect ||
-         s == S::Option || s == S::PsjHiscore;
+         s == S::Option || s == S::PsjHiscore || s == S::UnknownHiscore;
 }
 }  // namespace
 
@@ -226,7 +226,8 @@ TitleScreens::Result TitleScreens::tick(const Input& in) {
     case Screen::CdChange: r = cd_change(in); break;
     case Screen::TrackSelect: r = track_select(in); break;
     case Screen::Option: r = options(in); break;
-    case Screen::PsjHiscore: r = psj_hiscore(in, 0); break;
+    case Screen::PsjHiscore:
+    case Screen::UnknownHiscore: r = psj_hiscore(in, 0); break;
     case Screen::Results: r = psj_hiscore(in, ++results_frame_); break;
     case Screen::Clear: r = clear(in); break;
     case Screen::Again: r = again(in); break;
@@ -478,7 +479,7 @@ void TitleScreens::draw_vibri(int jitter, std::vector<SceneLine>& out) {
   if (vibri_ == Vibri::Hidden) return;
   Model& m = models_[std::size_t(m_vibri_)];
   m.jitter_all((jitter + 4 * kGteOne) / kGteOne);
-  const bool results = screen_ == Screen::PsjHiscore || screen_ == Screen::Results || screen_ == Screen::Again || screen_ == Screen::Clear;
+  const bool results = screen_ == Screen::PsjHiscore || screen_ == Screen::UnknownHiscore || screen_ == Screen::Results || screen_ == Screen::Again || screen_ == Screen::Clear;
   m.hide(19, results);
   m.hide(20, results);
   const int movie_of[6] = {0, 1, 2, 3, 4, 5};
@@ -523,6 +524,12 @@ void TitleScreens::show_number(Model& m, const std::array<int, 6>& slots, int fi
     }
   }
   if (!shown) m.swap(slots[0], first_digit_object);
+}
+
+void TitleScreens::show_seconds(Model& m, const std::array<int, 6>& slots, int first_digit_object, int sign_object, int value) {
+  const std::array<int, 6> digits = {slots[1], slots[2], slots[3], slots[4], slots[5], slots[5]};
+  show_number(m, digits, first_digit_object, std::clamp(value, 0, 99999));
+  m.swap(slots[0], sign_object);
 }
 
 // ---------------------------------------------------------------- screens
@@ -1100,14 +1107,31 @@ TitleScreens::Result TitleScreens::options(const Input& in) {
 TitleScreens::Result TitleScreens::psj_hiscore(const Input& in, int frame) {
   // Objects of the high-score model: the menu (arrows and back), the three places,
   // each course's name and the digits of the three scores.
+  // PSJ HISCORE shows the game disc's three courses; UNKNOWN HISCORE the own-CD's
+  // five (one track, all tracks, the three speed courses: not in order). After a
+  // course, the course played. Slot 6 names the course (for a speed course, "speed"),
+  // slot 5 the speed level.
   static const int menu_objects[4] = {0, 1, 2, 7};
   static const int place_objects[3] = {27, 48, 49};
-  static const int course_names[3] = {6, 47, 44};
+  static const int course_name[8] = {6, 47, 44, 45, 43, 46, 46, 46};   // by Course
+  static const int speed_name[8] = {5, 5, 5, 5, 5, 40, 41, 42};
   static const std::array<int, 6> rows[3] = {{8, 9, 10, 11, 12, 13}, {14, 15, 16, 17, 18, 19}, {20, 21, 22, 23, 24, 25}};
-  static const int voices[4] = {114, 113, 112, 96};
+  static const std::vector<int> psj_voices[4] = {{114}, {113}, {112}, {96}};
+  static const std::vector<int> unknown_voices[6] = {{115, 120}, {117, 120}, {116, 114}, {116, 113}, {116, 112}, {96}};
+  static const int unknown_courses[5] = {3, 4, 5, 6, 7};
   Model& model = models_[std::size_t(m_hiscore_)];
   const bool still = fade_frame_ == 0;
   const bool results = frame != 0;
+  const bool unknown = !results && screen_ == Screen::UnknownHiscore;
+  const int count = unknown ? 5 : 3;
+  int& shown = unknown ? unknown_course_ : hiscore_course_;
+  auto course_of = [&](int i) { return unknown ? unknown_courses[i] : i; };
+  auto voice = [&](int i) -> const std::vector<int>& { return unknown ? unknown_voices[i == count ? 5 : i] : psj_voices[i == count ? 3 : i]; };
+  const int volume = unknown ? 64 : 90;
+  auto sign = [&](int c) {
+    model.swap(6, course_name[std::clamp(c, 0, 7)]);
+    model.swap(5, speed_name[std::clamp(c, 0, 7)]);
+  };
 
   // After a course it is set up on its second frame, as the original's results do.
   if (arrived_ || frame == 2) {
@@ -1119,15 +1143,16 @@ TitleScreens::Result TitleScreens::psj_hiscore(const Input& in, int frame) {
     entering_ = true;
     leaving_ = false;
     vibri_ = Vibri::Lying;
-    const int course = results ? results_course : hiscore_course_;
-    model.swap(6, course_names[course]);
-    model.swap(5, 5);
+    sign(results ? results_course : course_of(shown));
     for (int o : menu_objects) model.hide(o, results);  // after a course: no menu
     for (int o : place_objects) model.hide(o, false);
   }
-  const int course = results ? results_course : hiscore_course_;
-  for (std::size_t row = 0; row < 3; ++row)
-    show_number(model, rows[row], 28, psj_high_scores[std::size_t(course)][row]);
+  const int course = std::clamp(results ? results_course : course_of(shown), 0, 8);
+  const bool seconds = course >= 5 && course <= 7;  // the speed courses keep times
+  for (std::size_t row = 0; row < 3; ++row) {
+    if (seconds) show_seconds(model, rows[row], 28, 39, high_scores[std::size_t(course)][row]);
+    else show_number(model, rows[row], 28, high_scores[std::size_t(course)][row]);
+  }
   const MenuRead r = read(back_cursor_, in, false, still && !results);
 
   Hud::Layer layer;
@@ -1158,25 +1183,31 @@ TitleScreens::Result TitleScreens::psj_hiscore(const Input& in, int frame) {
     return Result::None;
   }
 
-  if (r.back) say({voices[3]}, 90, Vibri::LyingSpeaking);
+  if (r.back) say(voice(count), volume, Vibri::LyingSpeaking);
   if (back_cursor_.index == 0 && (r.left || r.right)) {
     if (r.left) {
       menu_movie_ = hi_left_;
-      hiscore_course_ = (hiscore_course_ + 2) % 3;
+      shown = (shown + count - 1) % count;
     } else {
       menu_movie_ = hi_right_;
-      hiscore_course_ = (hiscore_course_ + 1) % 3;
+      shown = (shown + 1) % count;
     }
-    say({voices[hiscore_course_]}, 90, Vibri::LyingSpeaking);
+    say(voice(shown), volume, Vibri::LyingSpeaking);
     movies_[std::size_t(menu_movie_)].clip.rewind();
     speed_ = 1;
-    model.swap(6, course_names[hiscore_course_]);
+    sign(course_of(shown));
   }
-  if (r.changed && (r.up || r.down)) say({back_cursor_.index != 0 ? voices[3] : voices[hiscore_course_]}, 90, Vibri::LyingSpeaking);
+  if (r.changed && (r.up || r.down)) say(voice(back_cursor_.index != 0 ? count : shown), volume, Vibri::LyingSpeaking);
   model.jitter_all(kMenuJitter);
-  // The item under the cursor shakes harder: the course's name, or "back".
-  const int under = back_cursor_.index == 0 ? course_names[hiscore_course_] : 7;
-  model.look.jitter[std::size_t(under)] = kTextJitter;
+  // The item under the cursor shakes harder: the course's name (a speed course's
+  // level and "speed"), or "back".
+  if (back_cursor_.index == 0) {
+    const int c = course_of(shown);
+    model.look.jitter[std::size_t(seconds ? speed_name[c] : course_name[c])] = kTextJitter;
+    if (seconds) model.look.jitter[46] = kTextJitter;
+  } else {
+    model.look.jitter[7] = kTextJitter;
+  }
   draw_vibri(jitter, layer.lines);
   Movie& ex = movies_[std::size_t(hi_exit_)];
   ex.clip.set_speed(0);
@@ -1212,10 +1243,7 @@ TitleScreens::Result TitleScreens::speed_clear(const Input& in) {
     for (int o = 0; o < int(meter.tmd.objects.size()); ++o) meter.swap(o, o);
     meter.swap(4, 4 + std::clamp(results_speed, 1, 3) - 1);  // the level's mark (objects 4-6)
     // The seconds as digits in slots 32-36 (units first), slot 31 the seconds sign.
-    static const std::array<int, 6> digits = {32, 33, 34, 35, 36, 36};
-    show_number(end, digits, 52, std::min(seconds, 99999));
-    if (seconds == 0) end.swap(32, 52);
-    end.swap(31, 63);
+    show_seconds(end, {31, 32, 33, 34, 35, 36}, 52, 63, seconds);
     result_frame_ = wait_frame_ = hiscore_frame_ = leave_frame_ = 0;
     speed_movie_ = 0;
     rewind_movies();
@@ -1422,9 +1450,13 @@ TitleScreens::Result TitleScreens::again_select(const Input& in) {
   Model& model = models_[std::size_t(m_again_)];
   if (arrived_) {
     // The sign names the course played: object 3 as itself, or 6 or 7 in its place.
-    static const int course_sign[3] = {3, 6, 7};
-    model.swap(3, course_sign[std::clamp(results_course, 0, 2)]);
-    model.swap(15, 15);
+    // Object 3 as itself or 6-10 or 14 in its place by course (one track, all tracks,
+    // speed, in order); slot 15 the speed level (11-13).
+    static const int course_sign[9] = {3, 6, 7, 8, 9, 14, 14, 14, 10};
+    static const int speed_sign[9] = {15, 15, 15, 15, 15, 11, 12, 13, 15};
+    const int c = std::clamp(results_course, 0, 8);
+    model.swap(3, course_sign[c]);
+    model.swap(15, speed_sign[c]);
     menu_movie_ = again_steps_[0];
     again_cursor_.index = 0;
     speed_ = 0;
@@ -1574,21 +1606,21 @@ TitleScreens::SpokenNumber TitleScreens::say_number(int number, int form) {
 TitleScreens::Result TitleScreens::clear(const Input& in) {
   static const std::vector<int> medal_words[3] = {
       {48, 48}, {48, 48, 51, 52}, {48, 48, 49, 50, 48, 48, 51, 52}};
-  static const std::vector<int> course_name_words[3] = {{36, 53, 54}, {35, 53, 54}, {34, 53, 54}};
+  static const std::vector<int> course_name_words[5] = {{36, 53, 54}, {35, 53, 54}, {34, 53, 54}, {38, 39, 54}, {37, 39, 54}};
   static const std::vector<int> score_beat[3] = {{62, 60, 61}, {62, 63, 62, 60, 61}, {62, 63, 62, 63, 62, 60, 61}};
   static const std::vector<int> comment_words[4] = {
       {196}, {197, 198, 199}, {200, 201, 202, 203, 204}, {208, 209, 210, 211, 212, 213, 214, 215, 216, 217}};
   // Each medal's steps, bronze to gold; which of them show the medal (0) or the score (1).
   static const std::vector<int> medal_steps[3] = {{0, 4, 5, 6, 7, 9}, {0, 1, 4, 5, 6, 7, 8, 9}, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9}};
   static const int step_sign[10] = {0, 0, 0, 0, 1, 1, 1, -1, 0, 0};
-  static const int medal_scores[3][3] = {{2000, 4000, 6000}, {2000, 4000, 6000}, {1500, 3500, 5500}};
+  static const int medal_scores[5][3] = {{2000, 4000, 6000}, {2000, 4000, 6000}, {1500, 3500, 5500}, {2500, 4500, 6500}, {20000, 35000, 50000}};
   static const int comment_for_form[4] = {3, 1, 0, 2};  // the sign's comment by Vibri's final form
   static const int comment_signs[4] = {10, 7, 8, 9};    // its objects
   if (results_speed > 0) return speed_clear(in);
   Model& end = models_[std::size_t(m_end_)];
   Model& vibri = models_[std::size_t(m_vibri_)];
   Model& song = models_[std::size_t(m_song_)];
-  const int course = std::clamp(results_course, 0, 2);
+  const int course = std::clamp(results_course, 0, 4);  // the game disc's three, one track, all tracks
   const int total = results_score + results_bonus;
 
   if (arrived_) {

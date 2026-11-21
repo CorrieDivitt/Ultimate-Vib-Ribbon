@@ -469,7 +469,28 @@ The rotating obstacles the owner saw with own music: the original's **screw** ef
   - Both go back to the speed select. results_rank is 0 for now, so no table follows; the speed tables are stage 3. There is no "again?" after time up yet.
   - Test: test_disc checks both screens on the disc (words read, lines drawn, ending by themselves).
 - Zoom: the furthest zoom out is now 1/36 (was 1/24), 50% further, in both the settings item and the right stick.
-- Not yet: the speed high-score view and table (stage 3), "again?" after time up, and a check of the dial's placement in VR.
+- Owner tested the speed results and the zoom: locked in.
+
+## 2x. Speed mode finished; own-CD high scores (session 3, past midnight; stage 3 of 3.7)
+
+- High-score screen: `psj_hiscore` now serves `Screen::PsjHiscore` (bronze, silver, gold) and `Screen::UnknownHiscore` (one track, all tracks, speed 1-3; not In order), and the table shown after any course.
+  - Table data: `TitleScreens::high_scores` holds all 9 courses (it was psj_high_scores for 3).
+  - Signs: slot 6 is the course name (by Course: 6, 47, 44, 45, 43, then 46 "speed" for the three speed courses). Slot 5 is the speed level (40-42).
+  - Speed times use `show_seconds`: slot 0 is the seconds sign (object 39 in the table, 63 on the clear screen), with the digits after it.
+  - UNKNOWN voices: 115+120, 117+120, 116+114, 116+113, 116+112; back is 96; volume 64.
+  - HiscoreBack goes back to the mode select it came from.
+- "Again?" signs by course: object 3 becomes 3, 6, 7, 8, 9 (game disc, one track, all tracks), 14 (speed), or 10 (in order). Slot 15 is the speed level (11-13).
+- Clear screen for one track (medals 2500/4500/6500, words 38+39+54) and all tracks (20000/35000/50000, words 37+39+54).
+- Own-music results (main.cpp, own_play block):
+  - One track records each cleared track (score plus bonus).
+  - All tracks records the whole run when its last track is cleared.
+  - A speed course records its seconds.
+  - The run then shows Clear (with the table if the score placed) or Again, then "again?".
+  - Again restarts the same files from the track that was lost: `own_start`, with the score carried for all tracks (`own_start_points`). A speed course starts again from its first track.
+  - After results, the game returns to the speed select or the own-CD mode select.
+  - In order and leaving during play go straight back to the menu.
+- Test: test_disc runs UNKNOWN HISCORE (cycling, back), one-track and all-tracks clears, a speed clear with a table, and "again?".
+- Left for the owner to judge: the speed dial's placement in VR (it is drawn through the original's own meter camera).
 - Unchecked (no disc here): whether SPD_LBL1-3.ANM need a language prefix. If the label is missing, check `localized()` for those names.
 
 ## 2o. Idea dropped: Vibri speaking English (session 3, 2026-11-20)

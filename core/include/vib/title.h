@@ -24,7 +24,7 @@ namespace vib {
 
 class TitleScreens {
  public:
-  enum class Screen { None, Main, PsjModeSelect, UnknownModeSelect, SpeedSelect, CdChange, TrackSelect, Option, PsjHiscore, Results, Clear, Again, AgainSelect, Done };
+  enum class Screen { None, Main, PsjModeSelect, UnknownModeSelect, SpeedSelect, CdChange, TrackSelect, Option, PsjHiscore, UnknownHiscore, Results, Clear, Again, AgainSelect, Done };
   enum class Result {
     None,
     PsjModes, UnknownModes, Options, Leave,          // main
@@ -94,7 +94,9 @@ class TitleScreens {
 
   // What the screens show and change.
   bool sound_effects = true, vibration = true;
-  std::array<std::array<int, 3>, 3> psj_high_scores{};  // bronze, silver, gold
+  // Every course's table (as Course: bronze, silver, gold, one track, all tracks, the
+  // three speed courses in seconds, in order); the high-score screens show them.
+  std::array<std::array<int, 3>, 9> high_scores{};
   // For the results screens: the course just played (0-2), its place in the high
   // scores (1-3, 0 for none) and the score. Screen::Again is game over: Vibri's
   // reaction, the score, then the high scores if it made them.
@@ -158,6 +160,8 @@ class TitleScreens {
   const std::string& words(GameText::List list, int index) const;
   void play_music();
   void show_number(Model& m, const std::array<int, 6>& slots, int first_digit_object, int value);
+  // A time: slots[0] shows the seconds sign, the digits from slots[1] (units first).
+  void show_seconds(Model& m, const std::array<int, 6>& slots, int first_digit_object, int sign_object, int value);
 
   Result main_menu(const Input& in);
   Result psj_mode_select(const Input& in);
@@ -235,6 +239,7 @@ class TitleScreens {
   // screen state
   Cursor main_cursor_{0, 4, 3}, psj_cursor_{0, 5, 4}, unknown_cursor_{0, 6, 5}, speed_cursor_{0, 4, 3}, cd_cursor_{1, 3, 2}, trk_cursor_{0, 2, 1}, option_cursor_{0, 3, 2}, back_cursor_{0, 2, 1};
   int menu_movie_ = 0, camera_cue_ = -1, wait_frame_ = 0, hiscore_course_ = 0, results_frame_ = 0;
+  int unknown_course_ = 0;  // UNKNOWN HISCORE: which of its five courses is shown
   int result_frame_ = 0, leave_frame_ = 0, hiscore_frame_ = 0, comment_ = 0;
   std::uint32_t random_ = 12345;
   Cursor again_cursor_{0, 2, 1};

@@ -228,6 +228,46 @@ TEST(disc_sces02873_menus_flow) {
   run(80, {});
   run(10, cancel);  // cancel jumps to back
   CHECK(run(80, confirm) == R::UnknownBack);
+  // UNKNOWN HISCORE: five courses round with left and right (speed ones as times);
+  // down then confirm leaves.
+  for (std::size_t c = 0; c < t.high_scores.size(); ++c) t.high_scores[c] = {300, 200, 100};
+  t.go_to(S::UnknownHiscore);
+  run(80, {});
+  CHECK(t.screen() == S::UnknownHiscore);
+  for (int k = 0; k < 6; ++k) CHECK(run(30, right) == R::None);
+  run(10, down);
+  CHECK(run(80, confirm) == R::HiscoreBack);
+  // Own-CD results: one track and all tracks clear as the game disc's courses do and
+  // end by themselves; "again?" after a loss names the course; a speed course's
+  // cleared time is followed by its table.
+  TitleScreens::Input none;
+  for (const int course : {3, 4}) {
+    t.results_course = course;
+    t.results_speed = 0;
+    t.results_score = 7000;
+    t.results_bonus = 700;
+    t.results_form = 2;
+    t.results_rank = 1;
+    t.go_to(S::Clear);
+    R seen = R::None;
+    for (int i = 0; i < 4000 && seen == R::None; ++i) seen = t.tick(none);
+    CHECK(seen == R::ResultsDone);
+  }
+  t.results_course = 6;
+  t.results_speed = 2;
+  t.results_time_up = false;
+  t.results_score = 70;
+  t.results_rank = 2;
+  t.go_to(S::Clear);
+  {
+    R seen = R::None;
+    for (int i = 0; i < 4000 && seen == R::None; ++i) seen = t.tick(none);
+    CHECK(seen == R::ResultsDone);
+  }
+  t.results_speed = 0;
+  t.go_to(S::AgainSelect);
+  run(80, {});
+  CHECK(t.screen() == S::AgainSelect);
   // CD CHANGE: starts on "this CD"; up is "change the CD"; back leaves with its clip.
   TitleScreens::Input up, left;
   up.up = true;
