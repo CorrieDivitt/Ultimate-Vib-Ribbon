@@ -6,6 +6,35 @@
 
 namespace vib {
 
+std::vector<std::uint8_t> loudness_levels(const std::vector<Block>& blocks) {
+  constexpr int kWindow = 400, kShift = 14;
+  const std::size_t n = blocks.size();
+  std::vector<std::int32_t> scaled(n);
+  for (std::size_t i = 0; i < n; ++i) {
+    std::int32_t sum = 0;
+    for (const std::int16_t v : blocks[i]) sum += v < 0 ? -std::int32_t(v) : std::int32_t(v);
+    scaled[i] = sum >> kShift;
+  }
+  // The total of the 400 blocks ending at j is the level of block j - 200.
+  std::vector<std::uint8_t> out(n, 0);
+  std::int64_t total = 0;
+  for (std::size_t j = 0; j < n + kWindow / 2; ++j) {
+    total += j < n ? scaled[j] : 0;
+    if (j >= std::size_t(kWindow)) total -= j - kWindow < n ? scaled[j - kWindow] : 0;
+    if (j < std::size_t(kWindow)) continue;  // (not yet 400 blocks: none written)
+    const std::size_t k = j - kWindow / 2;
+    if (k >= n) continue;
+    const std::int64_t level = (total / kWindow) * 5 / 4;
+    out[k] = std::uint8_t(level > 100 ? 100 : level);
+  }
+  return out;
+}
+
+int loud_volume(int volume, int level) {
+  const double loudness = 0.1 + 0.9 * double(std::clamp(level, 0, 100)) / 100.0;
+  return int(loudness * double(volume));
+}
+
 std::vector<Block> make_blocks(std::span<const std::int16_t> stereo, int lead) {
   const std::int64_t frames = static_cast<std::int64_t>(stereo.size() / 2);  // stereo sample pairs at 44.1 kHz
   const std::int64_t count = std::max<std::int64_t>(0, (frames - lead) / (kBlockSize * 2));  // 256 pairs make one block

@@ -27,6 +27,16 @@ using Block = std::array<std::int16_t, kBlockSize>;
 // start, in 44.1 kHz samples: positive skips that many, negative puts silence first.
 std::vector<Block> make_blocks(std::span<const std::int16_t> stereo_44100, int lead = 0);
 
+// How loud the music is around each block, 0 to 100, as the original measures it for
+// its sound effects (SPEC section 1, loudness meter): each block's samples' sizes
+// summed, scaled down by 2^14, totalled over 400 blocks around it (about 2.3 s; the
+// first 200 blocks have none yet, past the end counts as silence), divided by 400,
+// times 5/4, at most 100.
+std::vector<std::uint8_t> loudness_levels(const std::vector<Block>& blocks);
+// A gameplay sound's volume for a loudness: from 10% of `volume` in silence to all of
+// it at 100.
+int loud_volume(int volume, int level);
+
 // The original does not produce exactly the same course twice: where the music
 // starts against the round's start, and how audio blocks fall into video frames,
 // differ a little on every play (docs/HANDOFF.md section 2d). A CourseTiming holds

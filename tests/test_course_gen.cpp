@@ -155,3 +155,24 @@ TEST(disc_key_from_the_table_of_contents) {
   CHECK(disc_key(0, 0) == 0xCBF633B1u);
   CHECK(disc_key(1, 3) == ((128u | 3u) ^ 0xCBF633B1u));
 }
+
+TEST(the_effects_follow_the_musics_loudness) {
+  // 1,000 blocks: silence, then 400 loud ones (every sample 8,000), then silence again.
+  std::vector<Block> blocks(1000);
+  for (std::size_t i = 300; i < 700; ++i) blocks[i].fill(8000);
+  const auto level = loudness_levels(blocks);
+  CHECK(level.size() == blocks.size());
+  // A loud block: 128 x 8,000 = 1,024,000, >> 14 = 62. Block 500's window is blocks 301
+  // to 700: 399 loud and one silent, 24,738 / 400 = 61, x 5/4 = 76.
+  CHECK(level[500] == 76);
+  CHECK(level[150] == 0);            // (the first 200 have none: not yet 400 blocks)
+  CHECK(level[250] > 0 && level[250] < 76);  // (coming up: the window reaches the loud part)
+  CHECK(level[950] == 0);            // (silence again, far enough on)
+  // Centred: rising before the loud part as much as it falls after it.
+  CHECK(level[300] == level[699] || std::abs(int(level[300]) - int(level[699])) <= 1);
+  // Never over 100.
+  for (auto& b : blocks) b.fill(32000);
+  for (const auto v : loudness_levels(blocks)) CHECK(v <= 100);
+  // The volume: 10% in silence, all of it at 100, in between in proportion.
+  CHECK(loud_volume(127, 0) == 12 && loud_volume(127, 100) == 127 && loud_volume(100, 50) == 55);
+}

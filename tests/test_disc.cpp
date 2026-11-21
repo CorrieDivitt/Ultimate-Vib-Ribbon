@@ -129,6 +129,16 @@ TEST(disc_sces02873_first_song_course) {
     CHECK(parts[4].time == 218934 && parts[4].value == 3);
     CHECK(parts[74].time == 3409832 && parts[74].value == 2);
   }
+  // The music's loudness for the sound effects: some quieter and some louder stretches,
+  // none silent once the song is going, never over 100.
+  {
+    std::vector<std::uint8_t> level = loudness_levels(blocks);
+    std::vector<std::uint8_t> sorted(level.begin() + 400, level.end() - 400);
+    std::sort(sorted.begin(), sorted.end());
+    const int low = sorted[sorted.size() / 20], mid = sorted[sorted.size() / 2], high = sorted[sorted.size() * 19 / 20];
+    std::printf("    loudness of the first song: 5%% %d, median %d, 95%% %d\n", low, mid, high);
+    CHECK(low > 0 && low < mid && mid < high && high <= 100);
+  }
 }
 
 TEST(disc_sces02873_scene_draws) {

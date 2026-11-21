@@ -907,6 +907,9 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   const std::vector<std::int16_t> disc_pcm = s.music ? std::vector<std::int16_t>{} : s.disc.read_audio_track(song + 1);
   const std::vector<std::int16_t>& pcm = s.music ? s.music->pcm : disc_pcm;
   const std::vector<Block> blocks = make_blocks(pcm, timing.lead);
+  // How loud the music is around each block: gameplay's sounds follow it, as the
+  // original's do (10% in silence to full in loud music).
+  const std::vector<std::uint8_t> loudness = loudness_levels(blocks);
   const auto total = static_cast<std::int32_t>(blocks.size() * kBlockSize);
 
   // What you hear: the 8 s the original spends analysing ahead in silence, then the
@@ -1056,31 +1059,38 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   double fc_time = 0;
   const bool clean_before = track_index == 0 || s.course_clean;
   s.course_clean = false;  // (left so unless this song is a full combo)
+  // A gameplay sound's volume at the music's loudness where it is heard now (none
+  // before the song plays: the original's level is 0 then).
+  auto fx_volume = [&](int volume) {
+    const std::int32_t at = last_position;
+    const int level = at >= 0 && std::size_t(at / kBlockSize) < loudness.size() ? loudness[std::size_t(at / kBlockSize)] : 0;
+    return loud_volume(volume, level);
+  };
   auto handle = [&](const std::vector<GameEvent>& events) {
     bool form_up = false, hit = false, miss = false;
     for (const GameEvent& e : events) {
       switch (e.type) {
         case GameEvent::Type::Hit:
-          if (effects_on) s.fx.number(16 + e.road, 127, 3);
+          if (effects_on) s.fx.number(16 + e.road, fx_volume(127), 3);
           s.scene.set_move(e.road, false);
           hit = true;
           ++song_hits;
           break;
         case GameEvent::Type::Stray: {
           const int n = e.value == 1 ? 31 : e.value == 2 ? 28 : e.value == 4 ? 29 : 27;
-          if (effects_on) s.fx.number(n, 100, 3);
+          if (effects_on) s.fx.number(n, fx_volume(100), 3);
           s.scene.set_move(e.road, true);
           break;
         }
         case GameEvent::Type::Miss:
-          if (effects_on) s.fx.play(1, 10, 127, 2);
+          if (effects_on) s.fx.play(1, 10, fx_volume(127), 2);
           if (s.save.options.vibration)
             for (auto& [id, pad] : s.pads) SDL_RumbleGamepad(pad, 0x6000, 0xC000, 200);
           miss = true;
           ++song_misses;
           break;
         case GameEvent::Type::FormUp:
-          if (effects_on) s.fx.play(1, 14, 127, 4);
+          if (effects_on) s.fx.play(1, 14, fx_volume(127), 4);
           s.scene.play_evo();
           form_up = true;
           break;
