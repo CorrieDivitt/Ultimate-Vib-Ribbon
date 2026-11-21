@@ -752,10 +752,11 @@ void score_above_vibri(const std::vector<SceneLine>& marks, float vibri_z, Vec3f
 // only a strip of it shows along the screen's bottom edge, sliding as the song goes;
 // so the meter's lines are cut to that strip, the original picture's 4:3 window
 // through its camera, then that strip is placed below her as the score is above:
-// centred on her, upright, turned to face `eye`, at a fixed height (900 below the
-// road, under the deepest pit, 559), never moving when she jumps, 1,200 across.
+// centred on her, upright, turned to face `eye`, at a fixed height (1,100 below the
+// road: under the deepest pit, 559, and the timing feedback just below it), never
+// moving when she jumps, 1,200 across.
 void meter_below_vibri(const Hud::Layer& meter, float vibri_z, Vec3f eye, std::vector<SceneLine>& out) {
-  constexpr float kWidth = 1200.0f, kY = 900.0f;
+  constexpr float kWidth = 1200.0f, kY = 1100.0f;
   out.clear();
   // The meter's camera: right, down and forward, as the original's screen shows them.
   const Vec3f e = meter.view.eye, t = meter.view.target;
@@ -826,15 +827,15 @@ void meter_below_vibri(const Hud::Layer& meter, float vibri_z, Vec3f eye, std::v
 
 // In a headset, with the Score in numbers setting (task 4.10), the score's number sits
 // below the time meter under Vibri, placed as the meter is: centred on her, upright,
-// facing `eye`, at a fixed height (its middle 1,090 below the road, just under the
+// facing `eye`, at a fixed height (its middle 1,290 below the road, just under the
 // meter's strip), in the game's own line font with its text jitter. `text`: from
 // SettingsPanel::text_lines, centred on the origin as if seen from -z.
-// The timing feedback's middle in a headset: above Vibri's running height (she stays
-// under 805, every move but the angel's block under 1,360) and under the score marks'
-// lowest point (1,388); y is down, so negative is above the road.
-constexpr float kTimingAboveRoad = -1240.0f;
+// The timing feedback's middle in a headset: just below the road, under the deepest
+// pit (559) and above the time meter's strip (its middle 1,100 below, about 36 each
+// way); y is down. The scroll speed's note goes under the score's number.
+constexpr float kTimingBelowRoad = 720.0f, kScrollNoteBelowRoad = 1530.0f, kTimingScale = 0.8f;
 
-void number_below_vibri(const std::vector<SceneLine>& text, float vibri_z, Vec3f eye, std::vector<SceneLine>& out, float kY = 1090.0f) {
+void number_below_vibri(const std::vector<SceneLine>& text, float vibri_z, Vec3f eye, std::vector<SceneLine>& out, float kY = 1290.0f) {
   float fx, fz;
   facing(vibri_z, eye, fx, fz);
   auto place = [&](Vec3f p) { return Vec3f{fz * p.x + fx * p.z, kY + p.y, vibri_z - fx * p.x + fz * p.z}; };
@@ -1415,14 +1416,14 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     }
     if (s.save.options.timing_feedback && timing_note > 0 && s.panel && !s.demo && !paused) {
       // The last hit's offset in ms, full brightness, dimming over its last 0.2 s. In a
-      // headset just above Vibri (under the score), facing the eye; on the monitor
-      // above the score's number.
+      // headset just below the road (above the time meter), facing the eye; on the
+      // monitor above the score's number.
       const float bright = float(std::min(1.0, timing_note / 0.2));
       const std::string text = SettingsPanel::offset_text(timing_ms);
       timing_lines.clear();
       if (s.opt.vr) {
         std::vector<SceneLine> placed;
-        number_below_vibri(s.panel->text_lines(text, 1.0f, h.jitter_seed, 4), s.scene.vibri_z(), view.eye, placed, kTimingAboveRoad);
+        number_below_vibri(s.panel->text_lines(text, kTimingScale, h.jitter_seed, 4), s.scene.vibri_z(), view.eye, placed, kTimingBelowRoad);
         const auto grey = static_cast<std::uint8_t>(bright * 255.0f);
         for (SceneLine& l : placed) l.colour = {grey, grey, grey};
         convert(placed, timing_lines);
@@ -1437,7 +1438,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
       scroll_note_lines.clear();
       if (s.opt.vr) {
         std::vector<SceneLine> placed;
-        number_below_vibri(s.panel->text_lines(s.panel->scroll_line(s.save.options), 1.0f, h.jitter_seed, 4), s.scene.vibri_z(), view.eye, placed, 1330.0f);
+        number_below_vibri(s.panel->text_lines(s.panel->scroll_line(s.save.options), 1.0f, h.jitter_seed, 4), s.scene.vibri_z(), view.eye, placed, kScrollNoteBelowRoad);
         convert(placed, scroll_note_lines);
         layers.push_back({&scroll_note_lines, matrix(view), view.fov_y});
       } else {

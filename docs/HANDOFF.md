@@ -544,7 +544,7 @@ Owner's spec: as StepMania, when on, each press shows how far it was from perfec
 - vibplay `play_song`: on each Hit event, `timing_ms` and `timing_note` (0.6 s, `kTimingNoteSeconds`; counts down only while not paused); drawn while it lasts, full white then dimming linearly over the last 0.2 s. Headset: `number_below_vibri(..., kTimingAboveRoad)` with the middle 1,240 above the road (Vibri runs under 805, every move but the angel's block under 1,360; the score marks' lowest point is 1,388), upright, facing the eye, scale 1 (142 tall). Monitor: `SettingsPanel::draw_timing`, scale 1.2, halfway down the lower half of the text camera (above the score's number at 0.72). Not in the demo.
 - Tests: the item's label, toggle and text, `draw_timing` dims its colour, save round trip; the width test covers it.
 
-To judge: placement (between Vibri and the score in the headset), size, how long it shows, whether a colour by closeness (StepMania colours by judgement) is wanted.
+Owner's first test: worked well. **Moved (owner):** below the play line, a little smaller, no colour for now. Headset layout below the road now (all `main.cpp` constants, the monitor unchanged): timing feedback middle 720 (`kTimingBelowRoad`, scale 0.8 = `kTimingScale`, about 114 tall: 663 to 777, under the deepest pit at 559); time meter strip middle 1,100 (`meter_below_vibri` kY, was 900); score number middle 1,290 (`number_below_vibri` default, was 1,090); scroll-speed note 1,530 (`kScrollNoteBelowRoad`, was 1,330). Waiting for the owner's look.
 
 ## 2o. Idea dropped: Vibri speaking English (session 3, 2026-11-20)
 
