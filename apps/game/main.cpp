@@ -1645,6 +1645,25 @@ int run(int argc, char** argv) {
       std::vector<std::string> own_files;
       std::string own_folder;
       Course own_course = Course::OneTrack;
+      // The player's "CD": the picked files, decoded once, and its virtual disc.
+      std::vector<vibr::Music> own_tracks;
+      OwnCd own_cd;
+      std::vector<int> own_order;  // the tracks to play next (from 1)
+      auto load_own_cd = [&]() {
+        own_tracks.clear();
+        std::vector<std::pair<std::string, std::uint32_t>> names;
+        for (const std::string& name : own_files) {
+          try {
+            own_tracks.push_back(vibr::load_music(child_folder(own_folder, name)));
+            names.push_back({name, std::uint32_t(own_tracks.back().pcm.size() / 2)});
+            std::printf("Track %zu: %s\n", own_tracks.size(), name.c_str());
+          } catch (const std::exception& error) {
+            std::printf("Left out %s: %s\n", name.c_str(), error.what());
+          }
+        }
+        own_cd = make_own_cd(names);
+        title.num_tracks = std::max(1, int(own_tracks.size()));
+      };
       auto show_folder = [&](FilePicker::Mode mode, const std::string& folder) {
         picker.show(mode, folder, list_folder(folder), !folder.empty());
       };
@@ -1803,11 +1822,11 @@ int run(int argc, char** argv) {
                 std::printf("Music folder: %s (saved)\n", picker.path().c_str());
                 show_folder(FilePicker::Mode::Files, picker.path());
                 break;
-              case PA::Done:
+              case PA::Done:  // the new CD is in: back to the CD screen
                 own_files = picker.ticked();
                 own_folder = picker.path();
                 in_picker = false;
-                own_play = true;
+                load_own_cd();
                 break;
               case PA::Cancel: in_picker = false; break;
               default: break;
@@ -1815,7 +1834,6 @@ int run(int argc, char** argv) {
             idle_ticks = 0;
             music.update();
             voices.update();
-            if (own_play) break;
             continue;
           }
           if (in_settings) {
@@ -1918,9 +1936,34 @@ int run(int argc, char** argv) {
             case R::UnknownModes: title.go_to(S::UnknownModeSelect); break;
             // The own-CD courses: our picker stands in for the original's CD step (the CD
             // change screen, the track select and the alerts come next).
-            case R::OneTrack: own_course = Course::OneTrack, open_picker(); break;
-            case R::AllTracks: own_course = Course::AllTracks, open_picker(); break;
-            case R::InOrder: own_course = Course::InOrder, open_picker(); break;
+            // The own-CD courses go through the original's CD screen; "change the CD"
+            // opens our picker (the player's files stand for the CD).
+            case R::OneTrack: own_course = Course::OneTrack, title.go_to(S::CdChange); break;
+            case R::AllTracks: own_course = Course::AllTracks, title.go_to(S::CdChange); break;
+            case R::InOrder: own_course = Course::InOrder, title.go_to(S::CdChange); break;
+            case R::ChangeCd: open_picker(); break;
+            case R::CdReady:
+              if (own_tracks.empty()) {
+                open_picker();  // no CD in yet: pick one first
+              } else if (own_course == Course::OneTrack) {
+                title.go_to(S::TrackSelect);
+              } else {
+                // All tracks: shuffled from the disc's key, so a CD always comes in the same
+                // order; in order: the disc's own.
+                own_order.clear();
+                for (int k = 1; k <= int(own_tracks.size()); ++k) own_order.push_back(k);
+                if (own_course == Course::AllTracks) own_order = random_picks(1, int(own_tracks.size()), int(own_tracks.size()), own_cd.key);
+                own_play = true;
+                title.go_to(S::Done);
+              }
+              break;
+            case R::TrackChosen:
+              own_order = {title.track};
+              own_play = true;
+              title.go_to(S::Done);
+              break;
+            case R::TrackBack: title.go_to(S::CdChange); break;
+            case R::CdChangeBack: title.go_to(S::UnknownModeSelect); break;
             case R::SpeedModes: std::printf("Speed courses come in the next stage.\n"); break;
             case R::UnknownHiscores: std::printf("High scores for your own music come later.\n"); break;
             case R::UnknownBack: title.go_to(S::Main); break;
@@ -1964,52 +2007,32 @@ int run(int argc, char** argv) {
         }
         if (!running) break;
         const std::uint64_t ticked_ns = SDL_GetTicksNS();  // (the menus' work this frame, for the overlay)
-        if (own_play) {
-          // The picked files as a CD (own_cd.h), each track played in turn through the
-          // original's audio-CD course rules. For now straight into play; the original's
-          // own-CD screens (mode select, CD change, track select) come next.
+        if (own_play && title.done()) {
+          // The CD's tracks in `own_order`, through the original's audio-CD course rules,
+          // the score carried from track to track in all tracks.
           own_play = false;
           music.stop();
           voices.stop();
-          std::vector<vibr::Music> tracks;
-          std::vector<std::pair<std::string, std::uint32_t>> names;
-          for (const std::string& name : own_files) {
-            const std::string file = child_folder(own_folder, name);
-            try {
-              tracks.push_back(vibr::load_music(file));
-              names.push_back({name, std::uint32_t(tracks.back().pcm.size() / 2)});
-              std::printf("Track %zu: %s\n", tracks.size(), name.c_str());
-            } catch (const std::exception& error) {
-              std::printf("Left out %s: %s\n", name.c_str(), error.what());
-            }
+          s.music_key = own_cd.key;
+          s.music_disc = own_cd.track_samples();
+          s.course = own_course;
+          int points = 0;
+          Result r = Result::Clear;
+          for (std::size_t k = 0; k < own_order.size() && r == Result::Clear; ++k) {
+            const int t = own_order[k];
+            if (t < 1 || t > int(own_tracks.size())) continue;
+            s.music = &own_tracks[std::size_t(t - 1)];
+            s.music_track = t;
+            std::printf("Track %d of %zu\n", t, own_tracks.size());
+            r = play_song(s, 0, int(k), points, seed);
+            seed = next_random(seed);
+            if (own_course != Course::AllTracks) points = 0;
           }
-          if (!tracks.empty()) {
-            const OwnCd cd = make_own_cd(names);
-            s.music_key = cd.key;
-            s.music_disc = cd.track_samples();
-            s.course = own_course;
-            // In order (the game plays itself) and one track (until the track select
-            // comes): disc order. All tracks: shuffled from the disc's key, so a CD
-            // always comes in the same order, the score carried from track to track.
-            std::vector<int> order;
-            for (int i = 1; i <= int(tracks.size()); ++i) order.push_back(i);
-            if (own_course == Course::AllTracks) order = random_picks(1, int(tracks.size()), int(tracks.size()), cd.key);
-            int points = 0;
-            Result r = Result::Clear;
-            for (std::size_t k = 0; k < order.size() && r == Result::Clear; ++k) {
-              const int t = order[k];
-              s.music = &tracks[std::size_t(t - 1)];
-              s.music_track = t;
-              std::printf("Track %d of %zu\n", t, tracks.size());
-              r = play_song(s, 0, int(k), points, seed);
-              seed = next_random(seed);
-              if (own_course != Course::AllTracks) points = 0;
-            }
-            s.music = nullptr;
-            audio.play_music({});
-            if (r == Result::Quit) break;
-          }
-          title.go_to(S::UnknownModeSelect);
+          s.music = nullptr;
+          audio.play_music({});
+          if (r == Result::Quit) break;
+          // Back where the course was chosen from.
+          title.go_to(own_course == Course::OneTrack ? S::TrackSelect : S::CdChange);
           prev_layers.clear();
           last_ns = SDL_GetTicksNS();
           behind = 0;

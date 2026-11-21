@@ -228,6 +228,32 @@ TEST(disc_sces02873_menus_flow) {
   run(80, {});
   run(10, cancel);  // cancel jumps to back
   CHECK(run(80, confirm) == R::UnknownBack);
+  // CD CHANGE: starts on "this CD"; up is "change the CD"; back leaves with its clip.
+  TitleScreens::Input up, left;
+  up.up = true;
+  left.left = true;
+  t.go_to(S::CdChange);
+  run(80, {});
+  CHECK(t.screen() == S::CdChange);
+  CHECK(run(5, confirm) == R::CdReady);
+  t.go_to(S::CdChange);
+  run(80, {});
+  run(10, up);
+  CHECK(run(5, confirm) == R::ChangeCd);
+  // TRACK SELECT: right and left step the number round the CD's tracks; down is back.
+  t.num_tracks = 3;
+  t.go_to(S::TrackSelect);
+  run(80, {});
+  CHECK(t.screen() == S::TrackSelect && t.track == 1);
+  run(10, right);
+  CHECK(t.track == 2);
+  run(10, left), run(10, left);
+  CHECK(t.track == 3);  // (wrapped round)
+  CHECK(run(5, confirm) == R::TrackChosen && t.track == 3);
+  t.go_to(S::TrackSelect);
+  run(80, {});
+  run(10, down);
+  CHECK(run(5, confirm) == R::TrackBack);
   t.go_to(S::Main);
   run(60, {});
   t.go_to(S::PsjModeSelect);

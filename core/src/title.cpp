@@ -95,6 +95,17 @@ TitleScreens::TitleScreens(const Pak& pak, int language) {
   for (std::size_t i = 0; i < 6; ++i) unknown_steps_[i] = load_movie(pak, m_unknown_, unknown_steps[i]);
   unknown_open_ = load_movie(pak, m_unknown_, "MODE/MDU_OP.ANM");
   unknown_close_ = load_movie(pak, m_unknown_, "MODE/MDU_CL.ANM");
+  // CD CHANGE: change the CD, this CD, back.
+  m_cd_ = load_model(pak, language, "CD/CD.TMD");
+  const char* cd_steps[3] = {"CD/CD-12.ANM", "CD/CD-23.ANM", "CD/CD-31.ANM"};
+  for (std::size_t i = 0; i < 3; ++i) cd_steps_[i] = load_movie(pak, m_cd_, cd_steps[i]);
+  cd_open_ = load_movie(pak, m_cd_, "CD/OPEN.ANM");
+  cd_close_ = load_movie(pak, m_cd_, "CD/CLOSE.ANM");
+  // TRACK SELECT: the arrows either side of the number, and back below.
+  m_trk_ = load_model(pak, language, "TRK/TRK.TMD");
+  trk_left_ = load_movie(pak, m_trk_, "TRK/TRK_L.ANM");
+  trk_right_ = load_movie(pak, m_trk_, "TRK/TRK_R.ANM");
+  trk_exit_ = load_movie(pak, m_trk_, "TRK/TRK_EXIT.ANM");
   const char* option_steps[3] = {"OPTION/OP01_02.ANM", "OPTION/OP02_03.ANM", "OPTION/OP03_01.ANM"};
   for (std::size_t i = 0; i < 3; ++i) option_steps_[i] = load_movie(pak, m_option_, option_steps[i]);
   option_open_ = load_movie(pak, m_option_, "OPTION/OPEN.ANM");
@@ -144,7 +155,8 @@ namespace {
 // Which screens have the menu music: all but the results and the course itself.
 bool has_music(TitleScreens::Screen s) {
   using S = TitleScreens::Screen;
-  return s == S::Main || s == S::PsjModeSelect || s == S::UnknownModeSelect || s == S::Option || s == S::PsjHiscore;
+  return s == S::Main || s == S::PsjModeSelect || s == S::UnknownModeSelect || s == S::CdChange || s == S::TrackSelect ||
+         s == S::Option || s == S::PsjHiscore;
 }
 }  // namespace
 
@@ -190,6 +202,8 @@ TitleScreens::Result TitleScreens::tick(const Input& in) {
     case Screen::Main: r = main_menu(in); break;
     case Screen::PsjModeSelect: r = psj_mode_select(in); break;
     case Screen::UnknownModeSelect: r = unknown_mode_select(in); break;
+    case Screen::CdChange: r = cd_change(in); break;
+    case Screen::TrackSelect: r = track_select(in); break;
     case Screen::Option: r = options(in); break;
     case Screen::PsjHiscore: r = psj_hiscore(in, 0); break;
     case Screen::Results: r = psj_hiscore(in, ++results_frame_); break;
@@ -343,6 +357,28 @@ void TitleScreens::draw_text(const std::string& text, int jitter) {
       }
       ++column;
     }
+  }
+  layers_.push_back(std::move(layer));
+}
+
+void TitleScreens::draw_text_at(const std::string& text, float x, float y, float scale, int range) {
+  if (!text_ || text.empty()) return;
+  constexpr float kDepth = 2690, kWidth = 90;  // as draw_text: the original's text space
+  Hud::Layer layer;
+  layer.view.eye = {0, 0, 0};
+  layer.view.target = {0, 0, 4730};
+  layer.view.fov_y = float(682 * kTau / 4096.0);
+  lines_.set_view(layer.view);
+  LineBuilder::Xform xf;
+  xf.m.m = {{{scale, 0, 0}, {0, scale, 0}, {0, 0, scale}}};
+  int column = 0;
+  for (const char ch : text) {
+    const int object = text_->object_for(static_cast<unsigned char>(ch), false);
+    if (ch != ' ' && object >= 0 && object < int(font_.objects.size())) {
+      xf.t = {x + kWidth * scale * float(column), y, kDepth};
+      lines_.object(font_.objects[std::size_t(object)], xf, range, 0, nullptr, layer.lines);
+    }
+    ++column;
   }
   layers_.push_back(std::move(layer));
 }
@@ -630,6 +666,178 @@ TitleScreens::Result TitleScreens::unknown_mode_select(const Input& in) {
     menu_movie_ = unknown_close_;
     leaving_ = true;
     speed_ = 1;
+  }
+  return Result::None;
+}
+
+// CD CHANGE (own-CD side): change the CD, this CD (go on), back; Vibri sitting.
+// Arriving from the track select keeps the cursor (moved off back); from anywhere
+// else it starts on "this CD". Our app opens its file picker for "change the CD".
+TitleScreens::Result TitleScreens::cd_change(const Input& in) {
+  static const Result results[3] = {Result::ChangeCd, Result::CdReady, Result::CdChangeBack};
+  static const std::vector<int> voices[3] = {{246, 247}, {246, 248}, {96}};
+  static const int cues[3] = {0, 0, 3};
+  constexpr int kBack = 2;
+  const bool still = fade_frame_ == 0;
+  if (arrived_) {
+    vibri_ = Vibri::Sitting;
+    leaving_ = false;
+    speed_ = 0;
+    rewind_movies();
+    if (previous_ == Screen::TrackSelect) {
+      camera_cue_ = 1;
+      if (cd_cursor_.index == kBack) cd_cursor_.index = 1;
+      entering_ = false;
+    } else {
+      cd_cursor_.index = 1;
+      camera_cue_ = 2;
+      entering_ = true;
+    }
+    menu_movie_ = cd_steps_[std::size_t(cd_cursor_.index)];
+    set_camera(camera_cue_);
+    play_music();
+  }
+  const MenuRead r = read(cd_cursor_, in, true, still && !entering_ && !leaving_);
+  int jitter = kMenuJitter * kGteOne;
+  if (next_ == Screen::Done) jitter += fade_jitter();
+  models_[std::size_t(m_cd_)].jitter_all(jitter / kGteOne);
+  const int i = cd_cursor_.index;
+  if (r.changed && (r.up || r.down)) {
+    say(voices[i], 64, Vibri::SittingSpeaking);
+    if (r.up) {
+      menu_movie_ = cd_steps_[std::size_t(i)];
+      movies_[std::size_t(menu_movie_)].clip.rewind(true);
+      speed_ = -1;
+    } else {
+      menu_movie_ = cd_steps_[std::size_t((i + 2) % 3)];
+      movies_[std::size_t(menu_movie_)].clip.rewind();
+      speed_ = 1;
+    }
+  }
+  if (r.back) {
+    menu_movie_ = cd_steps_[std::size_t(i)];
+    movies_[std::size_t(menu_movie_)].clip.rewind();
+    say(voices[i], 64, Vibri::SittingSpeaking);
+    speed_ = 0;
+  }
+  Hud::Layer vibri, menu;
+  vibri.view = vibri_view();
+  lines_.set_view(vibri.view);
+  draw_vibri(jitter, vibri.lines);
+  view_ = camera_view(cam_menu_);
+  cameras_[std::size_t(cam_menu_)].clip.advance(kTick);
+  if (fade_ == kOut && !leaving_) update_camera(cues[i]);
+  if (fade_ == kIn) update_camera(camera_cue_);
+  menu.view = view_;
+  lines_.set_view(menu.view);
+  if (entering_) draw_menu_movie(cd_open_, menu.lines);
+  else draw_movie(menu_movie_, speed_, menu.lines);
+  layers_.push_back(std::move(vibri));
+  layers_.push_back(std::move(menu));
+  if (leaving_ && movies_[std::size_t(cd_close_)].clip.finished()) {
+    leaving_ = false;
+    set_camera(cues[i]);
+    return results[i];
+  }
+  if (r.confirm) {
+    say({1}, 90, Vibri::Hidden);
+    if (i < kBack) {
+      set_camera(cues[i]);
+      return results[i];
+    }
+    leaving_ = true;
+    menu_movie_ = cd_close_;
+    movies_[std::size_t(cd_close_)].clip.rewind();
+    speed_ = 1;
+  }
+  return Result::None;
+}
+
+// TRACK SELECT (own-CD side, for one track and the speed courses): the track's number
+// between two arrows, left and right step it (wrapping), Vibri standing says it; the
+// number is drawn large and shaking while it has the cursor; back below. Behaviour read
+// from the original's TitleDraw; our own code.
+TitleScreens::Result TitleScreens::track_select(const Input& in) {
+  const bool still = fade_frame_ == 0;
+  auto say_track = [&]() { say(say_number(track, 1).clips, 64, Vibri::StandingSpeaking); };
+  if (arrived_) {
+    vibri_ = Vibri::Standing;
+    play_music();
+    track = 1;
+    trk_cursor_.index = 0;
+    menu_movie_ = trk_left_;
+    rewind_movies();
+    camera_cue_ = 4;
+    set_camera(4);
+    speed_ = 0;
+    leaving_ = false;
+    trk_wait_ = 0;
+    say_track();
+  }
+  const MenuRead r = read(trk_cursor_, in, false, still);
+  int jitter = kMenuJitter * kGteOne;
+  int text_jitter = kTextJitter * kGteOne;
+  if (fade_ == kOut && trk_cursor_.index == 0) jitter += fade_jitter(), text_jitter += fade_jitter();
+  Model& model = models_[std::size_t(m_trk_)];
+  model.jitter_all(jitter / kGteOne);
+  const int tracks = std::max(1, num_tracks);
+  if (trk_cursor_.index == 0 && (r.right || r.left)) {
+    if (r.right) track = track % tracks + 1;
+    else track = track == 1 ? tracks : track - 1;
+    say_track();
+    model.look.jitter[r.right ? 1 : 0] = text_jitter / kGteOne;  // the arrow pressed shakes
+    menu_movie_ = r.right ? trk_right_ : trk_left_;
+    movies_[std::size_t(menu_movie_)].clip.rewind();
+    speed_ = 1;
+  }
+  if (r.back) {
+    menu_movie_ = trk_exit_;
+    movies_[std::size_t(trk_exit_)].clip.rewind();
+    speed_ = 1;
+    say({96}, 90, Vibri::StandingSpeaking);
+  }
+  if (r.changed) {
+    menu_movie_ = trk_exit_;
+    if (r.up) {
+      movies_[std::size_t(trk_exit_)].clip.rewind(true);
+      speed_ = -1;
+      say_track();
+    } else if (r.down) {
+      movies_[std::size_t(trk_exit_)].clip.rewind();
+      speed_ = 1;
+      say({96}, 90, Vibri::StandingSpeaking);
+    }
+  }
+  if (trk_cursor_.index != 0) model.look.jitter[2] = text_jitter / kGteOne;  // back shakes while chosen
+  Hud::Layer vibri, menu;
+  vibri.view = vibri_view();
+  lines_.set_view(vibri.view);
+  draw_vibri(jitter, vibri.lines);
+  view_ = camera_view(cam_menu_);
+  cameras_[std::size_t(cam_menu_)].clip.advance(kTick);
+  update_camera(camera_cue_);
+  menu.view = view_;
+  lines_.set_view(menu.view);
+  draw_movie(menu_movie_, speed_, menu.lines);
+  layers_.push_back(std::move(vibri));
+  layers_.push_back(std::move(menu));
+  // The number: bigger and shaking while it is the item chosen.
+  const bool on_number = trk_cursor_.index == 0;
+  int number_range = on_number ? 5 : 0;
+  if (fade_ == kOut && on_number) number_range += fade_jitter() / kGteOne;
+  draw_text_at(std::to_string(track), track >= 10 ? 70.0f : 170.0f, 0.0f, on_number ? 2.8f : 1.8f, number_range);
+  if (leaving_ && ++trk_wait_ == frames(10)) {
+    camera_cue_ = 5;
+    set_camera(5);
+    leaving_ = false;
+  }
+  if (r.confirm) {
+    say({1}, 90, Vibri::Hidden);
+    if (trk_cursor_.index != 0) {
+      leaving_ = true;
+      return Result::TrackBack;
+    }
+    return Result::TrackChosen;
   }
   return Result::None;
 }
