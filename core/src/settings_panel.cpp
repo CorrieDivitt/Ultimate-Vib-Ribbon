@@ -428,7 +428,8 @@ SettingsPanel::Action SettingsPanel::tick(const Input& in, double seconds, Optio
   } else {
     repeat_dir_ = 0;
   }
-  if (d && change(item, d, o, vr)) return Action::Changed;
+  // (Reset colors acts on A only: left or right on it must not wipe the colours.)
+  if (d && item != Item::ResetColours && change(item, d, o, vr)) return Action::Changed;
   return Action::None;
 }
 

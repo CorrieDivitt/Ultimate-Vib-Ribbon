@@ -918,6 +918,9 @@ TEST(disc_sces02873_settings_panel) {
       CHECK(p.value(I::ColourBackground, co, true) == "Black");  // (six, then round)
       p.tick(rt, 0.0, co, true);
       p.tick(dn2, 0.0, co, true);
+      CHECK(p.current() == I::ResetColours);
+      co.colours[3] = 2;
+      CHECK(p.tick(lt, 0.0, co, true) == A::None && p.tick(rt, 0.0, co, true) == A::None && co.colours[3] == 2);  // (A only)
       CHECK(p.tick(ok2, 0.0, co, true) == A::Changed && co.colours == Options{}.colours);
     }
     // The course around you: off, a ring of 3 m by default, 1 to 10 m in half metres.
@@ -980,7 +983,7 @@ TEST(disc_sces02873_settings_panel) {
   CHECK(std::abs(o.vr_angle + 165) < 1e-9);
   go_to(I::LineWidth);
   p.tick(right, 0.02, o, true);
-  CHECK(std::abs(o.vr_line_width - 0.15 * 1.25) < 1e-9);
+  CHECK(std::abs(o.vr_line_width - 0.05 * 1.25) < 1e-9);
   go_to(I::SoundEffects);
   CHECK(p.tick(confirm, 0.02, o, true) == A::Changed && !o.sound_effects);
   go_to(I::Recentre);

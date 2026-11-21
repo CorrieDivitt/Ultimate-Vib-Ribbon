@@ -37,7 +37,7 @@ struct Options {
   // steps through them (15 to 30 a second for most), so this is off by default.
   bool smooth_animation = false;
   double line_width = 0.3;     // relative to the original's one pixel on a 288-line picture
-  double vr_line_width = 0.15;  // the same, in a headset (an eye's picture is much taller)
+  double vr_line_width = 0.05;  // the same, in a headset (an eye's picture is much taller; owner's default)
   double vr_zoom = 1.0;         // in a headset, how close the view stands to Vibri in play (larger: closer)
   double vr_behind_seconds = 30.0;  // in a headset, how long passed parts stay on the line, 2 s at least (kWholeSongSeconds: all of them)
   double vr_ahead_seconds = 30.0;   // and how far ahead it is drawn (play itself builds 8 s ahead; kWholeSongSeconds: to the end)
