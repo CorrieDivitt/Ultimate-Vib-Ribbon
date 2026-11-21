@@ -499,10 +499,10 @@ void change_jitter_scale(Session& s, bool more) {
 }
 
 // Thicker or thinner lines, saved for the display in use. In a headset each step is
-// a quarter more or less, with the confirm click so it can be heard without a console.
+// 0.005 (owner), with the confirm click so it can be heard without a console.
 void change_line_width(Session& s, bool thicker) {
   if (s.opt.vr) {
-    s.line_width = std::clamp(thicker ? s.line_width * 1.25 : s.line_width / 1.25, 0.03, 4.0);
+    s.line_width = std::clamp(std::round((s.line_width + (thicker ? kHeadsetLineStep : -kHeadsetLineStep)) * 1000.0) / 1000.0, kHeadsetLineStep, 1.0);
     s.save.options.vr_line_width = s.line_width;
     s.fx.number(1, 90, 5);
   } else {
@@ -606,7 +606,9 @@ void draw_frame(Session& s, std::vector<vibr::Layer>& layers, double update_ms, 
   const double build_more = double(SDL_GetTicksNS() - now) * 1e-6;  // (the overlay's own lines count as building)
   // Glow (ours): under every layer a copy of its lines, wide and faint (Visual > Glow).
   if (const int g = std::clamp(s.save.options.glow, 0, 4); g > 0) {
-    static const float kWidth[5] = {0, 5, 7, 9, 12}, kBright[5] = {0, 0.10f, 0.16f, 0.24f, 0.35f};
+    // (Owner: the first Soft, 7 wide at 0.16, was already about the most anyone would
+    // want; it is Strong now, the others below it.)
+    static const float kWidth[5] = {0, 3, 4, 5.5f, 7}, kBright[5] = {0, 0.04f, 0.07f, 0.11f, 0.16f};
     s.glow_lines.resize(layers.size());
     std::vector<vibr::Layer> with_glow;
     with_glow.reserve(layers.size() * 2);

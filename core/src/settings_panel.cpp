@@ -205,6 +205,8 @@ void SettingsPanel::close_group() {
 
 std::string SettingsPanel::label(Item item, bool vr) const {
   std::string text = to_font_text(kLabels[table_language(language_)][int(item)]);
+  // The headset's line width shows our default, not the original's (owner).
+  if (item == Item::LineWidth && vr) return text + " (" + value(item, Options{}, vr) + ")";
   switch (item) {
     case Item::WobbleSize: case Item::WobbleHold: case Item::Smooth: case Item::LineWidth: case Item::Zoom:
     case Item::ViewAngle: case Item::SeeAhead: case Item::SeeBehind: case Item::SoundTiming: case Item::PictureTiming: case Item::Glow: case Item::FixedCourses:
@@ -228,7 +230,15 @@ std::string SettingsPanel::value(Item item, const Options& o, bool vr) const {
     case Item::WobbleSize: std::snprintf(buf, sizeof buf, "%.1f", vr ? o.vr_jitter_scale : o.jitter_scale); break;
     case Item::WobbleHold: std::snprintf(buf, sizeof buf, "%d", o.vr_jitter_hold); break;
     case Item::Smooth: return on_off(o.smooth_animation);
-    case Item::LineWidth: std::snprintf(buf, sizeof buf, "%.3f", vr ? o.vr_line_width : o.line_width); break;
+    case Item::LineWidth:
+      if (vr) {  // steps of 0.005: three places, without a trailing nought ("0.05", "0.055")
+        std::snprintf(buf, sizeof buf, "%.3f", o.vr_line_width);
+        std::string t = buf;
+        if (t.size() > 4 && t.back() == '0') t.pop_back();
+        return t;
+      }
+      std::snprintf(buf, sizeof buf, "%.3f", o.line_width);
+      break;
     case Item::Zoom: std::snprintf(buf, sizeof buf, "%.2f", o.vr_zoom); break;
     case Item::ViewAngle: std::snprintf(buf, sizeof buf, "%.0f", o.vr_angle); break;
     case Item::SeeAhead: case Item::SeeBehind: {
@@ -303,9 +313,7 @@ bool SettingsPanel::change(Item item, int d, Options& o, bool vr) {
     case Item::Smooth: o.smooth_animation = !o.smooth_animation; return true;
     case Item::LineWidth: {
       if (!vr) return step(o.line_width, 0.125 * d, 0.125, 4.0);
-      const double before = o.vr_line_width;
-      o.vr_line_width = std::clamp(d > 0 ? o.vr_line_width * 1.25 : o.vr_line_width / 1.25, 0.03, 4.0);
-      return o.vr_line_width != before;
+      return step(o.vr_line_width, kHeadsetLineStep * d, kHeadsetLineStep, 1.0);  // (owner: steps of 0.005)
     }
     case Item::Zoom: {
       const double before = o.vr_zoom;

@@ -831,7 +831,7 @@ TEST(disc_sces02873_settings_panel) {
   }
   // Our settings show the original game's value after the name; the original's options and the actions do not.
   CHECK(p.label(I::SeeAhead, true) == "See ahead (8 s)" && p.label(I::SeeBehind, true) == "See behind (2 s)");
-  CHECK(p.label(I::LineWidth, true) == "Line width (1.000)" && p.label(I::LineWidth, false) == "Line width (1.000)");
+  CHECK(p.label(I::LineWidth, true) == "Line width (0.05)" && p.label(I::LineWidth, false) == "Line width (1.000)");
   CHECK(p.label(I::WobbleHold, true) == "Wobble hold (1)" && p.label(I::WobbleSize, true) == "Wobble size (1.0)");
   CHECK(p.label(I::Smooth) == "Smooth motion (Off)" && p.label(I::SoundTiming) == "Sound timing (0 ms)");
   CHECK(p.label(I::Performance) == "Performance" && p.label(I::ResumeStyle) == "Resume");  // (owner: none for these)
@@ -1023,7 +1023,7 @@ TEST(disc_sces02873_settings_panel) {
   CHECK(std::abs(o.vr_angle + 165) < 1e-9);
   go_to(I::LineWidth);
   p.tick(right, 0.02, o, true);
-  CHECK(std::abs(o.vr_line_width - 0.05 * 1.25) < 1e-9);
+  CHECK(std::abs(o.vr_line_width - 0.055) < 1e-9 && p.value(I::LineWidth, o, true) == "0.055");  // (steps of 0.005)
   go_to(I::SoundEffects);
   CHECK(p.tick(confirm, 0.02, o, true) == A::Changed && !o.sound_effects);
   go_to(I::Recentre);

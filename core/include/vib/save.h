@@ -24,6 +24,9 @@ double clamp_scroll_speed(double v);
 // Custom colours: how many slots (see vib/colours.h for what each is).
 constexpr int kColourSlotCount = 16;
 
+// The headset's line width moves in these steps (owner), from one step to 1.0.
+constexpr double kHeadsetLineStep = 0.005;
+
 struct Options {
   // The language of the menus and words: 0 German, 1 English, 2 Spanish, 3 French,
   // 4 Italian; -1 until the player has chosen one (the title then asks first).
