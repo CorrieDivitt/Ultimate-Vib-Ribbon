@@ -338,6 +338,10 @@ struct Session {
   int song = 0;                    // 1-6 when practising one song
   int final_score = 0, final_bonus = 0, final_form = 1;  // the last song cleared
   bool final_time_up = false;  // a speed course's music ran out before the top speed
+  // The full course combo: how many songs this run of the course has, and whether every
+  // song so far was cleared with no miss (play_song keeps it; its first song sets it).
+  int course_songs = 1;
+  bool course_clean = false;
   bool zooming = false, turning = false;                  // the sticks are moving the view (headset)
   bool demo = false;  // the title's demo: the game plays itself (missing now and then), any button ends it
   // The player's own music, played as a one-track audio CD: its course follows the
@@ -836,6 +840,8 @@ void meter_below_vibri(const Hud::Layer& meter, float vibri_z, Vec3f eye, std::v
 // "Full Combo!" in a headset: its middle 1,000 above the road, over Vibri's head (she
 // runs under 805) and under the score marks once settled.
 constexpr float kFullComboAboveRoad = -1000.0f;
+// "Full Course Combo!": two lines, "Combo!" larger and lower; its middle a little higher.
+constexpr float kFullCourseComboAboveRoad = -1150.0f;
 constexpr float kTimingBelowRoad = 720.0f, kScrollNoteBelowRoad = 1530.0f, kTimingScale = 0.8f;
 
 void number_below_vibri(const std::vector<SceneLine>& text, float vibri_z, Vec3f eye, std::vector<SceneLine>& out, float kY = 1290.0f) {
@@ -999,10 +1005,13 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   // (the menus' music and voice are not effects). Read as each sound comes: the
   // pause can change it.
   const bool& effects_on = s.save.options.sound_effects;
-  // The full combo (task 4.18): a song cleared with no miss, celebrated if set.
+  // The full combo (task 4.18): a song cleared with no miss, celebrated if set; a
+  // whole course with none, more so, at the end of its last song.
   int song_hits = 0, song_misses = 0;
-  bool celebrating = false;
+  bool celebrating = false, whole_course = false;
   double fc_time = 0;
+  const bool clean_before = track_index == 0 || s.course_clean;
+  s.course_clean = false;  // (left so unless this song is a full combo)
   auto handle = [&](const std::vector<GameEvent>& events) {
     bool form_up = false, hit = false, miss = false;
     for (const GameEvent& e : events) {
@@ -1447,11 +1456,12 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
       fc_lines.clear();
       if (s.opt.vr) {
         std::vector<SceneLine> placed;
-        number_below_vibri(s.panel->full_combo(fc_time, h.jitter_seed), s.scene.vibri_z(), view.eye, placed, kFullComboAboveRoad);
+        number_below_vibri(whole_course ? s.panel->full_course_combo(fc_time, h.jitter_seed) : s.panel->full_combo(fc_time, h.jitter_seed),
+                           s.scene.vibri_z(), view.eye, placed, whole_course ? kFullCourseComboAboveRoad : kFullComboAboveRoad);
         convert(placed, fc_lines);
         layers.push_back({&fc_lines, matrix(view), view.fov_y});
       } else {
-        const Hud::Layer word = s.panel->draw_full_combo(fc_time, h.jitter_seed);
+        const Hud::Layer word = s.panel->draw_full_combo(fc_time, h.jitter_seed, whole_course);
         convert(word.lines, fc_lines);
         layers.push_back({&fc_lines, matrix(word.view), word.view.fov_y});
       }
@@ -1492,10 +1502,12 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     // its 2.6 s over the running scene before the clear goes on as usual.
     if (celebrating) {
       fc_time += dt;
-      if (fc_time >= SettingsPanel::kFullComboSeconds) outcome = Outcome::Clear;
+      if (fc_time >= (whole_course ? SettingsPanel::kFullCourseComboSeconds : SettingsPanel::kFullComboSeconds)) outcome = Outcome::Clear;
     } else if (outcome == Outcome::Clear && s.save.options.fc_celebration && !s.demo && !course_info(s.course).auto_play &&
                song_misses == 0 && song_hits > 0 && game.score() > 0) {
-      std::printf("Full combo: %d hits, no misses\n", song_hits);
+      s.course_clean = clean_before;
+      whole_course = clean_before && s.course_songs > 1 && track_index == s.course_songs - 1;
+      std::printf("Full %scombo: %d hits, no misses\n", whole_course ? "course " : "", song_hits);
       celebrating = true;
       fc_time = 0;
       if (effects_on) s.fx.play(1, 14, 127, 4);  // the form-up sound
@@ -1663,6 +1675,7 @@ int run(int argc, char** argv) {
       int points = carried;
       bool finished = false;  // the course ended, cleared or lost, rather than being left
       last_lost = last_left = last_cleared = false;
+      s.course_songs = int(songs.size());  // (a single song as practice: no course combo)
       for (std::size_t i = std::size_t(first); i < songs.size(); ++i) {
         const int before = points;
         const Result r = play_song(s, songs[i], int(i), points, seed);
@@ -1726,6 +1739,7 @@ int run(int argc, char** argv) {
       std::printf("Music: %s (%u Hz, %u channels, %u:%02u)\n", opt.music_file.c_str(), own_music->source_rate, own_music->source_channels,
                   sectors / 75 / 60, sectors / 75 % 60);
       int points = 0;
+      s.course_songs = 1;
       const Result r = play_song(s, 0, 0, points, seed ? seed : std::uint32_t(SDL_GetTicksNS()));
       std::printf("%s, score %d\n", r == Result::Clear ? "Cleared" : r == Result::GameOver ? "Game over" : "Left", s.final_score);
     } else if (opt.song || opt.course_given) {
@@ -2360,6 +2374,7 @@ int run(int argc, char** argv) {
             own_start_points = 0;
             const bool speed = is_speed_course(own_course);
             const bool scored = own_course == Course::OneTrack || own_course == Course::AllTracks;
+            s.course_songs = own_course == Course::AllTracks ? int(names.size()) : 1;  // (all tracks: a full course combo is possible)
             // (A speed course: each picked track is a try, the next one starting when the
             // music runs out first; reaching the top speed ends the run.)
             for (std::size_t k = first; k < names.size() && (r == Result::Clear || (speed && r == Result::GameOver && s.final_time_up)); ++k) {

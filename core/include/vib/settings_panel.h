@@ -115,8 +115,13 @@ class SettingsPanel {
   // from -z, y down), the word about 1,500 across.
   static constexpr double kFullComboSeconds = 2.6;
   std::vector<SceneLine> full_combo(double t, std::uint32_t seed);
-  // The same through the text camera, upper middle of the screen (the monitor).
-  Hud::Layer draw_full_combo(double t, std::uint32_t seed);
+  // A whole course with no misses: bigger. "Full Course" pops in as above, then a
+  // large "Combo!" slams down from oversize with a shake and a shockwave ring; three
+  // wider bursts of rays and twinkling sparkles all round; about 4 s.
+  static constexpr double kFullCourseComboSeconds = 4.0;
+  std::vector<SceneLine> full_course_combo(double t, std::uint32_t seed);
+  // Either, through the text camera, upper middle of the screen (the monitor).
+  Hud::Layer draw_full_combo(double t, std::uint32_t seed, bool course = false);
   // The timing feedback on the monitor: `text` centred a little above the score's
   // number, dimmed by `brightness` (0-1).
   Hud::Layer draw_timing(const std::string& text, float brightness, std::uint32_t seed);
@@ -139,6 +144,11 @@ class SettingsPanel {
 
  private:
   Hud::Layer start_layer(std::uint32_t seed);
+  // One word of a celebration: its letters popping in from `start`, `stagger` apart,
+  // each swelling to about 1.35 and settling with a hop, then riding a wave; centred
+  // across, its middle at `y`; grey `shade` (0-1).
+  void pop_word(const std::string& word, float scale, float y, double t, double start, double stagger, float shade,
+                std::uint32_t seed, std::vector<SceneLine>& out);
 
   const GameText* text_;
   int language_;

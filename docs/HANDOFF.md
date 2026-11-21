@@ -16,7 +16,7 @@ Confidence labels used below: **[measured]** = computed this session from the di
 - P1: nothing to build. Since cc3b9b0 the time-up screen returns ResultsDone, and main.cpp sends ResultsDone from Screen::Again to AGAIN SELECT; PlayAgain on a speed course restarts from its first track. Section 2w's "no again? after time up yet" was out of date (corrected there).
 - 4.14 built; owner's first test: "worked really well". Then (owner): maximum 10x, and L2/R2 change it mid-song without pausing. Built; owner: "works surprisingly well at 10x", locked in. **Task 4.14 done.**
 - 4.12 timing feedback built; moved below the road at the owner's request; locked in. **Task 4.12 done.**
-- 4.18 full combo celebration built, waiting for the test (section 2aa).
+- 4.18 full combo celebration built; owner: "that was perfect". Then (owner): a full course combo in the same setting, bigger; built, waiting for the test (section 2aa, last part).
 
 **End of session 3 (2026-11-21, about 00:40 Toronto):** the owner locked in everything built this session. Done:
 - 4.6 to 4.10: performance overlay, infinite horizon, score above Vibri, progress meter below her, score in numbers.
@@ -556,7 +556,9 @@ Owner's spec: a menu option "FC celebration"; when on, "Full Combo!" pops up at 
 - Tests: label and default, every character in the font, nothing at 0 s, letters arriving, the whole word centred at 2.05 s, rays out at 0.8 s, faded at the end, save round trip.
 - Quick test: `--last 15` (the skipped part is played perfectly, so a full combo needs only the last 15 s).
 
-To judge: the size and height over Vibri, the timing (2.6 s), whether the rays read as a celebration in line art, whether it should also show on the clear screen or count for a whole course.
+Owner's test of the song celebration: "perfect".
+
+**Full course combo (owner):** the same setting; a whole course with no misses gets "Full Course Combo!" with bigger flair. `Session::course_songs` (set by `play_course` to its song count, 1 for a practice song; by the own-music loop to the number of files for All tracks, 1 otherwise) and `Session::course_clean`: `play_song` reads `clean_before` (true on track 0, else the flag), clears the flag, and sets it back only if this song is a full combo; so a miss, a loss, leaving, or an "again?" from a lost song all break the chain. On the last song (`track_index == course_songs - 1`, more than one song) with a clean chain, `whole_course` replaces the song celebration with `SettingsPanel::full_course_combo` for `kFullCourseComboSeconds` (4.0 s): "Full Course" (scale 2.2, middle at -300) pops in as the song word does (`pop_word`, shared); at 1.0 s "Combo!" (scale 3.6, middle at 260) slams down from 2.6x over 0.18 s with a decaying shake and a shockwave ring (64 sides, ellipse 1.25 x 0.6, out to 2,450 over 0.7 s); three ray bursts (24 at 0.6 s, 36 at 1.2 s, 30 at 1.9 s, out to 2,300-2,800, longer strokes); 28 twinkling four-pointed sparkles from 1.2 s (hash-placed on a ring 1,100-2,000 out); fades over the last 0.6 s. Headset middle 1,150 above the road (`kFullCourseComboAboveRoad`). Tests: nothing at 0 s, "Combo!" lower than "Full Course" once in, the ring and rays out, wider and fuller than the song word, faded at the end.
 
 ## 2o. Idea dropped: Vibri speaking English (session 3, 2026-11-20)
 

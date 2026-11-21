@@ -815,6 +815,29 @@ TEST(disc_sces02873_settings_panel) {
     for (const SceneLine& l : p.full_combo(SettingsPanel::kFullComboSeconds - 0.01, 1)) dim = dim && l.colour.r < 10;
     CHECK(dim);  // faded out at the end
     CHECK(!p.draw_full_combo(1.0, 2).lines.empty());
+    // The full course combo: bigger and longer. Nothing at first; "Combo!" arrives at 1 s,
+    // with a shockwave ring; at 2.5 s both lines are in, wider than a song's word, and
+    // sparkles twinkle; faded by the end.
+    CHECK(p.full_course_combo(0.0, 1).empty());
+    const auto before_slam = p.full_course_combo(0.95, 1), after_slam = p.full_course_combo(1.35, 1);
+    float deepest_before = -1e9f, deepest_after = -1e9f, ring = 0;
+    // (Letters' lines carry vertex numbers; the rays, ring and sparkles none.)
+    for (const SceneLine& l : before_slam)
+      if (l.vertex_a) deepest_before = std::max(deepest_before, std::max(l.a.y, l.b.y));
+    for (const SceneLine& l : after_slam) {
+      if (l.vertex_a) deepest_after = std::max(deepest_after, std::max(l.a.y, l.b.y));
+      ring = std::max(ring, std::abs(l.a.x));
+    }
+    CHECK(deepest_before < 100.0f && deepest_after > 400.0f);  // "Combo!" is below "Full Course"
+    CHECK(ring > 1500.0f);                                     // the ring and the rays are out
+    const auto all_in = p.full_course_combo(3.0, 1);
+    const auto [cc_lo, cc_hi] = width_of(all_in);
+    CHECK(cc_hi - cc_lo > (fc_hi - fc_lo));                     // bigger than a song's
+    CHECK(all_in.size() > settled.size() + 40);                 // ("Combo!" and sparkles too)
+    bool course_dim = true;
+    for (const SceneLine& l : p.full_course_combo(SettingsPanel::kFullCourseComboSeconds - 0.01, 1)) course_dim = course_dim && l.colour.r < 10;
+    CHECK(course_dim);
+    CHECK(!p.draw_full_combo(2.0, 2, true).lines.empty());
     p.set_items({I::ScrollSpeed});
     SettingsPanel::Input faster;
     faster.right = true;

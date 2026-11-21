@@ -448,76 +448,157 @@ Hud::Layer SettingsPanel::draw_score(int score, std::uint32_t seed) {
   return layer;
 }
 
-std::vector<SceneLine> SettingsPanel::full_combo(double t, std::uint32_t seed) {
-  // (The words are the same in every language: gamers say "full combo" everywhere.)
-  static const std::string kWord = "Full Combo!";
-  constexpr float kScale = 2.2f;           // a letter about 312 tall, the word about 1,740 across
-  constexpr double kStagger = 0.07;        // between letters popping in
-  constexpr double kPop = 0.32;            // each letter's swell and settle
-  const double fade = std::clamp((kFullComboSeconds - t) / 0.45, 0.0, 1.0);
-  auto ease_back = [](double u) {          // 0 to 1, overshooting to about 1.35 on the way
-    const double c = 2.4;
-    const double v = u - 1.0;
-    return 1.0 + (c + 1.0) * v * v * v + c * v * v;
-  };
-  std::vector<SceneLine> out;
-  const auto grey = static_cast<std::uint8_t>(255.0 * fade);
-  const float width = text_width(kWord, kScale);
-  const int n = int(kWord.size());
+namespace {
+
+constexpr double kPi = 3.14159265358979;
+
+double ease_back(double u) {  // 0 to 1, overshooting to about 1.35 on the way
+  const double c = 2.4;
+  const double v = u - 1.0;
+  return 1.0 + (c + 1.0) * v * v * v + c * v * v;
+}
+
+std::uint8_t grey(double v) { return static_cast<std::uint8_t>(255.0 * std::clamp(v, 0.0, 1.0)); }
+
+// A burst of short rays flying out from the middle on an ellipse, shrinking and
+// fading as they go; `u` 0 to 1 through it.
+void rays(double u, int count, double turn, double from, double to, double length, double fade, std::vector<SceneLine>& out) {
+  if (u <= 0 || u >= 1) return;
+  const double far = from + (to - from) * (1.0 - (1.0 - u) * (1.0 - u));  // fast, then slowing
+  const double len = length * (1.0 - u);
+  const std::uint8_t shade = grey((1.0 - u) * fade);
+  for (int k = 0; k < count; ++k) {
+    const double a = 2.0 * kPi * (double(k) + turn) / double(count);
+    const double cx = std::cos(a) * 1.25, cy = std::sin(a) * 0.55;  // wider than tall, as the words are
+    SceneLine l;
+    l.a = {float(cx * far), float(cy * far), 0.0f};
+    l.b = {float(cx * (far + len)), float(cy * (far + len)), 0.0f};
+    l.colour = {shade, shade, shade};
+    out.push_back(l);
+  }
+}
+
+}  // namespace
+
+void SettingsPanel::pop_word(const std::string& word, float scale, float y, double t, double start, double stagger,
+                             float shade, std::uint32_t seed, std::vector<SceneLine>& out) {
+  constexpr double kPop = 0.32;  // each letter's swell and settle
+  const float width = text_width(word, scale);
+  const int n = int(word.size());
+  const std::uint8_t g = grey(shade);
   for (int i = 0; i < n; ++i) {
-    if (kWord[std::size_t(i)] == ' ') continue;
-    const double u = (t - kStagger * i) / kPop;
+    if (word[std::size_t(i)] == ' ') continue;
+    const double u = (t - start - stagger * i) / kPop;
     if (u <= 0) continue;
     const double grow = u >= 1 ? 1.0 : ease_back(u);
-    const double hop = u < 1 ? -90.0 * std::sin(3.14159265 * u) : 0.0;
+    const double hop = u < 1 ? -90.0 * std::sin(kPi * u) : 0.0;
     // Once all are in, a wave runs along the word.
-    const double settled = t - (kStagger * (n - 1) + kPop);
-    const double wave = settled > 0 ? -30.0 * std::sin(2.0 * 3.14159265 * (1.4 * settled) - 0.55 * i) * std::min(1.0, settled * 3.0) : 0.0;
-    std::string only(kWord.size(), ' ');
-    only[std::size_t(i)] = kWord[std::size_t(i)];
-    std::vector<SceneLine> letter = text_lines(to_font_text(only), kScale, seed + std::uint32_t(i) * 977u, u < 1 ? 14 : 5);
-    const float cx = -0.5f * width + 36.0f * kScale + 72.0f * kScale * float(i);
+    const double settled = t - (start + stagger * (n - 1) + kPop);
+    const double wave = settled > 0 ? -30.0 * std::sin(2.0 * kPi * (1.4 * settled) - 0.55 * i) * std::min(1.0, settled * 3.0) : 0.0;
+    std::string only(word.size(), ' ');
+    only[std::size_t(i)] = word[std::size_t(i)];
+    std::vector<SceneLine> letter = text_lines(to_font_text(only), scale, seed + std::uint32_t(i) * 977u, u < 1 ? 14 : 5);
+    const float cx = -0.5f * width + 36.0f * scale + 72.0f * scale * float(i);
     for (SceneLine& l : letter) {
       for (Vec3f* p : {&l.a, &l.b}) {
         p->x = cx + (p->x - cx) * float(grow);
-        p->y = p->y * float(grow) + float(hop + wave);
+        p->y = y + p->y * float(grow) + float(hop + wave);
       }
       l.jitter_a = {l.jitter_a.x * float(grow), l.jitter_a.y * float(grow), l.jitter_a.z};
       l.jitter_b = {l.jitter_b.x * float(grow), l.jitter_b.y * float(grow), l.jitter_b.z};
-      l.colour = {grey, grey, grey};
+      l.colour = {g, g, g};
       out.push_back(l);
     }
   }
-  // Two bursts of rays from behind the word: short strokes flying out, shrinking and
-  // fading as they go.
-  for (const double start : {0.55, 1.15}) {
-    const double u = (t - start) / 0.85;
-    if (u <= 0 || u >= 1) continue;
-    const int rays = start < 1 ? 18 : 24;
-    const double turn = start < 1 ? 0.0 : 0.5;
-    const double far = 300.0 + 1400.0 * (1.0 - (1.0 - u) * (1.0 - u));  // fast, then slowing
-    const double length = 260.0 * (1.0 - u);
-    const auto shade = static_cast<std::uint8_t>(255.0 * (1.0 - u) * fade);
-    for (int k = 0; k < rays; ++k) {
-      const double a = 2.0 * 3.14159265 * (double(k) + turn) / double(rays);
-      const double cx = std::cos(a) * 1.25, cy = std::sin(a) * 0.55;  // an ellipse, wider than tall, as the word is
-      SceneLine l;
-      l.a = {float(cx * far), float(cy * far), 0.0f};
-      l.b = {float(cx * (far + length)), float(cy * (far + length)), 0.0f};
-      l.colour = {shade, shade, shade};
+}
+
+std::vector<SceneLine> SettingsPanel::full_combo(double t, std::uint32_t seed) {
+  // (The words are the same in every language: gamers say "full combo" everywhere.)
+  const double fade = std::clamp((kFullComboSeconds - t) / 0.45, 0.0, 1.0);
+  std::vector<SceneLine> out;
+  pop_word("Full Combo!", 2.2f, 0.0f, t, 0.0, 0.07, float(fade), seed, out);  // about 1,630 across
+  // Two bursts of rays from behind the word.
+  rays((t - 0.55) / 0.85, 18, 0.0, 300.0, 1700.0, 260.0, fade, out);
+  rays((t - 1.15) / 0.85, 24, 0.5, 300.0, 1700.0, 260.0, fade, out);
+  return out;
+}
+
+std::vector<SceneLine> SettingsPanel::full_course_combo(double t, std::uint32_t seed) {
+  const double fade = std::clamp((kFullCourseComboSeconds - t) / 0.6, 0.0, 1.0);
+  std::vector<SceneLine> out;
+  // "Full Course" pops in above.
+  pop_word("Full Course", 2.2f, -300.0f, t, 0.0, 0.07, float(fade), seed, out);
+  // Then "Combo!" slams down: from 2.6 times its size to its size in 0.18 s, a shake
+  // that dies away, then the same wave as the line above.
+  constexpr double kSlam = 1.0, kSlamFor = 0.18;
+  if (t > kSlam) {
+    const double u = std::min(1.0, (t - kSlam) / kSlamFor);
+    const double big = 1.0 + 1.6 * (1.0 - u) * (1.0 - u);
+    const double since = t - kSlam - kSlamFor;
+    const double shake = since > 0 ? 40.0 * std::exp(-since * 6.0) * std::sin(since * 60.0) : 0.0;
+    std::vector<SceneLine> word;
+    pop_word("Combo!", 3.6f, 0.0f, kSlam + 1.0, kSlam, 0.0, float(fade), seed + 7u, word);  // (all in, settled)
+    const double wave = since > 0 ? -25.0 * std::sin(2.0 * kPi * 1.1 * since) * std::min(1.0, since * 2.0) : 0.0;
+    for (SceneLine& l : word) {
+      for (Vec3f* p : {&l.a, &l.b}) {
+        p->x = float(p->x * big + shake);
+        p->y = float(260.0 + p->y * big + wave);
+      }
       out.push_back(l);
+    }
+    // The shockwave: a ring racing out from "Combo!" as it lands, thinning to nothing.
+    const double r = (t - kSlam - kSlamFor) / 0.7;
+    if (r > 0 && r < 1) {
+      const double rad = 250.0 + 2200.0 * (1.0 - (1.0 - r) * (1.0 - r));
+      const std::uint8_t g = grey((1.0 - r) * fade);
+      constexpr int kSides = 64;
+      for (int k = 0; k < kSides; ++k) {
+        const double a0 = 2.0 * kPi * k / kSides, a1 = 2.0 * kPi * (k + 1) / kSides;
+        SceneLine l;
+        l.a = {float(std::cos(a0) * rad * 1.25), float(260.0 + std::sin(a0) * rad * 0.6), 0.0f};
+        l.b = {float(std::cos(a1) * rad * 1.25), float(260.0 + std::sin(a1) * rad * 0.6), 0.0f};
+        l.colour = {g, g, g};
+        out.push_back(l);
+      }
+    }
+  }
+  // Three bursts of rays, more and wider than a song's.
+  rays((t - 0.6) / 0.9, 24, 0.0, 400.0, 2300.0, 320.0, fade, out);
+  rays((t - 1.2) / 1.0, 36, 0.5, 450.0, 2800.0, 420.0, fade, out);
+  rays((t - 1.9) / 1.0, 30, 0.25, 400.0, 2500.0, 360.0, fade, out);
+  // Sparkles: small four-pointed stars appearing and vanishing all round the words.
+  if (t > 1.2) {
+    for (int k = 0; k < 28; ++k) {
+      std::uint32_t h = (std::uint32_t(k) + 1u) * 2654435761u;
+      h ^= h >> 13;
+      h *= 0x5bd1e995u;
+      h ^= h >> 15;
+      const double phase = double(h & 1023u) / 1024.0;              // when in its cycle it starts
+      const double life = std::fmod((t - 1.2) * 1.6 + phase, 1.0);  // 0 to 1, again and again
+      const double size = 70.0 * std::sin(kPi * life);
+      const double a = 2.0 * kPi * double((h >> 10) & 1023u) / 1024.0;
+      const double d = 1100.0 + 900.0 * double((h >> 20) & 1023u) / 1024.0;
+      const double x = std::cos(a) * d * 1.2, y = 0.0 + std::sin(a) * d * 0.55;
+      const std::uint8_t g = grey(std::sin(kPi * life) * fade);
+      for (int arm = 0; arm < 2; ++arm) {
+        SceneLine l;
+        l.a = arm ? Vec3f{float(x - size), float(y), 0.0f} : Vec3f{float(x), float(y - size), 0.0f};
+        l.b = arm ? Vec3f{float(x + size), float(y), 0.0f} : Vec3f{float(x), float(y + size), 0.0f};
+        l.colour = {g, g, g};
+        out.push_back(l);
+      }
     }
   }
   return out;
 }
 
-Hud::Layer SettingsPanel::draw_full_combo(double t, std::uint32_t seed) {
+Hud::Layer SettingsPanel::draw_full_combo(double t, std::uint32_t seed, bool course) {
   Hud::Layer layer;
   layer.view.eye = {0, 0, 0};
   layer.view.target = {0, 0, 4730};
   layer.view.fov_y = float(682 * kTau / 4096.0);
   const float half_height = 4000.0f * std::tan(0.5f * layer.view.fov_y);
-  layer.lines = full_combo(t, seed);
+  layer.lines = course ? full_course_combo(t, seed) : full_combo(t, seed);
   for (SceneLine& l : layer.lines) {  // the upper middle of the screen
     l.a.y -= 0.35f * half_height, l.b.y -= 0.35f * half_height;
     l.a.z += 4000.0f, l.b.z += 4000.0f;
