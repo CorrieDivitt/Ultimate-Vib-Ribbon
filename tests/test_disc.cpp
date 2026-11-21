@@ -1276,3 +1276,50 @@ TEST(disc_sces02873_speed_label_shows_in_every_language) {
     }
   }
 }
+
+TEST(disc_sces02873_vibri_outside_play_takes_her_colour) {
+  // In the menus, at the title and in the kiosk film Vibri's lines carry the rabbit
+  // form's part (custom colours colour her there too); nothing else on those screens does.
+  const std::string cue = test_cue();
+  if (cue.empty()) SKIP("set VIB_TEST_CUE to your SCES-02873 .cue to run");
+  DiscImage disc = DiscImage::open(path_from_utf8(cue));
+  Iso9660 iso(disc);
+  const std::uint8_t rabbit = std::uint8_t(line_part::kVibri + 1);
+  auto count = [&](const std::vector<Hud::Layer>& layers, std::size_t& tagged, std::size_t& other) {
+    for (const auto& l : layers)
+      for (const SceneLine& s : l.lines) (s.part == rabbit ? tagged : other) += s.part == rabbit || s.part == 0 ? 1 : 0;
+  };
+  {
+    const Pak game(iso.read("GAME/02_FILES.PAK"));
+    TitleScreens t(game);
+    t.go_to(TitleScreens::Screen::Main);
+    std::size_t tagged = 0, other = 0;
+    for (int i = 0; i < 120; ++i) {
+      t.tick({});
+      count(t.layers(), tagged, other);
+    }
+    CHECK(tagged > 0 && other > 0);  // (Vibri, and the menu itself untouched)
+  }
+  {
+    const Pak title(iso.read("TITLE/FILES.PAK"));
+    TitleIntro t(title);
+    std::size_t tagged = 0, other = 0;
+    for (int i = 0; i < 1500; ++i) {
+      t.tick(false);
+      if (i > 1400) count(t.layers(), tagged, other);  // (at the title)
+    }
+    CHECK(tagged > 0 && other > 0);
+  }
+  {
+    const Pak pak(iso.read("KIOSK/02_FILES.PAK"));
+    KioskMovie k(pak, 1);
+    KioskMovie::Input in;
+    in.music_playing = true;
+    std::size_t tagged = 0, other = 0;
+    for (int i = 0; i < 600; ++i) {
+      k.tick(in);
+      count(k.layers(), tagged, other);
+    }
+    CHECK(tagged > 0 && other > 0);
+  }
+}

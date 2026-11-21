@@ -42,6 +42,11 @@ struct SceneLine {
 namespace line_part {
 constexpr std::uint8_t kNone = 0, kRoad = 1, kObstacle = 2 /* + road 0-9 */, kVibri = 12 /* + form 0-3 */, kEvo = 16;
 }
+// Vibri outside play (the menus, the title, the results, the kiosk film): she is in
+// her usual form there, so her lines from `from` on take the rabbit form's colour.
+inline void tag_vibri(std::vector<SceneLine>& lines, std::size_t from) {
+  for (std::size_t i = from; i < lines.size(); ++i) lines[i].part = std::uint8_t(line_part::kVibri + 1);
+}
 
 struct SceneView {
   Vec3f eye, target;  // world space; "up" on screen is -Y

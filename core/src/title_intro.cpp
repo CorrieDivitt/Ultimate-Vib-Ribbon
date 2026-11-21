@@ -155,7 +155,9 @@ void TitleIntro::update_element(Element& e, std::vector<SceneLine>& out) {
   if (draw) {
     const ModelCue& c = e.cues[std::size_t(e.cue)];
     Movie& m = e.movies[std::size_t(c.movie)];
+    const std::size_t from = out.size();
     lines_.animated(e.models[std::size_t(c.model)], m.anim, m.clip.pose(), {}, jitter, out);
+    if (&e == &vibri_) tag_vibri(out, from);
     m.clip.advance(kTick);
   }
   ++e.frame;

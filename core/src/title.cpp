@@ -318,7 +318,9 @@ void TitleScreens::draw_movie(int movie, double speed, std::vector<SceneLine>& o
   Movie& m = movies_[std::size_t(movie)];
   m.clip.set_speed(speed);
   Model& model = models_[std::size_t(m.model)];
+  const std::size_t from = out.size();
   lines_.animated(model.tmd, m.anim, m.clip.pose(), {}, 0, out, model.look);
+  if (m.model == m_vibri_) tag_vibri(out, from);
   m.clip.advance(kTick);
 }
 
@@ -501,7 +503,9 @@ void TitleScreens::draw_vibri(int jitter, std::vector<SceneLine>& out) {
   }
   const int movie = vibri_ == Vibri::Paused ? vibri_movie_ : movie_of[int(vibri_)];
   Movie& mv = movies_[std::size_t(vibri_movies_[std::size_t(movie)])];
+  const std::size_t from = out.size();
   lines_.animated(m.tmd, mv.anim, mv.clip.pose(), {}, 0, out, m.look);
+  tag_vibri(out, from);
   mv.clip.advance(kTick);
   vibri_movie_ = movie;
 }

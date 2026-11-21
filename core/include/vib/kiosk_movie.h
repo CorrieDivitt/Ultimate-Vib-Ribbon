@@ -52,6 +52,7 @@ class KioskMovie {
     std::vector<int> model_jitter;
     int frame = 0, cue = 0;
     int scatter = 20, scatter_step = -1;
+    bool vibri = false;  // Vibri's own: tagged with her part for custom colours
     bool done() const;
   };
   struct Shot {

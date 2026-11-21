@@ -40,10 +40,11 @@ KioskMovie::KioskMovie(const Pak& pak, int language) {
     }
     e.jitter = std::move(jitter);
     e.model_jitter.assign(e.models.size(), kDefaultJitter);
+    e.vibri = elements_.empty();  // (Vibri is the first element)
     elements_.push_back(std::move(e));
   };
   using J = Jitter;
-  // Vibri.
+  // Vibri (the first element: her lines take Vibri's colour, custom colours).
   element({"KIOSK2/MODEL.TMD"},
           {{"KIOSK1/K1_V01.ANM", {kPart[0], 0}}, {"KIOSK1/K1_V02.ANM", {kShot2[0], 0}}, {"KIOSK2/K2_V01.ANM", {kPart[1], 0}},
            {"KIOSK2/K2_V02.ANM", {kShot2[1], 0}}, {"KIOSK3/K3_V01.ANM", {kPart[2], 0}}, {"KIOSK3/K3_V02.ANM", {kShot2[2], 0}}},
@@ -125,7 +126,9 @@ void KioskMovie::update_element(Element& e, std::vector<SceneLine>& out) {
   if (e.done()) return;  // its last clip over: no longer drawn
   if (draw) {
     Movie& m = e.movies[std::size_t(e.cue)];
+    const std::size_t from = out.size();
     lines_.animated(e.models[std::size_t(m.model)], m.anim, m.clip.pose(), {}, e.model_jitter[std::size_t(m.model)], out);
+    if (e.vibri) tag_vibri(out, from);
     m.clip.advance(kTick);
   }
   ++e.frame;
