@@ -2470,8 +2470,8 @@ int run(int argc, char** argv) {
         if (show_panel) {  // a dimmed "More options (Select)" at the bottom left, away from Vibri and the menu
           panel.set_place(-0.8f, 1, 0.65f);
           panel.set_columns(-1850.0f, 450.0f);
-          const std::uint32_t seed = next_random(menu_display_frame * 2654435761u);
-          panel_layer = title.screen() == S::Option ? panel.draw_hint(seed) : panel.draw_scroll_speed(save.options, seed);
+          const std::uint32_t panel_seed = next_random(menu_display_frame * 2654435761u);
+          panel_layer = title.screen() == S::Option ? panel.draw_hint(panel_seed) : panel.draw_scroll_speed(save.options, panel_seed);
         }
         menu_lines.resize(layers.size() + 1);
         for (std::size_t i = 0; i < layers.size() + (show_panel ? 1 : 0); ++i) {

@@ -794,15 +794,15 @@ TEST(disc_sces02873_settings_panel) {
     Options so;
     so.scroll_speed = 3.75;
     p.set_items({I::ScrollSpeed});
-    SettingsPanel::Input right;
-    right.right = true;
-    CHECK(p.tick(right, 0.0, so, true) == A::Changed && so.scroll_speed == 4.0 && p.value(I::ScrollSpeed, so, true) == "4x");
-    CHECK(p.tick(right, 0.0, so, true) == A::None && so.scroll_speed == 4.0);
+    SettingsPanel::Input faster;
+    faster.right = true;
+    CHECK(p.tick(faster, 0.0, so, true) == A::Changed && so.scroll_speed == 4.0 && p.value(I::ScrollSpeed, so, true) == "4x");
+    CHECK(p.tick(faster, 0.0, so, true) == A::None && so.scroll_speed == 4.0);
     so.scroll_speed = 0.75;
-    SettingsPanel::Input left;
-    left.left = true;
-    CHECK(p.tick(left, 0.0, so, true) == A::Changed && so.scroll_speed == 0.5 && p.value(I::ScrollSpeed, so, true) == "0.5x");
-    CHECK(p.tick(left, 0.0, so, true) == A::None);
+    SettingsPanel::Input slower;
+    slower.left = true;
+    CHECK(p.tick(slower, 0.0, so, true) == A::Changed && so.scroll_speed == 0.5 && p.value(I::ScrollSpeed, so, true) == "0.5x");
+    CHECK(p.tick(slower, 0.0, so, true) == A::None);
     so.scroll_speed = 1.25;
     CHECK(p.value(I::ScrollSpeed, so, true) == "1.25x");
     // The course selects' line at the bottom middle, in the font.
