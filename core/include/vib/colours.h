@@ -60,9 +60,28 @@ inline Rgb tinted(Rgb colour, std::uint8_t part, const std::array<std::uint8_t, 
   return {std::uint8_t(colour.r * t.r / 255), std::uint8_t(colour.g * t.g / 255), std::uint8_t(colour.b * t.b / 255)};
 }
 
+inline Rgb background_colour(const std::array<std::uint8_t, kColourSlots>& choices);
+
+// A light background (white): lines would vanish into it.
+inline bool light_background(const std::array<std::uint8_t, kColourSlots>& choices);
+
+// A line's colour as shown: its custom colour if it has one (tinted); every other line
+// (the menus, the settings, text, the HUD, the ring) keeps its own, inverted on a light
+// background, so the settings' chosen row (white) and other rows (grey) never match it.
+inline Rgb shown_colour(Rgb colour, std::uint8_t part, const std::array<std::uint8_t, kColourSlots>& choices) {
+  if (colour_slot(part) >= 0) return tinted(colour, part, choices);
+  if (!light_background(choices)) return colour;
+  return {std::uint8_t(255 - colour.r), std::uint8_t(255 - colour.g), std::uint8_t(255 - colour.b)};
+}
+
 inline Rgb background_colour(const std::array<std::uint8_t, kColourSlots>& choices) {
   const int choice = choices[std::size_t(kColourBackground)];
   return kBackgroundPalette[std::size_t(choice >= 0 && choice < kBackgroundColours ? choice : 0)];
+}
+
+inline bool light_background(const std::array<std::uint8_t, kColourSlots>& choices) {
+  const Rgb b = background_colour(choices);
+  return 299 * b.r + 587 * b.g + 114 * b.b > 128 * 1000;  // (perceived brightness over half)
 }
 
 }  // namespace vib

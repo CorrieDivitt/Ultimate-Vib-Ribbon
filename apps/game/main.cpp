@@ -561,7 +561,7 @@ void to_instances(const Session& s, const std::vector<SceneLine>& in, std::uint3
       a = scaled_jitter(l.a, l.jitter_a, o.jitter_scale);
       b = scaled_jitter(l.b, l.jitter_b, o.jitter_scale);
     }
-    const Rgb c = tinted(l.colour, l.part, o.colours);  // (custom colours; untagged lines keep theirs)
+    const Rgb c = shown_colour(l.colour, l.part, o.colours);  // (custom colours; the rest inverted on a light background)
     out.push_back({{a.x, a.y, a.z}, {b.x, b.y, b.z}, {c.r / 255.0f, c.g / 255.0f, c.b / 255.0f, 1.0f}});
   }
 }
@@ -590,8 +590,10 @@ void draw_frame(Session& s, std::vector<vibr::Layer>& layers, double update_ms, 
     const Hud::Layer pl = s.perf->draw(s.perf_text, level >= 2 ? s.stats.intervals(now) : std::vector<double>{}, sum.target_ms, s.opt.vr,
                                        float(w) / float(std::max(1, h)));
     s.perf_lines.clear();
-    for (const SceneLine& l : pl.lines)
-      s.perf_lines.push_back({{l.a.x, l.a.y, l.a.z}, {l.b.x, l.b.y, l.b.z}, {l.colour.r / 255.0f, l.colour.g / 255.0f, l.colour.b / 255.0f, 1.0f}});
+    for (const SceneLine& l : pl.lines) {
+      const Rgb c = shown_colour(l.colour, l.part, s.save.options.colours);
+      s.perf_lines.push_back({{l.a.x, l.a.y, l.a.z}, {l.b.x, l.b.y, l.b.z}, {c.r / 255.0f, c.g / 255.0f, c.b / 255.0f, 1.0f}});
+    }
     const SceneView& v = pl.view;
     layers.push_back({&s.perf_lines, vibr::look_at({v.eye.x, v.eye.y, v.eye.z}, {v.target.x, v.target.y, v.target.z}, {0, -1, 0}), v.fov_y,
                       s.opt.vr ? PerfOverlay::kAnchorMetresPerUnit : 0.0f});
@@ -1426,7 +1428,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
           a = scaled_jitter(l.a, l.jitter_a, s.save.options.jitter_scale);
           b = scaled_jitter(l.b, l.jitter_b, s.save.options.jitter_scale);
         }
-        const Rgb c = tinted(l.colour, l.part, s.save.options.colours);  // (custom colours; untagged lines keep theirs)
+        const Rgb c = shown_colour(l.colour, l.part, s.save.options.colours);  // (custom colours; the rest inverted on a light background)
         dst.push_back({{a.x, a.y, a.z}, {b.x, b.y, b.z}, {c.r / 255.0f, c.g / 255.0f, c.b / 255.0f, 1.0f}});
       }
     };
@@ -2678,7 +2680,8 @@ int run(int argc, char** argv) {
               a = scaled_jitter(a, l.jitter_a, save.options.jitter_scale);
               b = scaled_jitter(b, l.jitter_b, save.options.jitter_scale);
             }
-            menu_lines[i].push_back({{a.x, a.y, a.z}, {b.x, b.y, b.z}, {l.colour.r / 255.0f, l.colour.g / 255.0f, l.colour.b / 255.0f, 1.0f}});
+            const Rgb c = shown_colour(l.colour, l.part, save.options.colours);  // (inverted on a light background)
+            menu_lines[i].push_back({{a.x, a.y, a.z}, {b.x, b.y, b.z}, {c.r / 255.0f, c.g / 255.0f, c.b / 255.0f, 1.0f}});
           }
           SceneView v = layer.view;
           if (i < layers.size() && blend) {  // the camera too

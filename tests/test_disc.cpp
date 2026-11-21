@@ -181,6 +181,21 @@ TEST(disc_sces02873_scene_draws) {
     CHECK((tinted({255, 255, 255}, line_part::kEvo, choice).g == 255));
     choice[kColourBackground] = 1;
     CHECK((background_colour(choice).b == kBackgroundPalette[1].b));
+    // On a light background the lines with no colour of their own (the settings' rows:
+    // white chosen, grey others) are inverted, so neither matches it; dark ones keep theirs.
+    CHECK(!light_background(choice) && (shown_colour({255, 255, 255}, line_part::kNone, choice).r == 255));
+    choice[kColourBackground] = 5;  // white
+    CHECK(light_background(choice));
+    const Rgb chosen = shown_colour({255, 255, 255}, line_part::kNone, choice), other = shown_colour({110, 110, 110}, line_part::kNone, choice);
+    const Rgb back = background_colour(choice);
+    CHECK(chosen.r != back.r && other.r != back.r && chosen.r != other.r);
+    CHECK((shown_colour({255, 255, 255}, std::uint8_t(line_part::kObstacle + 2), choice).g == kLinePalette[1].g));  // (custom: as chosen)
+    for (std::uint8_t bgc = 0; bgc < kBackgroundColours; ++bgc) {  // every background: both rows differ from it
+      choice[kColourBackground] = bgc;
+      const Rgb b = background_colour(choice), c1 = shown_colour({255, 255, 255}, 0, choice), c2 = shown_colour({110, 110, 110}, 0, choice);
+      CHECK((std::abs(int(c1.r) - b.r) + std::abs(int(c1.g) - b.g) + std::abs(int(c1.b) - b.b)) > 120);
+      CHECK((std::abs(int(c2.r) - b.r) + std::abs(int(c2.g) - b.g) + std::abs(int(c2.b) - b.b)) > 120);
+    }
   }
   // Vibri stands at road position 1.25: z = (1.25 - 5) x 600.
   CHECK(std::abs(view.target.z - -2250.0f) < 3000.0f);

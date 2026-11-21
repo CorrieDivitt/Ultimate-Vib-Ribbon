@@ -596,6 +596,8 @@ Owner's spec: a colour setting for each single obstacle, each double obstacle, t
 
 **Revised (owner):** Custom colors is a group of the top list, right after Modifiers (no longer inside it), in the pause and the menus' settings, headset and monitor. Black added as the lines' ninth colour (index 8) and White as the background's sixth (index 5), at the ends so saved choices keep their meaning; the save clamp is 0-8. Black lines vanish on a black background, by the player's choice.
 
+**Light backgrounds (owner: the settings' chosen row is white and vanished on white):** `shown_colour(colour, part, choices)` (colours.h) is what every converter uses now (play, `to_instances`, the menus, the perf overlay): a line with a colour slot is tinted as chosen; every other line (settings rows, chosen white and others grey 110, titles, the menus' own models, HUD, text, the ring) keeps its colour on a dark background and is inverted on a light one (`light_background`: perceived brightness over half; of the palette only White). So on white the chosen row is black and the others mid grey. Test: for every background both row colours differ from it by more than 120.
+
 Not coloured (not asked): the evolution ring, the HUD (score, meter, numbers, celebrations), the menus' own models. Possible later: themes, a brightness or saturation control, a missed-obstacle flash colour.
 
 ## 2o. Idea dropped: Vibri speaking English (session 3, 2026-11-20)
