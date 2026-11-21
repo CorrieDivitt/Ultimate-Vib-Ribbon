@@ -396,6 +396,27 @@ Owner's observation on the combo dots (not a big deal): they draw behind Vibri a
 - **In play, Start opens our pause and settings; Select (View) does what the original's Start did** (ends the song and asks "again?", Result::Abort). Owner's choice. In the pause both still close the panel. Keyboard unchanged (P or Tab our pause, Esc the original's). **Then (owner): Start opens our settings on every screen**: in the menus, the title and the results screens too (A/Cross confirms; Select does nothing in the menus); during the kiosk film Start ends the film and the settings open after it. The Options screen's hint now says "More options (Start)" in all five languages. **Opening camera (owner):** in the headset every title camera (intro and title menus) is moved 1 m forward along its line of sight (`opening_forward()`), corrected for the headset's depth squeeze of narrow cameras (the intro's first shot is a 3 degree telephoto), never past what it looks at (at most 90% of the way). Not yet seen.
 - **Speed courses, how the original reaches them:** not an unlock. They are on the own-CD side of the main menu ("play with your own CD", the original's UNKNOWN MODE SELECT, then MODE SPEED SELECT with three levels); the game disc cannot be used for them [source: falsehead's FAQ, 2001, video-games-museum.com]. In speed mode all obstacles come at one speed that rises as the player scores; clearing quickly brings the goal (the dial's top speed) sooner; the result is the time taken. Our code already has the rules (Course::Speed1-3, SPEC 3.2 and the speed list: 1.5 beats a second rising toward 3.5, 5.0 or 6.2 over 210, 300 or 372 points on a square-root curve; the cue period fixed at one beat and select period at three; speed meter in SPEC's HUD list), but `Gameplay::fixed_period()` is not consumed by the CourseGenerator yet, there is no speed meter, no speed-course menus, and the speed CLEAR/AGAIN branches (time up, the speed texts) are not built.
 
+## 2v. Own-CD menus and music files: design and plan (session 3, evening)
+
+Owner: "get the original CD menus and file load system working". Decisions (owner, 2026-11-20):
+- **A "CD" is a set of files the player picks from one folder** (one or more; not necessarily the whole folder). Tracks in name order. The same files give the same courses, as the same CD did (disc key from the virtual table of contents).
+- **Picked in the game:** a list drawn in the line font, d-pad driven (works in the headset and on Quest later).
+- **Music folder:** the player picks it the first time they choose the own-music option (an in-game folder browser); remembered (save key `music_folder`).
+
+The original's own-CD side, read from revib (Title, TitleDraw, Glue; behaviour only, our words):
+- Main menu, second item: UNKNOWN MODE SELECT, six items with Vibri sitting: one track, all tracks, speed modes, in order (the game plays itself), own-CD high scores, back; each item has spoken words; entering and leaving clips like the other menus; menu music 32.
+- Speed modes: MODE SPEED SELECT, three levels and back (spoken like bronze/silver/gold), Vibri lying.
+- After a course is chosen, the steps: if no audio CD is in, an alert asks for one (cancel goes back); otherwise CD CHANGE: three items, "change CD" (opens the tray, then a CD CHECK alert while the new disc is read), "this CD" (go on), back; Vibri sitting.
+- One track and the speed levels then go to TRACK SELECT: left and right step the track number (wrapping), Vibri says the number, the number is drawn big with the font while it has the cursor, a back item below; confirm starts. All tracks and in order go straight to play.
+- Alerts: "put in an audio CD", "put in the Vib-Ribbon CD", and the check; Vibri standing, words spoken; Triangle cancels.
+- UNKNOWN HISCORE: the own-CD courses' high scores (not read in detail yet).
+- Our mapping: "change CD" opens our file picker; the CD CHECK alert covers reading the files; "no CD in" means no files picked yet.
+
+Stages:
+1. Folder browser and file picker (ours), the virtual CD from the picked files (track lengths, disc key, courses through the original's audio-CD script), playing the picked tracks; then the original's UNKNOWN MODE SELECT, CD CHANGE, TRACK SELECT and alerts around it (one track, all tracks, in order).
+2. Speed courses: the generator using `Gameplay::fixed_period()`, the speed dial HUD, MODE SPEED SELECT, the speed CLEAR/AGAIN branches.
+3. UNKNOWN HISCORE and own-CD high scores.
+
 ## 2o. Idea dropped: Vibri speaking English (session 3, 2026-11-20)
 
 Owner asked whether Vibri could say the menu items in English by restitching her syllables. Finding: only numbers are stitched (about 20 Japanese number syllables, sounds 64-79, plus the juu/hyaku/sen/man units 80-85, on a beat grid in `TitleScreens::say_number`); every menu word, comment and reaction is one whole clip (e.g. 112-114 the course names, 96 back, 129-132 options and on/off, 99/100 again/no). English cannot be built from those. New recordings, TTS or a voice model trained on her clips were offered; the owner declined all of them (no new lines, no other voice). Not to be revisited unless the owner raises it.
