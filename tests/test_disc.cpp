@@ -1189,7 +1189,7 @@ TEST(disc_sces02873_file_picker_ticks_files_and_draws_every_row) {
     p.show(FilePicker::Mode::Files, "C:/Users/me/Music/Albums", {{"Disc 2", true}, {"01 One.mp3", false}, {"02 Two.flac", false}, {"03 Three.mp3", false}}, true);
     CHECK(p.tick(confirm, 0.02) == A::None);  // Done, nothing ticked
     CHECK(p.start() == A::None);  // Start does nothing until something is ticked
-    p.tick(down, 0.02), p.tick(down, 0.02), p.tick(down, 0.02);  // up, the folder, the first file
+    p.tick(down, 0.02), p.tick(down, 0.02), p.tick(down, 0.02), p.tick(down, 0.02);  // up, clear, the folder, the first file
     CHECK(p.tick(confirm, 0.02) == A::Toggled);
     p.tick(down, 0.02), p.tick(down, 0.02);
     CHECK(p.tick(confirm, 0.02) == A::Toggled);
@@ -1198,6 +1198,13 @@ TEST(disc_sces02873_file_picker_ticks_files_and_draws_every_row) {
     CHECK(p.start() == A::Done);  // Start: Done, from anywhere in the list
     p.tick(down, 0.02);  // from the last file it wraps round to Done
     CHECK(p.tick(confirm, 0.02) == A::Done);
+    // Clear selection (owner): the row below Up a folder takes every tick off; with
+    // none ticked it does nothing.
+    p.tick(down, 0.02), p.tick(down, 0.02);
+    CHECK(p.rows()[2].find("(") == std::string::npos && !p.entry());
+    CHECK(p.tick(confirm, 0.02) == A::Cleared && p.ticked().empty() && p.rows()[0].find("(") == std::string::npos);
+    CHECK(p.tick(confirm, 0.02) == A::None);
+    CHECK(p.start() == A::None);  // (nothing ticked: Start does not play)
     CHECK(p.tick(cancel, 0.02) == A::Cancel);
     // A long list: held down, it scrolls (a press, then 0.35 s, then fast) and stops at the end.
     {
@@ -1216,8 +1223,8 @@ TEST(disc_sces02873_file_picker_ticks_files_and_draws_every_row) {
       held_up.held_up = true;
       p.tick(up, 0.02);
       for (int k = 0; k < 400; ++k) p.tick(held_up, 0.02);
-      CHECK(!p.entry());  // back at the top (Done, then Up a folder, then the first song)
-      p.tick(down, 0.02), p.tick(down, 0.02);
+      CHECK(!p.entry());  // back at the top (Done, Up a folder, Clear selection, then the first song)
+      p.tick(down, 0.02), p.tick(down, 0.02), p.tick(down, 0.02);
       CHECK(p.entry() && p.entry()->name == "Song 1.mp3");
     }
     // "No music here" for 3 s when a folder with nothing playable is chosen.

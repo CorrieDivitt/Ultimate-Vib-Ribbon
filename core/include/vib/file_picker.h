@@ -28,6 +28,7 @@ class FilePicker {
     None,
     Moved,      // the cursor moved
     Toggled,    // a file was ticked or unticked
+    Cleared,    // Files mode: every tick taken off (the Clear selection row)
     Enter,      // open entry() (a folder): the app lists it and calls show()
     Up,         // go to the folder above: the app lists it and calls show()
     UseFolder,  // Folder mode: this folder is the music folder
@@ -66,7 +67,7 @@ class FilePicker {
   std::vector<std::string> rows() const;
 
  private:
-  enum class Row { UseFolder, Done, Up, Entry };
+  enum class Row { UseFolder, Done, Up, Clear, Entry };
   struct Line {
     Row row;
     int entry = -1;

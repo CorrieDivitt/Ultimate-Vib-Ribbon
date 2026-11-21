@@ -13,7 +13,7 @@ constexpr int kRows = 12;          // rows shown at once below the heading
 constexpr std::size_t kLongest = 102;  // characters of a name shown (owner: three times the first 34)
 
 // Our own words, in the PAL menus' five languages (German, English, Spanish, French, Italian).
-enum Word { kChooseFolder, kChooseMusic, kUseFolder, kDone, kUp, kNothing, kWords };
+enum Word { kChooseFolder, kChooseMusic, kUseFolder, kDone, kUp, kNothing, kClear, kWords };
 const char* const kText[kWords][kLanguages] = {
     {"Musikordner wählen", "Choose your music folder", "Elige tu carpeta de música", "Choisis ton dossier de musique",
      "Scegli la cartella della musica"},
@@ -22,6 +22,7 @@ const char* const kText[kWords][kLanguages] = {
     {"Fertig", "Done", "Listo", "Terminé", "Fatto"},
     {"Ordner hoch", "Up a folder", "Subir", "Dossier parent", "Su di una cartella"},
     {"Keine Musik hier", "No music here", "No hay música aquí", "Pas de musique ici", "Nessuna musica qui"},
+    {"Auswahl löschen", "Clear selection", "Borrar selección", "Effacer la sélection", "Cancella selezione"},
 };
 
 std::string word(Word w, int language) {
@@ -58,6 +59,7 @@ std::vector<FilePicker::Line> FilePicker::lines() const {
   std::vector<Line> out;
   out.push_back({mode_ == Mode::Folder ? Row::UseFolder : Row::Done});
   if (can_go_up_) out.push_back({Row::Up});
+  if (mode_ == Mode::Files) out.push_back({Row::Clear});  // (owner: below Up a folder)
   for (int i = 0; i < int(entries_.size()); ++i)
     if (mode_ == Mode::Files || entries_[std::size_t(i)].folder) out.push_back({Row::Entry, i});
   return out;
@@ -124,6 +126,10 @@ FilePicker::Action FilePicker::tick(const SettingsPanel::Input& in, double secon
     case Row::UseFolder: return Action::UseFolder;
     case Row::Done: return ticked_.empty() ? Action::None : Action::Done;
     case Row::Up: return Action::Up;
+    case Row::Clear:
+      if (ticked_.empty()) return Action::None;
+      ticked_.clear();
+      return Action::Cleared;
     case Row::Entry: {
       const Entry& e = entries_[std::size_t(at.entry)];
       if (e.folder) return Action::Enter;
@@ -146,6 +152,7 @@ std::vector<std::string> FilePicker::rows() const {
         break;
       }
       case Row::Up: out.push_back(word(kUp, language_)); break;
+      case Row::Clear: out.push_back(word(kClear, language_)); break;
       case Row::Entry: {
         const Entry& e = entries_[std::size_t(l.entry)];
         // A folder ends in "/"; a ticked file starts with "x".
