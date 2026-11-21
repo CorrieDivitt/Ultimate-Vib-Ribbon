@@ -1321,9 +1321,9 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
       }
       if (s.opt.vr && hud_layers[i].speed) {
         // In a headset the speed dial sits higher above Vibri (owner's request): raised
-        // in its own camera's space by 400, about 40% of its height (its lines span
+        // in its own camera's space by 800, about 80% of its height (its lines span
         // y -1,333 to -307 there; y is down).
-        constexpr float kSpeedDialRaise = 400.0f;
+        constexpr float kSpeedDialRaise = 800.0f;
         for (SceneLine& l : hud_layers[i].lines) l.a.y -= kSpeedDialRaise, l.b.y -= kSpeedDialRaise;
       }
       convert(hud_layers[i].lines, hud_lines[i]);

@@ -11,6 +11,25 @@ Confidence labels used below: **[measured]** = computed this session from the di
 
 ## 1. Where things stand
 
+**End of session 3 (2026-11-21, about 00:40 Toronto):** the owner locked in everything built this session. Done:
+- 4.6 to 4.10: performance overlay, infinite horizon, score above Vibri, progress meter below her, score in numbers.
+- 3.7, own music, all three stages (sections 2v to 2x):
+  - the in-game file picker (Pick track(s), all tracks and in order by folder) with loading, held scrolling and the no-music notice;
+  - speed courses: the speed select, the dial (raised 800 in VR, `kSpeedDialRaise`), the timed clear and time-up screens;
+  - own-CD high scores (UNKNOWN HISCORE), results and "again?" for one track and all tracks.
+- Other changes this session:
+  - Effects volume and Consistent courses settings.
+  - Furthest zoom 1/36.
+  - Start opens our settings on every screen; Select is the original's Start.
+  - The original's values in brackets in the settings.
+- Next session: more quality-of-life enhancements, owner to pick. Candidates on the tracker are 4.11 to 4.15 (wrap-around course, timing feedback, colour options, speed modifier, passthrough), plus anything new the owner lists. The prompt for the next session is in section 1a.
+
+## 1a. Prompt for session 4
+
+```
+Continue the Vib Ribbon VR project (repo CorrieDivitt/Vib-Ribbon-VR). Read the project's claude/HANDOFF.md first (section 1 "End of session 3", then sections 2v-2x for own music and speed courses), then the tracker at https://claude.ai/artifact/42iBUS2Aiu81652cgnRM1k, including my notes box (artifact db, path tracker/notes). This session is about quality-of-life enhancements. Start by listing the candidates: tracker tasks 4.11-4.15 (course wrapped around the player, timing feedback during a song, colour options, speed modifier, passthrough) plus small polish items you noticed in the handoff, each with a one-line plan and rough size, and let me pick the order. Then build them one at a time, waiting for my headset test before moving on. Keep the standing rules: give commands in code blocks, keep the tracker and handoff up to date at each step, commit with the usual attribution, check CI, and write our own code (nothing copied from revib or open-ribbon, no game data or text in the repo, never show me images of the game's character).
+```
+
 **Session 3 (2026-11-20):** task 4.6, the performance overlay, is built and pushed (section 2n): L3 or F3 steps it off / one line / detailed, also the Performance item in the settings. After the owner's first headset look it no longer follows the head: it is fixed in the room up and to the right of the recentred view, and shows fps. **Owner's test (2026-11-20): solid 120 fps at 120 Hz (Virtual Desktop set to 120), frame time a steady 8.3 ms, worst 8.3 with one spike to 10 ms noticed. Task 4.6 done.** Next the owner chose 4.7, the infinite horizon: built, waiting for the headset test (section 2p). Owner's reminder: the dev PC is very powerful (RTX 4090), so the Quest standalone build will likely need performance work (noted on task 5.4); the overlay is the tool to measure it there. The owner's local repo had 13 files with only line endings changed (CRLF) and was two commits behind; the tracker's Session 3 command discards those and pulls.
 
 **End of session 2 (2026-11-19, late):** the settings panel and pause (section 2m) were tested by the owner in the headset and work ("It's working great"); the Options screen's hint now reads "More options (Select)" (Select = the gamepad's View/Back button; the other languages say "(Select)" too). The demo (2.6) is done. Virtual Desktop offers only one refresh rate (80 Hz as set there), so 120 Hz must be set in Virtual Desktop. The owner added ten PCVR features to the tracker as tasks 4.6-4.15: performance overlay, infinite horizon for the obstacles and the line, a new way of showing the score, a new song progress bar, the score in numbers during play (option), the course wrapped round the player with no horizon, timing feedback during play, colour options, a speed modifier, play with passthrough. **Next session starts with 4.6, the performance overlay** (plan in section 2n).
