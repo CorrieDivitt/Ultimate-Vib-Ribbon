@@ -4,6 +4,7 @@ Last updated 2026-11-21 (session 4). Read this first in any new session, then th
 
 - Repository: https://github.com/CorrieDivitt/Vib-Ribbon-VR. Master copies of this file, the plan and the tracker source live in its `docs/` folder.
 
+- **Before publishing the tracker, check its script parses** (session 4: a note edit cut the end of a task list and the page went blank): extract the last `<script>` of docs/tracker/index.html and run `node --check` on it, and when editing a task's note by search, find the end of that task's own line, never the next `},` (the last task of a phase is followed by `]},`).
 - Tracker (live status, command notes): https://claude.ai/artifact/42iBUS2Aiu81652cgnRM1k (artifact slug `188889c5-f4d7-4ae5-bc71-aeb8011a952b`; its data is the `const T = {...}` block at the top of the page script; source is `docs/tracker/index.html` in the repo. To update: edit that block, publish the file to the artifact with publish_files, commit)
 - Plan: `docs/PLAN.md` in the repo, also project doc `claude/PLAN.md`
 
