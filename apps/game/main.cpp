@@ -1699,22 +1699,18 @@ int run(int argc, char** argv) {
       std::vector<std::string> own_files;
       std::string own_folder;
       Course own_course = Course::OneTrack;
-      // The player's "CD": the picked files, decoded once, and its virtual disc.
-      std::vector<vibr::Music> own_tracks;
-      OwnCd own_cd;
       std::vector<int> own_order;  // the tracks to play next (from 1)
       // What the picker is for (owner's flow): picking tracks to play, or a folder whose
       // tracks all play in order.
       bool picking_folder = false;
       auto play_own = [&]() {  // the CD just loaded, every track in its (name) order, straight away
         own_order.clear();
-        for (int k = 1; k <= int(own_tracks.size()); ++k) own_order.push_back(k);
+        for (int k = 1; k <= int(own_files.size()); ++k) own_order.push_back(k);  // (the files picked: they decode as they play)
         if (own_order.empty()) return;
         own_play = true;
         title.go_to(S::Done);
       };
       auto load_own_cd = [&]() {  // (the tracks are read and decoded as they play: see own_play)
-        own_tracks.clear();
         title.num_tracks = std::max(1, int(own_files.size()));
       };
       auto show_folder = [&](FilePicker::Mode mode, const std::string& folder) {
@@ -2021,7 +2017,7 @@ int run(int argc, char** argv) {
             case R::InOrder: own_course = Course::InOrder, open_picker(true); break;
             case R::ChangeCd: open_picker(false); break;
             case R::CdReady:
-              if (own_tracks.empty()) {
+              if (own_files.empty()) {
                 open_picker(false);  // no CD in yet: pick one first
               } else if (own_course == Course::OneTrack) {
                 title.go_to(S::TrackSelect);
@@ -2029,8 +2025,7 @@ int run(int argc, char** argv) {
                 // All tracks: shuffled from the disc's key, so a CD always comes in the same
                 // order; in order: the disc's own.
                 own_order.clear();
-                for (int k = 1; k <= int(own_tracks.size()); ++k) own_order.push_back(k);
-                if (own_course == Course::AllTracks) own_order = random_picks(1, int(own_tracks.size()), int(own_tracks.size()), own_cd.key);
+                for (int k = 1; k <= int(own_files.size()); ++k) own_order.push_back(k);
                 own_play = true;
                 title.go_to(S::Done);
               }
