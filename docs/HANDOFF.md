@@ -460,7 +460,16 @@ The rotating obstacles the owner saw with own music: the original's **screw** ef
 - Result: a clear returns the seconds taken, which `save.record` stores (fewer is better). The output prints "Speed record: N s (place P)".
   - If the music ends first (`Session.final_time_up`), the next picked track is a new try.
   - A real game over ends the run.
-- Not yet: the original's speed results screen, the speed high-score view (stage 3), and a check of the dial's placement in VR.
+- Owner tested speed courses: they work.
+- Speed results built (session 3, late night):
+  - Clear: `TitleScreens::speed_clear` (from `clear()` when `results_speed > 0`). Parts: the end meter END/SPD_MTR.TMD (S_MTR01 and the hands S_KEM01/02; the level mark is objects 4-6), END/S_TEN02 on CL_OV, the seconds as digits in slots 32-36 with the seconds sign (object 63) in slot 31, and Vibri's V_CL/S_V01..S_V07 (S_V04 loops until the spoken time ends).
+  - Voices: 8, 8, 9, 13, 90, 218; the time said in the speed form at 366/60 s; then 206 and 220.
+  - Words: `GameText::List::SpeedTime`, pointer table 0x8006CEE8, 3 per language. Null entries read as empty; Japanese uses all three, the others two.
+  - Time up (`again()` when `results_time_up`): END/SPD_MOJA.TMD (SPD_M01, SPD_M02), END/SPD_G02 on CL_OV, Vibri V_OV/SPD_V02/03, EndWords 0 then 1, voices 9, 12, 176, 182, ending by itself at 390/60 s.
+  - Both go back to the speed select. results_rank is 0 for now, so no table follows; the speed tables are stage 3. There is no "again?" after time up yet.
+  - Test: test_disc checks both screens on the disc (words read, lines drawn, ending by themselves).
+- Zoom: the furthest zoom out is now 1/36 (was 1/24), 50% further, in both the settings item and the right stick.
+- Not yet: the speed high-score view and table (stage 3), "again?" after time up, and a check of the dial's placement in VR.
 - Unchecked (no disc here): whether SPD_LBL1-3.ANM need a language prefix. If the label is missing, check `localized()` for those names.
 
 ## 2o. Idea dropped: Vibri speaking English (session 3, 2026-11-20)

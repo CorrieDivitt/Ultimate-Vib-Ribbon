@@ -413,7 +413,7 @@ void zoom_with_stick(Session& s, double seconds, double& zoom) {
   }
   if (std::abs(y) > 0.2f) {
     const double t = (std::abs(y) - 0.2) / 0.8 * (y > 0 ? 1.0 : -1.0);
-    zoom = std::clamp(zoom * std::exp2(t * std::min(seconds, 0.1)), 1.0 / 24.0, 4.0);  // 4x closer to 24x further
+    zoom = std::clamp(zoom * std::exp2(t * std::min(seconds, 0.1)), 1.0 / 36.0, 4.0);  // 4x closer to 36x further
     s.zooming = true;
   } else if (s.zooming) {
     s.zooming = false;
@@ -2096,7 +2096,14 @@ int run(int argc, char** argv) {
             case R::PsjBack: title.go_to(S::Main); break;
             case R::OptionBack: title.go_to(S::Main); break;
             case R::HiscoreBack: title.go_to(S::PsjModeSelect); break;
-            case R::ResultsDone: title.go_to(title.screen() == S::Again ? S::AgainSelect : S::PsjModeSelect); break;
+            case R::ResultsDone:
+              if (title.results_speed > 0) {
+                title.results_speed = 0;
+                title.go_to(S::SpeedSelect);
+              } else {
+                title.go_to(title.screen() == S::Again ? S::AgainSelect : S::PsjModeSelect);
+              }
+              break;
             case R::PlayAgain:  // the original's own courses start again from the song that was lost
               replay = true;
               course_chosen = true;
@@ -2155,6 +2162,7 @@ int run(int argc, char** argv) {
             break;
           }
           Result r = Result::Clear;
+          int speed_seconds = -1;  // a speed course cleared: its time
           if (read_all && names.empty()) {
             // Nothing playable after all (every file unreadable or under 10 s): back to
             // the picker with the message, as for a folder with no music files.
@@ -2210,6 +2218,7 @@ int run(int argc, char** argv) {
                 const int place = save.record(own_course, points);
                 write_save();
                 std::printf("Speed record: %d s%s\n", points, place ? (" (place " + std::to_string(place) + ")").c_str() : "");
+                speed_seconds = points;
                 points = 0;
                 break;
               }
@@ -2223,8 +2232,18 @@ int run(int argc, char** argv) {
             running = false;
             break;
           }
-          // Back to the own-CD mode select (or the speed select, after a speed course).
-          title.go_to(is_speed_course(own_course) ? S::SpeedSelect : S::UnknownModeSelect);
+          // A speed course ends on the original's speed clear or time-up screen, then the
+          // speed select; the other own-CD courses go back to the own-CD mode select.
+          title.results_speed = 0;
+          if (is_speed_course(own_course) && (speed_seconds >= 0 || (r == Result::GameOver && s.final_time_up))) {
+            title.results_speed = int(own_course) - int(Course::Speed1) + 1;
+            title.results_time_up = speed_seconds < 0;
+            title.results_score = std::max(0, speed_seconds);
+            title.results_rank = 0;  // (the speed high-score tables come with stage 3)
+            title.go_to(speed_seconds >= 0 ? S::Clear : S::Again);
+          } else {
+            title.go_to(is_speed_course(own_course) ? S::SpeedSelect : S::UnknownModeSelect);
+          }
           prev_layers.clear();
           last_ns = SDL_GetTicksNS();
           behind = 0;

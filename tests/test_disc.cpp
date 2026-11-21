@@ -353,6 +353,26 @@ TEST(disc_sces02873_screen_words_read_from_the_program) {
     written = t.layers().size() >= 2 && !t.layers().back().lines.empty();
   }
   CHECK(written);
+
+  // A speed course's time: the words for it are read (two parts outside Japanese),
+  // its clear screen writes them and ends by itself; time up does too.
+  CHECK(!words.get(GameText::List::SpeedTime, 0).empty());
+  CHECK(!words.get(GameText::List::SpeedTime, 1).empty());
+  CHECK(words.get(GameText::List::SpeedTime, 2).empty());
+  CHECK(!words.get(GameText::List::SpeedTime, 2, GameText::kJapanese).empty());
+  for (const bool up : {false, true}) {
+    t.results_speed = 2;
+    t.results_time_up = up;
+    t.results_score = 61;
+    t.go_to(up ? TitleScreens::Screen::Again : TitleScreens::Screen::Clear);
+    bool wrote = false, done = false;
+    for (int i = 0; i < 3000 && !done; ++i) {
+      done = t.tick({}) == TitleScreens::Result::ResultsDone;
+      wrote = wrote || (t.layers().size() >= 2 && !t.layers().back().lines.empty());
+    }
+    CHECK(wrote);
+    CHECK(done);
+  }
 }
 
 TEST(fill_in_takes_a_number_and_a_name) {

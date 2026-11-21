@@ -13,13 +13,14 @@ struct ListPlace {
   std::uint32_t address;
   int count;  // strings per language
 };
-constexpr ListPlace kLists[6] = {
+constexpr ListPlace kLists[7] = {
     {0x8006CCD8, 5},   // course names
     {0x8006CD50, 3},   // bonus
     {0x8006CD98, 4},   // comments
     {0x8006CDF8, 10},  // medal steps
     {0x8006CF30, 5},   // fail comments
     {0x8006CFA8, 2},   // end words
+    {0x8006CEE8, 3},   // speed time (some entries are null)
 };
 
 // A PS-X EXE: a 2 KiB header, then the program loaded at its t_addr.
@@ -61,11 +62,14 @@ GameText GameText::from_exe(ByteView exe) {
     require(objects[i] < 128, "MAIN_G.EXE: not the expected font table");
     t.objects_[i] = objects[i];
   }
-  for (std::size_t l = 0; l < 6; ++l) {
+  for (std::size_t l = 0; l < 7; ++l) {
     const ListPlace& place = kLists[l];
     const std::uint32_t n = std::uint32_t(place.count * kLanguages);
     const ByteView pointers = p.at(place.address, n * 4);
-    for (std::uint32_t i = 0; i < n; ++i) t.lists_[l].push_back(p.string_at(read_u32(pointers, i * 4)));
+    for (std::uint32_t i = 0; i < n; ++i) {
+      const std::uint32_t address = read_u32(pointers, i * 4);
+      t.lists_[l].push_back(address == 0 ? std::string() : p.string_at(address));
+    }
   }
   return t;
 }

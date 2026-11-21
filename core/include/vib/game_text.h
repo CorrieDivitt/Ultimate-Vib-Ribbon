@@ -24,6 +24,7 @@ class GameText {
     MedalSteps,    // 10: one per step of the medal sequence (%s the course, %d the score)
     FailComments,  // 5: her reactions to losing (the last follows the third)
     EndWords,      // 2: game over, time up
+    SpeedTime,     // 3: a speed course's time (%d seconds), in two parts; Japanese uses all three (others leave the third empty)
   };
 
   // Throws FormatError if `exe` is not the PAL program this layout belongs to.
@@ -34,7 +35,7 @@ class GameText {
   int object_for(unsigned char c, bool second) const;
 
  private:
-  std::array<std::vector<std::string>, 6> lists_;  // [list][language * count + index]
+  std::array<std::vector<std::string>, 7> lists_;  // [list][language * count + index]
   std::array<std::uint8_t, 148> objects_{};
 };
 

@@ -216,7 +216,7 @@ bool SettingsPanel::change(Item item, int d, Options& o, bool vr) {
     }
     case Item::Zoom: {
       const double before = o.vr_zoom;
-      o.vr_zoom = std::clamp(o.vr_zoom * std::exp2(0.25 * d), 1.0 / 24.0, 4.0);
+      o.vr_zoom = std::clamp(o.vr_zoom * std::exp2(0.25 * d), 1.0 / 36.0, 4.0);
       return o.vr_zoom != before;
     }
     case Item::ViewAngle: o.vr_angle = std::remainder(std::round(o.vr_angle / 15.0) * 15.0 + 15.0 * d, 360.0); return true;

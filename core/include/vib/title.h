@@ -99,6 +99,10 @@ class TitleScreens {
   // scores (1-3, 0 for none) and the score. Screen::Again is game over: Vibri's
   // reaction, the score, then the high scores if it made them.
   int results_course = 0, results_rank = 1, results_score = 0;
+  // A speed course's result (1 to 3; 0: not a speed course): results_score holds the
+  // seconds taken; time_up when the music ran out first (the end shows "time up").
+  int results_speed = 0;
+  bool results_time_up = false;
   // Screen::Clear (a course cleared): the last song's score and end bonus, and
   // Vibri's form at the end (0 best to 3), which picks the comment's sign.
   int results_bonus = 0, results_form = 1;
@@ -206,6 +210,12 @@ class TitleScreens {
   int again_close_ = 0;
   // CLEAR
   int m_song_ = 0, clear_sign_ = 0, clear_title_ = 0, clear_bonus_vibri_ = 0;
+  // A speed course's end: the meter (its dial, two hands), the scribble of time up,
+  // the end model's two speed clips and Vibri's.
+  int m_spd_mtr_ = 0, m_spd_moja_ = 0, spd_meter_ = 0, spd_hands_[2]{}, spd_scribble_[2]{};
+  int spd_over_ = 0, spd_ten_ = 0, spd_vibri_[7]{}, spd_up_vibri_[2]{};
+  int speed_movie_ = 0;  // which of Vibri's last four clips plays
+  Result speed_clear(const Input& in);
   std::array<int, 6> clr_ = {};        // Vibri: v04 (waits, loops), v05 (counts), v12 v14 v16 v15 (comments)
   std::array<int, 10> song_ = {};      // the medal steps, Vibri v01 ... v08
   int song_medal_ = 0, song_ten_ = 0;  // the medal and its score

@@ -147,6 +147,20 @@ TitleScreens::TitleScreens(const Pak& pak, int language) {
   }
   song_medal_ = load_movie(pak, m_song_, "END/SONG_01.ANM", true);
   song_ten_ = load_movie(pak, m_song_, "END/SONG_TEN.ANM");
+  // A speed course's end.
+  m_spd_mtr_ = load_model(pak, language, "END/SPD_MTR.TMD");
+  m_spd_moja_ = load_model(pak, language, "END/SPD_MOJA.TMD");
+  spd_meter_ = load_movie(pak, m_spd_mtr_, "END/S_MTR01.ANM");
+  spd_hands_[0] = load_movie(pak, m_spd_mtr_, "END/S_KEM01.ANM");
+  spd_hands_[1] = load_movie(pak, m_spd_mtr_, "END/S_KEM02.ANM");
+  spd_scribble_[0] = load_movie(pak, m_spd_moja_, "END/SPD_M01.ANM");
+  spd_scribble_[1] = load_movie(pak, m_spd_moja_, "END/SPD_M02.ANM");
+  spd_over_ = load_movie(pak, m_end_, "END/SPD_G02.ANM");
+  spd_ten_ = load_movie(pak, m_end_, "END/S_TEN02.ANM");
+  for (int i = 0; i < 7; ++i)
+    spd_vibri_[i] = load_movie(pak, m_vibri_, ("V_CL/S_V0" + std::to_string(i + 1) + ".ANM").c_str(), i == 3);  // the fourth loops
+  spd_up_vibri_[0] = load_movie(pak, m_vibri_, "V_OV/SPD_V02.ANM");
+  spd_up_vibri_[1] = load_movie(pak, m_vibri_, "V_OV/SPD_V03.ANM");
 
   cam_left_ = load_camera(pak, "C_L.ANC");
   cam_right_ = load_camera(pak, "R_C.ANC");
@@ -1183,6 +1197,109 @@ TitleScreens::Result TitleScreens::psj_hiscore(const Input& in, int frame) {
   return Result::None;
 }
 
+// CLEAR on a speed course: the meter with the level's mark, Vibri's clips, the time
+// taken written and said (in seconds), then her last clips. Timing from the original's
+// clear screen; our own code.
+TitleScreens::Result TitleScreens::speed_clear(const Input& in) {
+  Model& end = models_[std::size_t(m_end_)];
+  Model& vibri = models_[std::size_t(m_vibri_)];
+  Model& meter = models_[std::size_t(m_spd_mtr_)];
+  const int seconds = results_score;
+  if (arrived_) {
+    spoken_ = say_number(seconds, 1);  // the speed form: said as seconds
+    for (Camera& c : cameras_) c.clip.rewind();
+    for (int o = 0; o < int(end.tmd.objects.size()); ++o) end.swap(o, o);
+    for (int o = 0; o < int(meter.tmd.objects.size()); ++o) meter.swap(o, o);
+    meter.swap(4, 4 + std::clamp(results_speed, 1, 3) - 1);  // the level's mark (objects 4-6)
+    // The seconds as digits in slots 32-36 (units first), slot 31 the seconds sign.
+    static const std::array<int, 6> digits = {32, 33, 34, 35, 36, 36};
+    show_number(end, digits, 52, std::min(seconds, 99999));
+    if (seconds == 0) end.swap(32, 52);
+    end.swap(31, 63);
+    result_frame_ = wait_frame_ = hiscore_frame_ = leave_frame_ = 0;
+    speed_movie_ = 0;
+    rewind_movies();
+    sounds_.push_back({Channel::Music, {}, 0, true});
+    say({8, 8, 9, 13, 90, 218}, 64, Vibri::Hidden);
+  }
+  const int leave_jitter = leave_frame_ * 300 * kGteOne;
+  int jitter = kMenuJitter * kGteOne + leave_jitter;
+  if (fade_ == kOut) {
+    jitter += fade_jitter();
+    sounds_.push_back({Channel::Music, {}, 0, true});
+  }
+  for (Model* m : {&end, &vibri, &meter}) m->jitter_all(jitter / kGteOne);
+  vibri.hide(19, true);
+  vibri.hide(20, true);
+  if ((in.confirm || in.cancel) && fade_ == kNone && !hiscore_frame_ && !leave_frame_) {
+    sounds_.push_back({Channel::Music, {}, 0, true});
+    say({1}, 90, Vibri::Hidden);
+    if (results_rank == 0) return Result::ResultsDone;
+    leave_frame_ = 1;
+  }
+  if (leave_frame_ && ++leave_frame_ == frames(20)) {
+    hiscore_frame_ = 1;
+    leave_frame_ = 0;
+  }
+  if (hiscore_frame_) {
+    sounds_.push_back({Channel::Music, {}, 0, true});
+    return psj_hiscore(in, hiscore_frame_++);
+  }
+  Hud::Layer layer;
+  layer.view.eye = {0, 0, -3000};
+  layer.view.target = {0, 0, 0};
+  layer.view.fov_y = float(454 * kTau / 4096.0);
+  lines_.set_view(layer.view);
+  std::vector<SceneLine>& out = layer.lines;
+  const int f = result_frame_;
+  const bool japanese = text_language_ == GameText::kJapanese;
+  std::string text;
+  draw_movie(spd_meter_, 1, out);
+  if (f >= frames(85)) {
+    draw_movie(spd_hands_[1], 1, out);
+    draw_movie(spd_ten_, 1, out);
+  }
+  if (f <= frames(84)) {
+    draw_movie(spd_vibri_[0], 1, out);
+    draw_movie(spd_hands_[0], 1, out);
+  } else if (f <= frames(270)) {
+    draw_movie(spd_vibri_[1], 1, out);
+  } else if (f <= frames(360)) {
+    draw_movie(spd_vibri_[2], 1, out);
+    if (japanese) text = words(GameText::List::SpeedTime, 0);
+  }
+  if (!japanese && f > frames(270))
+    text = fill_in(words(GameText::List::SpeedTime, 0), seconds) + words(GameText::List::SpeedTime, 1);
+  if (f == frames(366)) sounds_.push_back({Channel::Music, spoken_.clips, 64, false});
+  if (speed_movie_ == 0 && f > frames(372) && !music_playing_) {
+    sounds_.push_back({Channel::Music, {206, 220}, 64, false});
+    speed_movie_ = 1;
+  }
+  Result result = Result::None;
+  if (f >= frames(361)) {
+    const int movie = spd_vibri_[std::size_t(3 + speed_movie_)];
+    draw_movie(movie, 1, out);
+    if (japanese) {
+      if (speed_movie_ <= 1) text = fill_in(words(GameText::List::SpeedTime, 1), seconds);
+      else if (speed_movie_ == 2) text = fill_in(words(GameText::List::SpeedTime, 2), seconds);
+    }
+    if (speed_movie_ > 0 && movies_[std::size_t(movie)].clip.finished()) {
+      if (speed_movie_ == 3) {
+        if (results_rank != 0) leave_frame_ = std::max(leave_frame_, 1);
+        else result = Result::ResultsDone;
+      } else {
+        ++speed_movie_;
+        movies_[std::size_t(spd_vibri_[std::size_t(3 + speed_movie_)])].clip.rewind();
+      }
+    }
+  }
+  layers_.push_back(std::move(layer));
+  draw_text(text, leave_jitter + (fade_ == kOut ? fade_jitter() : 0));
+  if (result != Result::None) return result;
+  ++result_frame_;
+  return Result::None;
+}
+
 TitleScreens::Result TitleScreens::again(const Input& in) {
   // Vibri's four reactions to losing: what she says (sounds of the gameplay bank),
   // and how likely each is (4, 3, 2 and 1 in 10).
@@ -1210,7 +1327,8 @@ TitleScreens::Result TitleScreens::again(const Input& in) {
     result_frame_ = 0;
     rewind_movies();
     sounds_.push_back({Channel::Music, {}, 0, true});
-    say(reaction_words[comment_], 64, Vibri::Hidden);
+    if (results_speed > 0 && results_time_up) say({9, 12, 176, 182}, 64, Vibri::Hidden);
+    else say(reaction_words[comment_], 64, Vibri::Hidden);
   }
   const int leave_jitter = leave_frame_ * 300 * kGteOne;
   int jitter = kMenuJitter * kGteOne + leave_jitter;
@@ -1240,6 +1358,33 @@ TitleScreens::Result TitleScreens::again(const Input& in) {
   layer.view.fov_y = float(454 * kTau / 4096.0);
   lines_.set_view(layer.view);
   const int f = result_frame_;
+  if (results_speed > 0 && results_time_up) {
+    // A speed course's music ran out first: the scribble, then Vibri shaking less and
+    // less under the game-over words, then the time-up words; about 6.5 seconds.
+    Model& scribble = models_[std::size_t(m_spd_moja_)];
+    scribble.jitter_all(jitter / kGteOne + 30);
+    if (f >= frames(193) && f <= frames(258)) vibri.jitter_all((frames(258) - f) * 10);
+    std::string text;
+    if (f <= frames(192)) {
+      draw_movie(spd_scribble_[0], 1, layer.lines);
+    } else if (f <= frames(258)) {
+      draw_movie(spd_scribble_[1], 1, layer.lines);
+      draw_movie(spd_up_vibri_[0], 1, layer.lines);
+      draw_movie(spd_over_, 1, layer.lines);
+      text = words(GameText::List::EndWords, 0);
+    } else {
+      draw_movie(spd_over_, 1, layer.lines);
+      draw_movie(spd_up_vibri_[1], 1, layer.lines);
+      text = words(GameText::List::EndWords, 1);
+    }
+    layers_.push_back(std::move(layer));
+    draw_text(text, leave_jitter + (fade_ == kOut ? fade_jitter() : 0));
+    if (result_frame_++ == frames(390)) {
+      if (results_rank == 0) return Result::ResultsDone;
+      leave_frame_ = 1;
+    }
+    return Result::None;
+  }
   // The GAME OVER sign: it falls in, lands, settles; the score comes up later.
   draw_movie(over_[f < frames(100) ? 0 : f < frames(112) ? 1 : 2], 1, layer.lines);
   if (f >= frames(140)) draw_movie(over_[3], 1, layer.lines);
@@ -1439,6 +1584,7 @@ TitleScreens::Result TitleScreens::clear(const Input& in) {
   static const int medal_scores[3][3] = {{2000, 4000, 6000}, {2000, 4000, 6000}, {1500, 3500, 5500}};
   static const int comment_for_form[4] = {3, 1, 0, 2};  // the sign's comment by Vibri's final form
   static const int comment_signs[4] = {10, 7, 8, 9};    // its objects
+  if (results_speed > 0) return speed_clear(in);
   Model& end = models_[std::size_t(m_end_)];
   Model& vibri = models_[std::size_t(m_vibri_)];
   Model& song = models_[std::size_t(m_song_)];
