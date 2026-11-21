@@ -18,6 +18,7 @@ Confidence labels used below: **[measured]** = computed this session from the di
 - 4.12 timing feedback built; moved below the road at the owner's request; locked in. **Task 4.12 done.**
 - 4.18 full combo celebration built; owner: "that was perfect". Then (owner): a full course combo in the same setting, bigger; built; owner: "that worked well", locked in. **Task 4.18 done.**
 - 4.11 course wrapped around the player built, then the right stick for its size and the walking-speed fix; owner: "works great", locked in. **Task 4.11 done** (section 2ab).
+- Settings reorganised into groups (owner's layout) before 4.13 colour options (section 2ac).
 
 **End of session 3 (2026-11-21, about 00:40 Toronto):** the owner locked in everything built this session. Done:
 - 4.6 to 4.10: performance overlay, infinite horizon, score above Vibri, progress meter below her, score in numbers.
@@ -575,6 +576,13 @@ Owner's first test: "worked surprisingly well"; on a very big circle the objects
 - Sliding: the walk followed the next part's rate eased over 0.5 s (`follow`), so after each change of speed the pieces near her drifted until the easing caught up; a big ring shows many more parts, so more of it. Now `Gameplay::ground_rate_near(1.0)`: the parts in parts_ (ahead and the ones just passed) averaged by speed with weights exp(-(d / 1 length)^2), no easing; the nearest part decides and the hand-over to the next is smooth (test `vibris_walk_follows_the_parts_nearest_her`). Kept when no part is within reach. `CourseWrap::follow` stays in the header (unused by vibplay). Far parts at other speeds still drift relative to the room: they move at their own speeds in the original too (they overtake each other ahead on songs 3, 5, 6).
 
 To judge in the headset: whether the pieces near Vibri now stand still on a big circle, the default radius and eye height (0.5 m above the road), the fade length.
+
+## 2ac. Settings in groups (session 4, before task 4.13)
+
+Owner's layout for the headset pause (indented = a group of its own): Continue; Visual (Wobble size, Wobble hold, Line width, Zoom, View angle, See ahead, See behind, Performance); Modifiers (Scroll speed, Timing feedback, FC celebration, Course around you, Circle size, Score in numbers, Consistent courses, Custom colors); Recenter view; Sound effects; Effects volume; Vibration; Sound timing; Resume; Quit song. The menus' settings: the same without Continue and Quit song (owner: yes). The monitor: the same without the headset-only items, Smooth motion under Visual (assistant's choice, not objected to). "Recentre view" renamed "Recenter view" (owner).
+- `SettingsPanel`: items `Visual`, `Modifiers`, `CustomColours` (groups) and `Back`; `set_group(group, items)` (Back is added at the end; groups nest), `depth()`, `open_group()`. Confirm on a group opens it (cursor on its first row); B, or confirm on Back, returns to the row it was opened from (`Moved`, the quiet click); B at the top still closes. A group's row shows ">" (our own stroke glyph) as its value; inside a group its name is drawn dimmed above the list. Labels: Grafik / Visual / Imagen / Visuel / Grafica; Modifikatoren / Modifiers / Modificadores / Modificateurs / Modificatori; Eigene Farben / Custom colors / Colores propios / Couleurs perso / Colori personalizzati; Zurück / Back / Volver / Retour / Indietro.
+- vibplay `setup_panel(panel, vr, pause)` replaces pause_items/menu_items. Custom colors is an empty group (Back only) until the colour options are added.
+- Test: groups open, nest, return to their row, B closes at the top, ">" value, a group's title drawn.
 
 ## 2o. Idea dropped: Vibri speaking English (session 3, 2026-11-20)
 

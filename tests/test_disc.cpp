@@ -838,6 +838,28 @@ TEST(disc_sces02873_settings_panel) {
     for (const SceneLine& l : p.full_course_combo(SettingsPanel::kFullCourseComboSeconds - 0.01, 1)) course_dim = course_dim && l.colour.r < 10;
     CHECK(course_dim);
     CHECK(!p.draw_full_combo(2.0, 2, true).lines.empty());
+    // Groups: confirm opens one (its rows, then Back), B or Back returns to the row it
+    // was opened from; groups nest; a group's row shows ">".
+    {
+      Options go;
+      p.set_group(I::Modifiers, {I::ScrollSpeed, I::CustomColours});
+      p.set_group(I::CustomColours, {});
+      p.set_items({I::Continue, I::Visual, I::Modifiers, I::QuitSong});
+      SettingsPanel::Input dn, ok, back;
+      dn.down = true, ok.confirm = true, back.cancel = true;
+      p.tick(dn, 0.0, go, true);
+      p.tick(dn, 0.0, go, true);
+      CHECK(p.current() == I::Modifiers && p.value(I::Modifiers, go, true) == ">");
+      CHECK(p.tick(ok, 0.0, go, true) == A::Moved && p.depth() == 1 && p.current() == I::ScrollSpeed && p.open_group() == I::Modifiers);
+      p.tick(dn, 0.0, go, true);
+      CHECK(p.tick(ok, 0.0, go, true) == A::Moved && p.depth() == 2 && p.current() == I::Back);  // (an empty group: Back alone)
+      CHECK(!p.draw(go, true, 1).lines.empty());                                                  // (its title)
+      CHECK(p.tick(ok, 0.0, go, true) == A::Moved && p.depth() == 1 && p.current() == I::CustomColours);
+      CHECK(p.tick(back, 0.0, go, true) == A::Moved && p.depth() == 0 && p.current() == I::Modifiers);
+      CHECK(p.tick(back, 0.0, go, true) == A::Close);  // (at the top, B closes)
+      p.set_items({I::Modifiers});
+      CHECK(p.depth() == 0);
+    }
     // The course around you: off, a ring of 3 m by default, 1 to 10 m in half metres.
     CHECK(p.label(I::WrapCourse, true) == "Course around you (Off)" && p.label(I::WrapSize, true) == "Circle size (3.0 m)");
     {
@@ -891,7 +913,7 @@ TEST(disc_sces02873_settings_panel) {
   }
   // No counterpart in the original: ours.
   CHECK(p.label(I::Zoom, true) == "Zoom (1.00)" && p.label(I::ViewAngle, true) == "View angle (45)");
-  CHECK(p.label(I::SoundEffects) == "Sound effects" && p.label(I::Continue) == "Continue" && p.label(I::Recentre, true) == "Recentre view");
+  CHECK(p.label(I::SoundEffects) == "Sound effects" && p.label(I::Continue) == "Continue" && p.label(I::Recentre, true) == "Recenter view");
   go_to(I::ViewAngle);
   o.vr_angle = 180;
   p.tick(right, 0.02, o, true);
@@ -1006,7 +1028,7 @@ TEST(disc_sces02873_settings_labels_with_defaults_fit_beside_their_values) {
   using I = SettingsPanel::Item;
   const std::vector<I> all = {I::WobbleSize, I::WobbleHold, I::Smooth, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead,
                               I::SeeBehind, I::Recentre, I::SoundEffects, I::Vibration, I::SoundTiming, I::QuitSong,
-                              I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses, I::EffectsVolume, I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::WrapCourse, I::WrapSize, I::Continue};
+                              I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses, I::EffectsVolume, I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::WrapCourse, I::WrapSize, I::Visual, I::Modifiers, I::CustomColours, I::Back, I::Continue};
   Options longest;
   longest.scroll_speed = 9.75;
   longest.vr_ahead_seconds = longest.vr_behind_seconds = kWholeSongSeconds;

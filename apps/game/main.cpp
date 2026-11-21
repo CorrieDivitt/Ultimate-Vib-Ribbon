@@ -520,20 +520,28 @@ void apply_settings(Session& s) {
 
 // The settings in play's pause, and below the Options screen (which has the
 // original's sound effects and vibration items itself).
-std::vector<SettingsPanel::Item> pause_items(bool vr) {
+// The settings' layout (owner's, session 4): a top list with the Visual and Modifiers
+// groups, Custom colors inside Modifiers. `pause`: play's pause (Continue first, Quit
+// song last); otherwise the menus' settings. The headset has more view settings.
+void setup_panel(SettingsPanel& p, bool vr, bool pause) {
   using I = SettingsPanel::Item;
   if (vr)
-    return {I::Continue, I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::WobbleSize, I::WobbleHold, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind,
-            I::WrapCourse, I::WrapSize, I::Recentre, I::SoundEffects, I::EffectsVolume, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses, I::QuitSong};
-  return {I::Continue, I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::WobbleSize, I::Smooth, I::LineWidth, I::SoundEffects, I::EffectsVolume, I::Vibration, I::SoundTiming, I::ResumeStyle,
-          I::Performance, I::ScoreNumbers, I::FixedCourses, I::QuitSong};
-}
-std::vector<SettingsPanel::Item> menu_items(bool vr) {
-  using I = SettingsPanel::Item;
+    p.set_group(I::Visual, {I::WobbleSize, I::WobbleHold, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind, I::Performance});
+  else
+    p.set_group(I::Visual, {I::WobbleSize, I::Smooth, I::LineWidth, I::Performance});
   if (vr)
-    return {I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::WobbleSize, I::WobbleHold, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind, I::WrapCourse, I::WrapSize, I::Recentre,
-            I::SoundEffects, I::EffectsVolume, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses};
-  return {I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::WobbleSize, I::Smooth, I::LineWidth, I::SoundEffects, I::EffectsVolume, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses};
+    p.set_group(I::Modifiers, {I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::WrapCourse, I::WrapSize, I::ScoreNumbers, I::FixedCourses,
+                               I::CustomColours});
+  else
+    p.set_group(I::Modifiers, {I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::ScoreNumbers, I::FixedCourses, I::CustomColours});
+  p.set_group(I::CustomColours, {});  // (the colour options come next)
+  std::vector<I> top;
+  if (pause) top.push_back(I::Continue);
+  top.insert(top.end(), {I::Visual, I::Modifiers});
+  if (vr) top.push_back(I::Recentre);
+  top.insert(top.end(), {I::SoundEffects, I::EffectsVolume, I::Vibration, I::SoundTiming, I::ResumeStyle});
+  if (pause) top.push_back(I::QuitSong);
+  p.set_items(std::move(top));
 }
 
 // Scene lines to the renderer's, jittered as play does: in a headset afresh every
@@ -1216,7 +1224,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
       pause_at = last_position;
       s.audio.play_music({});
       for (auto& [id, pad] : s.pads) SDL_RumbleGamepad(pad, 0, 0, 0);
-      s.panel->set_items(pause_items(s.opt.vr));
+      setup_panel(*s.panel, s.opt.vr, true);
       s.panel->set_wraps(true);
       s.panel->set_active(true);
       s.panel->set_place(0.6f, 14, s.opt.vr ? 0.25f : 1.0f);  // in a headset 1 m away, in front of Vibri
@@ -2082,7 +2090,7 @@ int run(int argc, char** argv) {
           toggle_settings = false;
           in_settings = !in_settings;
           if (in_settings) {
-            panel.set_items(menu_items(opt.vr));
+            setup_panel(panel, opt.vr, false);
             panel.set_wraps(true);
             panel.set_active(true);
             preview.start(s);

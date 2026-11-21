@@ -10,28 +10,28 @@ namespace vib {
 namespace {
 
 constexpr double kTau = 6.28318530717958647692;
-constexpr int kItemCount = 24;
+constexpr int kItemCount = 28;
 constexpr int kLanguages = 5;  // German, English, Spanish, French, Italian (the PAL menus)
 
 // Our own words. Order as SettingsPanel::Item.
 const char* const kLabels[kLanguages][kItemCount] = {
     // German
     {"Weiter", "Wackelgröße", "Wackeltakt", "Weiche Bewegung", "Linienstärke", "Zoom", "Blickwinkel", "Sicht nach vorn",
-     "Sicht nach hinten", "Ansicht zentrieren", "Soundeffekte", "Vibration", "Tonversatz", "Lied beenden", "Fortsetzen", "Leistung", "Punkte als Zahl", "Gleiche Strecke", "Effektlautstärke", "Scrolltempo", "Timing-Anzeige", "FC-Jubel", "Strecke um dich", "Kreisgröße"},
+     "Sicht nach hinten", "Ansicht zentrieren", "Soundeffekte", "Vibration", "Tonversatz", "Lied beenden", "Fortsetzen", "Leistung", "Punkte als Zahl", "Gleiche Strecke", "Effektlautstärke", "Scrolltempo", "Timing-Anzeige", "FC-Jubel", "Strecke um dich", "Kreisgröße", "Grafik", "Modifikatoren", "Eigene Farben", "Zurück"},
     // English
     {"Continue", "Wobble size", "Wobble hold", "Smooth motion", "Line width", "Zoom", "View angle", "See ahead", "See behind",
-     "Recentre view", "Sound effects", "Vibration", "Sound timing", "Quit song", "Resume", "Performance", "Score in numbers", "Consistent courses", "Effects volume", "Scroll speed", "Timing feedback", "FC celebration", "Course around you", "Circle size"},
+     "Recenter view", "Sound effects", "Vibration", "Sound timing", "Quit song", "Resume", "Performance", "Score in numbers", "Consistent courses", "Effects volume", "Scroll speed", "Timing feedback", "FC celebration", "Course around you", "Circle size", "Visual", "Modifiers", "Custom colors", "Back"},
     // Spanish
     {"Continuar", "Tamaño del temblor", "Ritmo del temblor", "Movimiento suave", "Grosor de línea", "Zoom", "Ángulo de vista",
-     "Ver adelante", "Ver atrás", "Centrar vista", "Efectos de sonido", "Vibración", "Desfase de sonido", "Salir de la canción", "Reanudar", "Rendimiento", "Puntos en números", "Recorridos fijos", "Volumen de efectos", "Velocidad de avance", "Precisión en ms", "Celebrar FC", "Recorrido alrededor", "Tamaño del círculo"},
+     "Ver adelante", "Ver atrás", "Centrar vista", "Efectos de sonido", "Vibración", "Desfase de sonido", "Salir de la canción", "Reanudar", "Rendimiento", "Puntos en números", "Recorridos fijos", "Volumen de efectos", "Velocidad de avance", "Precisión en ms", "Celebrar FC", "Recorrido alrededor", "Tamaño del círculo", "Imagen", "Modificadores", "Colores propios", "Volver"},
     // French
     {"Continuer", "Taille du tremblement", "Rythme du tremblement", "Mouvement fluide", "Épaisseur des lignes", "Zoom",
      "Angle de vue", "Voir devant", "Voir derrière", "Recentrer la vue", "Effets sonores", "Vibration", "Décalage du son",
-     "Quitter la chanson", "Reprise", "Performances", "Score en chiffres", "Parcours fixes", "Volume des effets", "Vitesse de défilement", "Précision en ms", "Fête du FC", "Parcours autour de toi", "Taille du cercle"},
+     "Quitter la chanson", "Reprise", "Performances", "Score en chiffres", "Parcours fixes", "Volume des effets", "Vitesse de défilement", "Précision en ms", "Fête du FC", "Parcours autour de toi", "Taille du cercle", "Visuel", "Modificateurs", "Couleurs perso", "Retour"},
     // Italian
     {"Continua", "Ampiezza del tremolio", "Ritmo del tremolio", "Movimento fluido", "Spessore delle linee", "Zoom",
      "Angolo di vista", "Vista avanti", "Vista indietro", "Ricentra la vista", "Effetti sonori", "Vibrazione", "Ritardo audio",
-     "Esci dalla canzone", "Ripresa", "Prestazioni", "Punteggio in cifre", "Percorsi fissi", "Volume effetti", "Velocità di scorrimento", "Precisione in ms", "Festa FC", "Percorso intorno a te", "Dimensione del cerchio"},
+     "Esci dalla canzone", "Ripresa", "Prestazioni", "Punteggio in cifre", "Percorsi fissi", "Volume effetti", "Velocità di scorrimento", "Precisione in ms", "Festa FC", "Percorso intorno a te", "Dimensione del cerchio", "Grafica", "Modificatori", "Colori personalizzati", "Indietro"},
 };
 const char* const kMore[kLanguages] = {"Weitere Einstellungen (Start)", "More options (Start)", "Más ajustes (Start)", "Autres réglages (Start)",
                                        "Altre impostazioni (Start)"};
@@ -64,7 +64,7 @@ bool in_font(char c) {
   return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == ' ' || c == '!' || c == '&' ||
          c == '\'' || c == '(' || c == ')' || c == ',' || c == '-' || c == '.' || c == '?';
 }
-bool drawn_by_us(char c) { return c == '/' || c == '\\' || c == ':' || c == '_' || c == '+' || c == '[' || c == ']'; }
+bool drawn_by_us(char c) { return c == '/' || c == '\\' || c == ':' || c == '_' || c == '+' || c == '[' || c == ']' || c == '>'; }
 
 // Ours: strokes for a few characters the font lacks (paths need / \ and :), the size
 // of the font's own (a digit is 142 high and about 60 wide at scale 1), centred on
@@ -86,6 +86,7 @@ void own_glyph(char c, float x, float y, float z, float scale, const Rgb& colour
       break;
     case '_': line(-w, h, w, h); break;
     case '+': line(-w, 0, w, 0), line(0, -w, 0, w); break;
+    case '>': line(-w * 0.6f, -w, w * 0.6f, 0), line(w * 0.6f, 0, -w * 0.6f, w); break;
     case '[': line(w * 0.4f, -h, -w * 0.4f, -h), line(-w * 0.4f, -h, -w * 0.4f, h), line(-w * 0.4f, h, w * 0.4f, h); break;
     case ']': line(-w * 0.4f, -h, w * 0.4f, -h), line(w * 0.4f, -h, w * 0.4f, h), line(w * 0.4f, h, -w * 0.4f, h); break;
     default: break;
@@ -127,7 +128,39 @@ SettingsPanel::SettingsPanel(const Pak& game_pak, int language, const GameText* 
 
 void SettingsPanel::set_items(std::vector<Item> items) {
   items_ = std::move(items);
+  stack_.clear();
   home();
+}
+
+void SettingsPanel::set_group(Item group, std::vector<Item> items) {
+  items.push_back(Item::Back);
+  for (auto& g : groups_)
+    if (g.first == group) {
+      g.second = std::move(items);
+      return;
+    }
+  groups_.emplace_back(group, std::move(items));
+}
+
+bool SettingsPanel::is_group(Item item) const {
+  return std::any_of(groups_.begin(), groups_.end(), [item](const auto& g) { return g.first == item; });
+}
+
+void SettingsPanel::open(Item group) {
+  for (const auto& g : groups_)
+    if (g.first == group) {
+      stack_.push_back({items_, cursor_, first_, group});
+      items_ = g.second;
+      cursor_ = 0, first_ = 0;
+      return;
+    }
+}
+
+void SettingsPanel::close_group() {
+  if (stack_.empty()) return;
+  items_ = std::move(stack_.back().items);
+  cursor_ = stack_.back().cursor, first_ = stack_.back().first;
+  stack_.pop_back();
 }
 
 std::string SettingsPanel::label(Item item, bool vr) const {
@@ -173,6 +206,7 @@ std::string SettingsPanel::value(Item item, const Options& o, bool vr) const {
     case Item::FcCelebration: return on_off(o.fc_celebration);
     case Item::WrapCourse: return on_off(o.vr_wrap);
     case Item::WrapSize: std::snprintf(buf, sizeof buf, "%.1f m", o.vr_wrap_radius); break;
+    case Item::Visual: case Item::Modifiers: case Item::CustomColours: return ">";
     default: return {};
   }
   return buf;
@@ -270,8 +304,12 @@ std::string SettingsPanel::scroll_text(double speed) {
 
 SettingsPanel::Action SettingsPanel::tick(const Input& in, double seconds, Options& o, bool vr) {
   if (items_.empty()) return in.cancel ? Action::Close : Action::None;
+  if (in.cancel) {
+    if (stack_.empty()) return Action::Close;
+    close_group();  // B in a group: back to the list above
+    return Action::Moved;
+  }
   const int count = int(items_.size());
-  if (in.cancel) return Action::Close;
   if (in.up || in.down) {
     repeat_dir_ = 0;
     scroll_dir_ = in.down ? 1 : -1;
@@ -297,6 +335,14 @@ SettingsPanel::Action SettingsPanel::tick(const Input& in, double seconds, Optio
     scroll_dir_ = 0;
   }
   const Item item = items_[std::size_t(cursor_)];
+  if (in.confirm && item == Item::Back) {
+    close_group();
+    return Action::Moved;
+  }
+  if (in.confirm && is_group(item)) {
+    open(item);
+    return Action::Moved;
+  }
   if (in.confirm) {
     switch (item) {
       case Item::Continue: return Action::Close;
@@ -635,6 +681,10 @@ Hud::Layer SettingsPanel::draw(const Options& o, bool vr, std::uint32_t seed) {
   auto at_size = [this](float x, float y) { return Vec3f{x * size_, y * size_, 4000.0f * size_}; };
   const int shown = std::min(rows_, int(items_.size()));
   first_ = std::clamp(first_, 0, std::max(0, int(items_.size()) - shown));
+  if (!stack_.empty()) {  // in a group: its name above the list, dimmed
+    const Rgb title{170, 170, 170};
+    write(label(stack_.back().group, vr), label_x_, top - row_height * 1.15f, 1.0f, &title, 4, layer.lines);
+  }
   for (int r = 0; r < shown; ++r) {
     const int i = first_ + r;
     const Item item = items_[std::size_t(i)];

@@ -52,6 +52,12 @@ class SettingsPanel {
     FcCelebration, // fc_celebration: "Full Combo!" at the end of a song with no misses
     WrapCourse,    // vr_wrap: the course wrapped round the player (headset)
     WrapSize,      // vr_wrap_radius: that ring's radius, 1 to 10 m (headset)
+    // Groups (owner's layout, session 4): confirm opens the group's own list
+    // (set_group); B or its Back row returns to the list it was opened from.
+    Visual,
+    Modifiers,
+    CustomColours,
+    Back,          // the last row of every group: back to the list above
   };
   enum class Action { None, Moved, Changed, Close, Recentre, QuitSong, LeaveTop };
 
@@ -65,8 +71,13 @@ class SettingsPanel {
   // table; without it nothing is drawn but the panel still works.
   SettingsPanel(const Pak& game_pak, int language, const GameText* text);
 
-  // The items in order. The cursor goes to the first.
+  // The items in order. The cursor goes to the first, at the top level.
   void set_items(std::vector<Item> items);
+  // The list a group item opens (a Back row is added at its end). Groups can hold groups.
+  void set_group(Item group, std::vector<Item> items);
+  // How deep in groups the cursor is (0: the top list), and the group open now.
+  int depth() const { return int(stack_.size()); }
+  Item open_group() const { return stack_.empty() ? Item::Continue : stack_.back().group; }
   // At the top (from the Options screen, where up from the first leaves the panel)
   // or not (in play, where the cursor wraps).
   void set_wraps(bool wraps) { wraps_ = wraps; }
@@ -157,6 +168,16 @@ class SettingsPanel {
   TmdModel font_;
   LineBuilder lines_;
   std::vector<Item> items_;
+  struct Level {
+    std::vector<Item> items;
+    int cursor, first;
+    Item group;  // the group this level opened (the one shown now is stack_.back().group)
+  };
+  std::vector<Level> stack_;  // the lists above the one shown, innermost last
+  std::vector<std::pair<Item, std::vector<Item>>> groups_;
+  bool is_group(Item item) const;
+  void open(Item group);
+  void close_group();
   int cursor_ = 0, first_ = 0, rows_ = 20;
   float top_ = 0.8f, size_ = 1.0f, label_x_ = -1600.0f, value_right_ = 1600.0f;
   bool active_ = true;
