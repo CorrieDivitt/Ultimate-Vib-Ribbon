@@ -89,6 +89,12 @@ TitleScreens::TitleScreens(const Pak& pak, int language) {
   for (std::size_t i = 0; i < 5; ++i) psj_steps_[i] = load_movie(pak, m_psj_, psj_steps[i]);
   psj_open_ = load_movie(pak, m_psj_, "MODE/MDV_OP.ANM");
   psj_close_ = load_movie(pak, m_psj_, "MODE/MDV_CL.ANM");
+  // The own-CD mode select: one track, all tracks, speed, in order, high scores, back.
+  m_unknown_ = load_model(pak, language, "MODE/MDU.TMD");
+  const char* unknown_steps[6] = {"MODE/MDU12.ANM", "MODE/MDU23.ANM", "MODE/MDU34.ANM", "MODE/MDU45.ANM", "MODE/MDU56.ANM", "MODE/MDU61.ANM"};
+  for (std::size_t i = 0; i < 6; ++i) unknown_steps_[i] = load_movie(pak, m_unknown_, unknown_steps[i]);
+  unknown_open_ = load_movie(pak, m_unknown_, "MODE/MDU_OP.ANM");
+  unknown_close_ = load_movie(pak, m_unknown_, "MODE/MDU_CL.ANM");
   const char* option_steps[3] = {"OPTION/OP01_02.ANM", "OPTION/OP02_03.ANM", "OPTION/OP03_01.ANM"};
   for (std::size_t i = 0; i < 3; ++i) option_steps_[i] = load_movie(pak, m_option_, option_steps[i]);
   option_open_ = load_movie(pak, m_option_, "OPTION/OPEN.ANM");
@@ -138,7 +144,7 @@ namespace {
 // Which screens have the menu music: all but the results and the course itself.
 bool has_music(TitleScreens::Screen s) {
   using S = TitleScreens::Screen;
-  return s == S::Main || s == S::PsjModeSelect || s == S::Option || s == S::PsjHiscore;
+  return s == S::Main || s == S::PsjModeSelect || s == S::UnknownModeSelect || s == S::Option || s == S::PsjHiscore;
 }
 }  // namespace
 
@@ -183,6 +189,7 @@ TitleScreens::Result TitleScreens::tick(const Input& in) {
   switch (screen_) {
     case Screen::Main: r = main_menu(in); break;
     case Screen::PsjModeSelect: r = psj_mode_select(in); break;
+    case Screen::UnknownModeSelect: r = unknown_mode_select(in); break;
     case Screen::Option: r = options(in); break;
     case Screen::PsjHiscore: r = psj_hiscore(in, 0); break;
     case Screen::Results: r = psj_hiscore(in, ++results_frame_); break;
@@ -538,6 +545,89 @@ TitleScreens::Result TitleScreens::psj_mode_select(const Input& in) {
       return results[i];
     }
     menu_movie_ = psj_close_;
+    leaving_ = true;
+    speed_ = 1;
+  }
+  return Result::None;
+}
+
+// The own-CD side's mode select (UNKNOWN MODE SELECT): six items with Vibri sitting,
+// built as the game-disc course select is. Each item says its words when the cursor
+// reaches it (one track and all tracks have a second word); back leaves with the
+// closing clip. Behaviour read from the original's TitleDraw; our own code.
+TitleScreens::Result TitleScreens::unknown_mode_select(const Input& in) {
+  static const Result results[6] = {Result::OneTrack, Result::AllTracks, Result::SpeedModes,
+                                    Result::InOrder,  Result::UnknownHiscores, Result::UnknownBack};
+  static const std::vector<int> voices[6] = {{115, 120}, {117, 120}, {116}, {118}, {128}, {96}};
+  constexpr int kBack = 5;
+  const bool still = fade_frame_ == 0;
+  if (arrived_) {
+    vibri_ = Vibri::Sitting;
+    leaving_ = false;
+    rewind_movies();
+    if (previous_ == Screen::Main) {
+      unknown_cursor_.index = 0;
+      camera_cue_ = 2;
+      entering_ = true;
+    } else {
+      camera_cue_ = 1;
+      entering_ = false;
+    }
+    menu_movie_ = unknown_steps_[std::size_t(unknown_cursor_.index)];
+    speed_ = 0;
+    set_camera(camera_cue_);
+    play_music();
+  }
+  const MenuRead r = read(unknown_cursor_, in, true, still && !entering_ && !leaving_);
+  int jitter = kMenuJitter * kGteOne;
+  if (next_ == Screen::Done) jitter += fade_jitter();
+  models_[std::size_t(m_unknown_)].jitter_all(jitter / kGteOne);
+  const int i = unknown_cursor_.index;
+  if (r.changed) {
+    if (r.up || r.down) say(voices[i], 64, Vibri::SittingSpeaking);
+    if (r.up) {
+      menu_movie_ = unknown_steps_[std::size_t(i)];
+      movies_[std::size_t(menu_movie_)].clip.rewind(true);
+      speed_ = -1;
+    } else if (r.down) {
+      menu_movie_ = unknown_steps_[std::size_t((i + 5) % 6)];
+      movies_[std::size_t(menu_movie_)].clip.rewind();
+      speed_ = 1;
+    }
+  }
+  if (r.back) {
+    menu_movie_ = unknown_steps_[kBack];
+    movies_[std::size_t(menu_movie_)].clip.rewind();
+    say(voices[i], 64, Vibri::SittingSpeaking);
+    speed_ = 0;
+  }
+  Hud::Layer vibri, menu;
+  vibri.view = vibri_view();
+  lines_.set_view(vibri.view);
+  draw_vibri(jitter, vibri.lines);
+  view_ = camera_view(cam_menu_);
+  cameras_[std::size_t(cam_menu_)].clip.advance(kTick);
+  if (next_ != Screen::Done && !still) update_camera(camera_cue_);
+  menu.view = view_;
+  lines_.set_view(menu.view);
+  if (entering_) draw_menu_movie(unknown_open_, menu.lines);
+  else draw_movie(menu_movie_, speed_, menu.lines);
+  layers_.push_back(std::move(vibri));
+  layers_.push_back(std::move(menu));
+  if (leaving_ && movies_[std::size_t(unknown_close_)].clip.finished()) {
+    leaving_ = false;
+    camera_cue_ = 3;
+    set_camera(3);
+    return results[i];
+  }
+  if (r.confirm) {
+    say({1}, 90, Vibri::Hidden);
+    if (i != kBack) {
+      camera_cue_ = 0;
+      set_camera(0);
+      return results[i];
+    }
+    menu_movie_ = unknown_close_;
     leaving_ = true;
     speed_ = 1;
   }

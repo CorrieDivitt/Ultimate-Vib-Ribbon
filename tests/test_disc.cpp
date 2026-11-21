@@ -214,6 +214,22 @@ TEST(disc_sces02873_menus_flow) {
   CHECK(run(60, {}) == R::None);
   CHECK(t.screen() == S::Main);
   CHECK(run(5, confirm) == R::PsjModes);
+  // The own-CD side's mode select: six items, the second is all tracks, back leaves.
+  t.go_to(S::UnknownModeSelect);
+  run(80, {});
+  CHECK(t.screen() == S::UnknownModeSelect);
+  run(10, down);
+  CHECK(run(5, confirm) == R::AllTracks);
+  t.go_to(S::UnknownModeSelect);
+  run(80, {});
+  run(10, down), run(10, down);  // (not from the main menu: the cursor stays on all tracks)
+  CHECK(run(5, confirm) == R::InOrder);
+  t.go_to(S::UnknownModeSelect);
+  run(80, {});
+  run(10, cancel);  // cancel jumps to back
+  CHECK(run(80, confirm) == R::UnknownBack);
+  t.go_to(S::Main);
+  run(60, {});
   t.go_to(S::PsjModeSelect);
   run(80, {});
   CHECK(t.screen() == S::PsjModeSelect);

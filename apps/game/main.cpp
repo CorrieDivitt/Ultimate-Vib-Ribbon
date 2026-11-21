@@ -856,7 +856,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   start(gen);
   Gameplay game;
   RoundSetup setup;
-  setup.course = s.music ? Course::OneTrack : s.song ? Course::Bronze : s.course;
+  setup.course = s.music ? (s.course >= Course::OneTrack ? s.course : Course::OneTrack) : s.song ? Course::Bronze : s.course;
   setup.course_seconds = total / kSampleRate;
   setup.points = points;
   setup.track_index = track_index;
@@ -1640,6 +1640,7 @@ int run(int argc, char** argv) {
       bool in_picker = false, own_play = false;
       std::vector<std::string> own_files;
       std::string own_folder;
+      Course own_course = Course::OneTrack;
       auto show_folder = [&](FilePicker::Mode mode, const std::string& folder) {
         picker.show(mode, folder, list_folder(folder), !folder.empty());
       };
@@ -1910,7 +1911,15 @@ int run(int argc, char** argv) {
           const R r = title.tick(in);
           switch (r) {
             case R::PsjModes: title.go_to(S::PsjModeSelect); break;
-            case R::UnknownModes: open_picker(); break;  // (the original's own-CD menus come next)
+            case R::UnknownModes: title.go_to(S::UnknownModeSelect); break;
+            // The own-CD courses: our picker stands in for the original's CD step (the CD
+            // change screen, the track select and the alerts come next).
+            case R::OneTrack: own_course = Course::OneTrack, open_picker(); break;
+            case R::AllTracks: own_course = Course::AllTracks, open_picker(); break;
+            case R::InOrder: own_course = Course::InOrder, open_picker(); break;
+            case R::SpeedModes: std::printf("Speed courses come in the next stage.\n"); break;
+            case R::UnknownHiscores: std::printf("High scores for your own music come later.\n"); break;
+            case R::UnknownBack: title.go_to(S::Main); break;
             case R::Options: title.go_to(S::Option); break;
             // The original's "leave" goes back to its title screen (close the window to quit).
             case R::Leave:
@@ -1974,20 +1983,29 @@ int run(int argc, char** argv) {
             const OwnCd cd = make_own_cd(names);
             s.music_key = cd.key;
             s.music_disc = cd.track_samples();
+            s.course = own_course;
+            // In order (the game plays itself) and one track (until the track select
+            // comes): disc order. All tracks: shuffled from the disc's key, so a CD
+            // always comes in the same order, the score carried from track to track.
+            std::vector<int> order;
+            for (int i = 1; i <= int(tracks.size()); ++i) order.push_back(i);
+            if (own_course == Course::AllTracks) order = random_picks(1, int(tracks.size()), int(tracks.size()), cd.key);
             int points = 0;
             Result r = Result::Clear;
-            for (std::size_t i = 0; i < tracks.size() && r == Result::Clear; ++i) {
-              s.music = &tracks[i];
-              s.music_track = int(i) + 1;
-              r = play_song(s, 0, 0, points, seed);
+            for (std::size_t k = 0; k < order.size() && r == Result::Clear; ++k) {
+              const int t = order[k];
+              s.music = &tracks[std::size_t(t - 1)];
+              s.music_track = t;
+              std::printf("Track %d of %zu\n", t, tracks.size());
+              r = play_song(s, 0, int(k), points, seed);
               seed = next_random(seed);
-              points = 0;
+              if (own_course != Course::AllTracks) points = 0;
             }
             s.music = nullptr;
             audio.play_music({});
             if (r == Result::Quit) break;
           }
-          title.go_to(S::Main);
+          title.go_to(S::UnknownModeSelect);
           prev_layers.clear();
           last_ns = SDL_GetTicksNS();
           behind = 0;
