@@ -10,7 +10,7 @@ namespace {
 constexpr double kTau = 6.28318530717958647692;
 constexpr int kLanguages = 5;
 constexpr int kRows = 12;          // rows shown at once below the heading
-constexpr std::size_t kLongest = 34;  // characters of a name shown
+constexpr std::size_t kLongest = 102;  // characters of a name shown (owner: three times the first 34)
 
 // Our own words, in the PAL menus' five languages (German, English, Spanish, French, Italian).
 enum Word { kChooseFolder, kChooseMusic, kUseFolder, kDone, kUp, kNothing, kWords };
@@ -165,7 +165,8 @@ Hud::Layer FilePicker::draw(float size, std::uint32_t seed) const {
   layer.view.target = {0, 0, 4730};
   layer.view.fov_y = float(682 * kTau / 4096.0);
   const float depth = 4000.0f * size, half_h = 4000.0f * std::tan(0.5f * layer.view.fov_y);
-  const float row = 200.0f, left = -2400.0f;
+  const float row = 200.0f, left = -2700.0f;
+  constexpr float kRowScale = 0.72f;  // (smaller, so 102 characters fit across a 4:3 picture)
   auto put = [&](const std::string& text, float x, float y, float scale, Rgb colour, std::uint32_t s) {
     std::vector<SceneLine> lines = font_.text_lines(text, scale, s, 3);
     const float shift = x + 0.5f * font_.text_width(text, scale);  // (text_lines centres on 0)
@@ -182,7 +183,7 @@ Hud::Layer FilePicker::draw(float size, std::uint32_t seed) const {
   float y = -0.85f * half_h;
   put(mode_ == Mode::Folder ? word(kChooseFolder, language_) : word(kChooseMusic, language_), left, y, 1.2f, white, seed);
   y += row;
-  put(shown_name(path_), left, y, 0.8f, dim, seed + 1);
+  put(shown_name(path_), left, y, kRowScale, dim, seed + 1);
   if (notice_seconds_ > 0) put(word(kNothing, language_), 900.0f, y - row, 1.0f, white, seed + 98);  // beside the heading
   y += row * 1.4f;
   const auto texts = rows();
@@ -192,7 +193,7 @@ Hud::Layer FilePicker::draw(float size, std::uint32_t seed) const {
   for (int r = 0; r < kRows && first + r < count; ++r) {
     const int i = first + r;
     const bool at = i == cursor_;
-    put(texts[std::size_t(i)], left + 300.0f, y + row * float(r), 1.0f, at ? white : dim, seed + 2 + std::uint32_t(i));
+    put(texts[std::size_t(i)], left + 300.0f, y + row * float(r), kRowScale, at ? white : dim, seed + 2 + std::uint32_t(i));
     if (at) {  // our cursor, as the settings panel's: a chevron before the row
       SceneLine a, b;
       const float cy = y + row * float(r);

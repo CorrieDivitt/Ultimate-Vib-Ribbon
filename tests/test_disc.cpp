@@ -1170,6 +1170,21 @@ TEST(disc_sces02873_file_picker_ticks_files_and_draws_every_row) {
     CHECK(p.tick(down, 0.02) == A::Moved && p.tick(confirm, 0.02) == A::Up);
     CHECK(p.tick(down, 0.02) == A::Moved && p.tick(confirm, 0.02) == A::Enter && p.entry() && p.entry()->name == "Albums");
     CHECK(!p.draw(1.0f, 7).lines.empty() && !p.draw(0.25f, 7).lines.empty());
+    // Long names: up to 102 characters shown (owner: three times the first 34), a longer
+    // one shortened from the middle; every row still fits inside a 4:3 picture.
+    {
+      const std::string fits(96, 'a'), longer = std::string(80, 'b') + std::string(80, 'c') + ".mp3";
+      p.show(FilePicker::Mode::Files, "C:/Music", {{fits + ".mp3", false}, {longer, false}}, true);
+      bool kept = false, shortened = false;
+      for (const std::string& r : p.rows()) {
+        kept = kept || r.find(fits) != std::string::npos;
+        if (r.find("...") != std::string::npos) shortened = r.size() <= 102 + 4 && r.find("bbb") != std::string::npos && r.find(".mp3") != std::string::npos;
+      }
+      CHECK(kept && shortened);
+      float widest = 0;
+      for (const SceneLine& l : p.draw(1.0f, 3).lines) widest = std::max({widest, std::abs(l.a.x), std::abs(l.b.x)});
+      CHECK(widest < 3080.0f);  // (4:3 at the text camera's depth: about 3,080 either side)
+    }
     // Files mode: tick two files; Done is refused until something is ticked.
     p.show(FilePicker::Mode::Files, "C:/Users/me/Music/Albums", {{"Disc 2", true}, {"01 One.mp3", false}, {"02 Two.flac", false}, {"03 Three.mp3", false}}, true);
     CHECK(p.tick(confirm, 0.02) == A::None);  // Done, nothing ticked
