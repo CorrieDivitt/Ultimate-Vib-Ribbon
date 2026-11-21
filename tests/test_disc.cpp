@@ -923,6 +923,15 @@ TEST(disc_sces02873_settings_panel) {
       ca.audio_offset_ms = 70, ca.picture_offset_ms = -15;  // (the Calibration rows show what they set)
       CHECK(p.value(I::SoundCalibration, ca, true) == "70 ms" && p.value(I::PictureCalibration, ca, true) == "-15 ms");
       ca.audio_offset_ms = 0, ca.picture_offset_ms = 0;
+      // Glow: off (the original) to strong, five levels, stopping at the ends.
+      CHECK(p.label(I::Glow) == "Glow (Off)" && p.value(I::Glow, ca, true) == "Off");
+      p.set_items({I::Glow});
+      SettingsPanel::Input brighter;
+      brighter.right = true;
+      for (const char* want : {"Faint", "Soft", "Medium", "Strong"}) CHECK(p.tick(brighter, 0.0, ca, true) == A::Changed && p.value(I::Glow, ca, true) == want);
+      CHECK(p.tick(brighter, 0.0, ca, true) == A::None && ca.glow == 4);
+      ca.glow = 0;
+      p.set_items({I::PictureCalibration, I::PictureTiming});
       SettingsPanel::Input dn4, rt4;
       dn4.down = true, rt4.right = true;
       p.tick(dn4, 0.0, ca, true);
@@ -1125,7 +1134,7 @@ TEST(disc_sces02873_settings_labels_with_defaults_fit_beside_their_values) {
                               I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses, I::EffectsVolume, I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::WrapCourse, I::WrapSize, I::Visual, I::Modifiers, I::CustomColours, I::Back,
                               I::ColourRoad, I::ColourBlock, I::ColourPit, I::ColourLoop, I::ColourWave, I::ColourBlockPit, I::ColourBlockLoop,
                               I::ColourBlockWave, I::ColourPitLoop, I::ColourPitWave, I::ColourLoopWave, I::ColourAngel, I::ColourRabbit,
-                              I::ColourFrog, I::ColourWorm, I::ColourBackground, I::ResetColours, I::Calibration, I::SoundCalibration, I::PictureTiming, I::PictureCalibration, I::Continue};
+                              I::ColourFrog, I::ColourWorm, I::ColourBackground, I::ResetColours, I::Calibration, I::SoundCalibration, I::PictureTiming, I::PictureCalibration, I::Glow, I::Continue};
   Options longest;
   longest.scroll_speed = 9.75;
   longest.vr_ahead_seconds = longest.vr_behind_seconds = kWholeSongSeconds;

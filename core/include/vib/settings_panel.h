@@ -67,6 +67,7 @@ class SettingsPanel {
     SoundCalibration, // an action: the click track to set Sound timing by
     PictureTiming,    // picture_offset_ms: the picture drawn ahead of the sound, -300 to 300 ms
     PictureCalibration, // an action: silent flashes to set Picture timing by
+    Glow,             // glow: off, faint, soft, medium, strong
   };
   enum class Action { None, Moved, Changed, Close, Recentre, QuitSong, LeaveTop, Calibrate, CalibratePicture };
 

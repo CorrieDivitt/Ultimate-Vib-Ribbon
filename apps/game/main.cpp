@@ -355,6 +355,7 @@ struct Session {
   int music_track = 1;                   // which of them `music` is (from 1)
   SettingsPanel* panel = nullptr;      // our settings: the pause, and below the Options screen
   std::function<void()> write_save;    // keeps the options now
+  std::vector<std::vector<vibr::LineInstance>> glow_lines;  // the glow passes' copies, a frame's worth
   // The performance overlay (ours, task 4.6): every frame measured, shown when on.
   PerfOverlay* perf = nullptr;
   FrameStats stats;
@@ -528,9 +529,9 @@ void apply_settings(Session& s) {
 void setup_panel(SettingsPanel& p, bool vr, bool pause) {
   using I = SettingsPanel::Item;
   if (vr)
-    p.set_group(I::Visual, {I::WobbleSize, I::WobbleHold, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind, I::Performance});
+    p.set_group(I::Visual, {I::WobbleSize, I::WobbleHold, I::LineWidth, I::Glow, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind, I::Performance});
   else
-    p.set_group(I::Visual, {I::WobbleSize, I::Smooth, I::LineWidth, I::Performance});
+    p.set_group(I::Visual, {I::WobbleSize, I::Smooth, I::LineWidth, I::Glow, I::Performance});
   if (vr)
     p.set_group(I::Modifiers, {I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::WrapCourse, I::WrapSize, I::ScoreNumbers, I::FixedCourses});
   else
@@ -603,6 +604,26 @@ void draw_frame(Session& s, std::vector<vibr::Layer>& layers, double update_ms, 
   int lines = 0;
   for (const vibr::Layer& l : layers) lines += l.lines ? int(l.lines->size()) : 0;
   const double build_more = double(SDL_GetTicksNS() - now) * 1e-6;  // (the overlay's own lines count as building)
+  // Glow (ours): under every layer a copy of its lines, wide and faint (Visual > Glow).
+  if (const int g = std::clamp(s.save.options.glow, 0, 4); g > 0) {
+    static const float kWidth[5] = {0, 5, 7, 9, 12}, kBright[5] = {0, 0.10f, 0.16f, 0.24f, 0.35f};
+    s.glow_lines.resize(layers.size());
+    std::vector<vibr::Layer> with_glow;
+    with_glow.reserve(layers.size() * 2);
+    for (std::size_t i = 0; i < layers.size(); ++i) {
+      if (layers[i].lines && !layers[i].lines->empty()) {
+        std::vector<vibr::LineInstance>& copy = s.glow_lines[i];
+        copy = *layers[i].lines;
+        for (vibr::LineInstance& l : copy) l.colour[3] *= kBright[g];
+        vibr::Layer gl = layers[i];
+        gl.lines = &copy;
+        gl.glow = kWidth[g];
+        with_glow.push_back(gl);
+      }
+      with_glow.push_back(layers[i]);
+    }
+    layers = std::move(with_glow);
+  }
   // The original's lines are one pixel on a 288-line picture.
   const Rgb bg = background_colour(s.save.options.colours);  // (custom colours: the background, on every screen)
   s.renderer.set_background(bg.r / 255.0f, bg.g / 255.0f, bg.b / 255.0f);

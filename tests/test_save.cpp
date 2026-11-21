@@ -51,6 +51,7 @@ TEST(save_text_round_trips_and_tolerates_old_files) {
   d.options.vr_wrap_radius = 4.5;
   d.options.colours[0] = 3;
   d.options.picture_offset_ms = -45;
+  d.options.glow = 3;
   d.options.colours[15] = 4;
   d.options.music_folder = "C:/Users/Me/My Music/Vib Ribbon";
   const SaveData back = SaveData::from_text(d.to_text());
@@ -63,6 +64,7 @@ TEST(save_text_round_trips_and_tolerates_old_files) {
   CHECK(back.options.fc_celebration && !SaveData().options.fc_celebration);
   CHECK(back.options.vr_wrap && back.options.vr_wrap_radius == 4.5 && !SaveData().options.vr_wrap && SaveData().options.vr_wrap_radius == 3.0);
   CHECK(SaveData::from_text("vr_wrap_radius 50\n").options.vr_wrap_radius == 10.0);
+  CHECK(back.options.glow == 3 && SaveData().options.glow == 0 && SaveData::from_text("glow 9\n").options.glow == 0);
   CHECK(back.options.picture_offset_ms == -45 && SaveData().options.picture_offset_ms == 0 &&
         SaveData::from_text("picture_offset_ms 900\n").options.picture_offset_ms == 300.0);
   CHECK(back.options.colours == d.options.colours && SaveData().options.colours == (std::array<std::uint8_t, kColourSlotCount>{}));

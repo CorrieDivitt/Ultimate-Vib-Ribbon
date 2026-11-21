@@ -72,6 +72,8 @@ struct Options {
   // Ours: the picture drawn this far ahead of what is heard (ms; negative: behind), to
   // make up for a display's own delay. Judging stays on the sound.
   double picture_offset_ms = 0;
+  // Ours: a soft halo round every line: 0 off (the original), 1 faint to 4 strong.
+  int glow = 0;
   float music_volume = 1.0f, effects_volume = 1.0f;
 };
 

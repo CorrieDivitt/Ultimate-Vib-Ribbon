@@ -76,6 +76,9 @@ struct Layer {
   // takes the lines to that place's own space (y up, -z ahead, the head's height at
   // the recentre at 0). It stays put as the head turns. A monitor draws it as any other.
   float anchored = 0;
+  // > 0: a glow pass (ours): the lines this many times as wide (from at least a pixel)
+  // with an edge that fades all the way out, drawn under the layer it copies.
+  float glow = 0;
 };
 
 // How the last frame went, as the display measured it (the performance overlay).

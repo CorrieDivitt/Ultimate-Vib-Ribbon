@@ -168,8 +168,9 @@ class Renderer::Impl {
       pc.mvp = mul(perspective(layers[i].fov_y, aspect, 10.0f, 100000.0f), layers[i].view);
       pc.viewport[0] = float(extent_.width);
       pc.viewport[1] = float(extent_.height);
-      pc.width = line_width;
-      pc.feather = 0.75f;
+      const float glow = layers[i].glow;  // (a glow pass: wide, fading all the way out)
+      pc.width = glow > 0 ? glow * std::max(line_width, 1.0f) : line_width;
+      pc.feather = glow > 0 ? 0.5f * pc.width : 0.75f;
       vkCmdPushConstants(cmd_, layout_, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof pc, &pc);
       vkCmdDraw(cmd_, 6, counts[i], 0, firsts[i]);
     }
