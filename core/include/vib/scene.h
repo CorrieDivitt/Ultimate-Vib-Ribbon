@@ -32,7 +32,16 @@ struct SceneLine {
   // afresh every frame of its own and the lines still meet.
   std::uint32_t vertex_a = 0, vertex_b = 0;
   float shake_a = 0, shake_b = 0;
+  // What the line belongs to, for colouring it (ours): see line_part.
+  std::uint8_t part = 0;
 };
+
+// SceneLine::part values: Scene tags the road's lines (the flat road between pieces and
+// out to its far ends), each piece's own lines by its road (0-9: block, pit, loop,
+// wave, then the pairs), Vibri's by her form (0-3) and the evolution ring's.
+namespace line_part {
+constexpr std::uint8_t kNone = 0, kRoad = 1, kObstacle = 2 /* + road 0-9 */, kVibri = 12 /* + form 0-3 */, kEvo = 16;
+}
 
 struct SceneView {
   Vec3f eye, target;  // world space; "up" on screen is -Y

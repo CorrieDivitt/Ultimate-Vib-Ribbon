@@ -104,6 +104,7 @@ float depth_for(float fov_y) {
 
 class XrDisplay::Impl {
  public:
+  float background[3] = {0.0f, 0.0f, 0.0f};  // (from Display::set_background, each draw)
   Impl(float scale, float refresh_hz) : scale_(scale) {
     create_instance();
     create_vulkan();
@@ -868,7 +869,9 @@ class XrDisplay::Impl {
     for (std::size_t e = 0; e < 2; ++e) {
       const Eye& eye = eyes_[e];
       VkClearValue clear{};
-      clear.color = {{0.0f, 0.0f, 0.0f, 1.0f}};
+      clear.color = {{background[0], background[1], background[2], 1.0f}};
+      if (linear_colours_)  // (as the lines: decoded so it shows as on the monitor)
+        for (int c = 0; c < 3; ++c) clear.color.float32[c] = to_linear(clear.color.float32[c]);
       VkRenderPassBeginInfo rp{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
       rp.renderPass = render_pass_;
       rp.framebuffer = eye.framebuffers[image[e]];
@@ -967,7 +970,10 @@ XrDisplay::XrDisplay(float metres_per_unit, float refresh_hz) : impl_(std::make_
 XrDisplay::~XrDisplay() = default;
 const char* XrDisplay::gpu_name() const { return impl_->gpu_name(); }
 int XrDisplay::height() const { return impl_->height(); }
-void XrDisplay::draw(const std::vector<Layer>& layers, float line_width) { impl_->draw(layers, line_width); }
+void XrDisplay::draw(const std::vector<Layer>& layers, float line_width) {
+  for (int c = 0; c < 3; ++c) impl_->background[c] = background_[c];
+  impl_->draw(layers, line_width);
+}
 void XrDisplay::recentre() { impl_->recentre(); }
 float XrDisplay::zoom() const { return impl_->zoom(); }
 void XrDisplay::set_zoom(float z) { impl_->set_zoom(z); }

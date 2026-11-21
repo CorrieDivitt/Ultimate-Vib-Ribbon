@@ -55,6 +55,7 @@ struct Buffer {
 
 class Renderer::Impl {
  public:
+  float background[3] = {0.0f, 0.0f, 0.0f};  // (from Display::set_background, each draw)
   explicit Impl(SDL_Window* window) : window_(window) {
     create_instance();
     if (!SDL_Vulkan_CreateSurface(window_, instance_, nullptr, &surface_))
@@ -145,7 +146,7 @@ class Renderer::Impl {
     VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     check(vkBeginCommandBuffer(cmd_, &begin), "vkBeginCommandBuffer");
     VkClearValue clear[2];
-    clear[0].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
+    clear[0].color = {{background[0], background[1], background[2], 1.0f}};
     clear[1].depthStencil = {1.0f, 0};
     VkRenderPassBeginInfo rp{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
     rp.renderPass = render_pass_;
@@ -605,7 +606,10 @@ int Renderer::height() const { return impl_->height(); }
 void Renderer::draw(const std::vector<LineInstance>& lines, const Mat4& view, float fov_y, float line_width) {
   impl_->draw({Layer{&lines, view, fov_y}}, line_width);
 }
-void Renderer::draw(const std::vector<Layer>& layers, float line_width) { impl_->draw(layers, line_width); }
+void Renderer::draw(const std::vector<Layer>& layers, float line_width) {
+  for (int c = 0; c < 3; ++c) impl_->background[c] = background_[c];
+  impl_->draw(layers, line_width);
+}
 FrameTiming Renderer::timing() const { return impl_->timing(); }
 
 }  // namespace vibr

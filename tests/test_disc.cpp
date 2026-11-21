@@ -9,6 +9,7 @@
 #include <string>
 
 #include "test.h"
+#include "vib/colours.h"
 #include "vib/disc_image.h"
 #include "vib/iso9660.h"
 #include "vib/known_discs.h"
@@ -158,6 +159,29 @@ TEST(disc_sces02873_scene_draws) {
     for (std::size_t k = scene.evo_first(); k < lines.size(); ++k) CHECK(std::abs(lines[k].a.x) < 50 && std::abs(lines[k].b.x) < 50);
   }
   CHECK(moved && scene.move_done(0.5));
+  // Every line says what it belongs to, for custom colours: the road between pieces,
+  // each piece by its road (0-5 here), Vibri by her form, then the evolution ring.
+  {
+    std::array<int, 17> count{};
+    for (const SceneLine& l : lines) count[std::min<std::size_t>(l.part, 16)]++;
+    CHECK(count[line_part::kNone] == 0);
+    CHECK(count[line_part::kRoad] >= 7);  // (a join to each of the 6 pieces and to the far point ahead)
+    for (int k = 0; k < 6; ++k) CHECK(count[std::size_t(line_part::kObstacle + k)] > 0);
+    CHECK(count[std::size_t(line_part::kObstacle + 6)] == 0);
+    int vibri_parts = 0;
+    for (int form = 0; form < 4; ++form) vibri_parts += count[std::size_t(line_part::kVibri + form)] > 0;
+    CHECK(vibri_parts == 1);  // (one form at a time)
+    CHECK(count[line_part::kEvo] == int(lines.size() - scene.evo_first()));
+    // Tinted: a white line takes the colour, a dark one stays dark, the ring keeps its own.
+    std::array<std::uint8_t, kColourSlots> choice{};
+    choice[kColourObstacle + 2] = 1;  // the loop: red
+    CHECK((tinted({255, 255, 255}, std::uint8_t(line_part::kObstacle + 2), choice).g == kLinePalette[1].g));
+    CHECK((tinted({0, 0, 2}, std::uint8_t(line_part::kObstacle + 2), choice).r == 0));
+    CHECK((tinted({255, 255, 255}, line_part::kRoad, choice).g == 255));  // (the road: still white)
+    CHECK((tinted({255, 255, 255}, line_part::kEvo, choice).g == 255));
+    choice[kColourBackground] = 1;
+    CHECK((background_colour(choice).b == kBackgroundPalette[1].b));
+  }
   // Vibri stands at road position 1.25: z = (1.25 - 5) x 600.
   CHECK(std::abs(view.target.z - -2250.0f) < 3000.0f);
 }
@@ -860,6 +884,27 @@ TEST(disc_sces02873_settings_panel) {
       p.set_items({I::Modifiers});
       CHECK(p.depth() == 0);
     }
+    // Custom colors: the original's white (black behind) in brackets; left and right go
+    // round the palette; Reset puts every colour back.
+    {
+      Options co;
+      CHECK(p.label(I::ColourRoad) == "Road line (White)" && p.label(I::ColourBackground) == "Background (Black)");
+      CHECK(p.label(I::ColourPitWave) == "Pit + Wave (White)" && p.label(I::ColourFrog) == "Vibri frog (White)");
+      p.set_items({I::ColourLoop, I::ColourBackground, I::ResetColours});
+      SettingsPanel::Input lt, rt, dn2, ok2;
+      lt.left = true, rt.right = true, dn2.down = true, ok2.confirm = true;
+      CHECK(p.tick(lt, 0.0, co, true) == A::Changed && p.value(I::ColourLoop, co, true) == "Pink");  // (round from white)
+      CHECK(p.tick(rt, 0.0, co, true) == A::Changed && p.value(I::ColourLoop, co, true) == "White");
+      CHECK(p.tick(ok2, 0.0, co, true) == A::Changed && p.value(I::ColourLoop, co, true) == "Red");
+      p.tick(dn2, 0.0, co, true);
+      for (int k = 0; k < 4; ++k) p.tick(rt, 0.0, co, true);
+      CHECK(p.value(I::ColourBackground, co, true) == "Grey");
+      p.tick(rt, 0.0, co, true);
+      CHECK(p.value(I::ColourBackground, co, true) == "Black");  // (five, then round)
+      p.tick(rt, 0.0, co, true);
+      p.tick(dn2, 0.0, co, true);
+      CHECK(p.tick(ok2, 0.0, co, true) == A::Changed && co.colours == Options{}.colours);
+    }
     // The course around you: off, a ring of 3 m by default, 1 to 10 m in half metres.
     CHECK(p.label(I::WrapCourse, true) == "Course around you (Off)" && p.label(I::WrapSize, true) == "Circle size (3.0 m)");
     {
@@ -1028,7 +1073,10 @@ TEST(disc_sces02873_settings_labels_with_defaults_fit_beside_their_values) {
   using I = SettingsPanel::Item;
   const std::vector<I> all = {I::WobbleSize, I::WobbleHold, I::Smooth, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead,
                               I::SeeBehind, I::Recentre, I::SoundEffects, I::Vibration, I::SoundTiming, I::QuitSong,
-                              I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses, I::EffectsVolume, I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::WrapCourse, I::WrapSize, I::Visual, I::Modifiers, I::CustomColours, I::Back, I::Continue};
+                              I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses, I::EffectsVolume, I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::WrapCourse, I::WrapSize, I::Visual, I::Modifiers, I::CustomColours, I::Back,
+                              I::ColourRoad, I::ColourBlock, I::ColourPit, I::ColourLoop, I::ColourWave, I::ColourBlockPit, I::ColourBlockLoop,
+                              I::ColourBlockWave, I::ColourPitLoop, I::ColourPitWave, I::ColourLoopWave, I::ColourAngel, I::ColourRabbit,
+                              I::ColourFrog, I::ColourWorm, I::ColourBackground, I::ResetColours, I::Continue};
   Options longest;
   longest.scroll_speed = 9.75;
   longest.vr_ahead_seconds = longest.vr_behind_seconds = kWholeSongSeconds;

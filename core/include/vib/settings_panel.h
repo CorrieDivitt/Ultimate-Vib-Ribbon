@@ -58,6 +58,11 @@ class SettingsPanel {
     Modifiers,
     CustomColours,
     Back,          // the last row of every group: back to the list above
+    // Custom colors: one per colour slot (vib/colours.h), in its order, then a reset.
+    ColourRoad, ColourBlock, ColourPit, ColourLoop, ColourWave,
+    ColourBlockPit, ColourBlockLoop, ColourBlockWave, ColourPitLoop, ColourPitWave, ColourLoopWave,
+    ColourAngel, ColourRabbit, ColourFrog, ColourWorm, ColourBackground,
+    ResetColours,  // an action: every colour back to the original's
   };
   enum class Action { None, Moved, Changed, Close, Recentre, QuitSong, LeaveTop };
 

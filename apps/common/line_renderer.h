@@ -102,6 +102,11 @@ class Display {
   virtual void set_zoom(float) {}
   // The last draw()'s timing.
   virtual FrameTiming timing() const { return {}; }
+  // The colour behind the lines, as shown on a monitor (0-1 each; the original's black).
+  void set_background(float r, float g, float b) { background_[0] = r, background_[1] = g, background_[2] = b; }
+
+ protected:
+  float background_[3] = {0.0f, 0.0f, 0.0f};
 };
 
 class Renderer : public Display {

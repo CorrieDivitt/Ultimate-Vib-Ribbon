@@ -1,5 +1,7 @@
 #include "vib/settings_panel.h"
 
+#include "vib/colours.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -10,37 +12,68 @@ namespace vib {
 namespace {
 
 constexpr double kTau = 6.28318530717958647692;
-constexpr int kItemCount = 28;
+constexpr int kItemCount = 45;
 constexpr int kLanguages = 5;  // German, English, Spanish, French, Italian (the PAL menus)
 
 // Our own words. Order as SettingsPanel::Item.
 const char* const kLabels[kLanguages][kItemCount] = {
     // German
     {"Weiter", "Wackelgröße", "Wackeltakt", "Weiche Bewegung", "Linienstärke", "Zoom", "Blickwinkel", "Sicht nach vorn",
-     "Sicht nach hinten", "Ansicht zentrieren", "Soundeffekte", "Vibration", "Tonversatz", "Lied beenden", "Fortsetzen", "Leistung", "Punkte als Zahl", "Gleiche Strecke", "Effektlautstärke", "Scrolltempo", "Timing-Anzeige", "FC-Jubel", "Strecke um dich", "Kreisgröße", "Grafik", "Modifikatoren", "Eigene Farben", "Zurück"},
+     "Sicht nach hinten", "Ansicht zentrieren", "Soundeffekte", "Vibration", "Tonversatz", "Lied beenden", "Fortsetzen", "Leistung", "Punkte als Zahl", "Gleiche Strecke", "Effektlautstärke", "Scrolltempo", "Timing-Anzeige", "FC-Jubel", "Strecke um dich", "Kreisgröße", "Grafik", "Modifikatoren", "Eigene Farben", "Zurück",
+     "Linie", "Block", "Grube", "Schleife", "Welle", "Block + Grube", "Block + Schleife", "Block + Welle", "Grube + Schleife",
+     "Grube + Welle", "Schleife + Welle", "Vibri Engel", "Vibri Hase", "Vibri Frosch", "Vibri Wurm", "Hintergrund", "Farben zurücksetzen"},
     // English
     {"Continue", "Wobble size", "Wobble hold", "Smooth motion", "Line width", "Zoom", "View angle", "See ahead", "See behind",
-     "Recenter view", "Sound effects", "Vibration", "Sound timing", "Quit song", "Resume", "Performance", "Score in numbers", "Consistent courses", "Effects volume", "Scroll speed", "Timing feedback", "FC celebration", "Course around you", "Circle size", "Visual", "Modifiers", "Custom colors", "Back"},
+     "Recenter view", "Sound effects", "Vibration", "Sound timing", "Quit song", "Resume", "Performance", "Score in numbers", "Consistent courses", "Effects volume", "Scroll speed", "Timing feedback", "FC celebration", "Course around you", "Circle size", "Visual", "Modifiers", "Custom colors", "Back",
+     "Road line", "Block", "Pit", "Loop", "Wave", "Block + Pit", "Block + Loop", "Block + Wave", "Pit + Loop", "Pit + Wave",
+     "Loop + Wave", "Vibri angel", "Vibri rabbit", "Vibri frog", "Vibri worm", "Background", "Reset colors"},
     // Spanish
     {"Continuar", "Tamaño del temblor", "Ritmo del temblor", "Movimiento suave", "Grosor de línea", "Zoom", "Ángulo de vista",
-     "Ver adelante", "Ver atrás", "Centrar vista", "Efectos de sonido", "Vibración", "Desfase de sonido", "Salir de la canción", "Reanudar", "Rendimiento", "Puntos en números", "Recorridos fijos", "Volumen de efectos", "Velocidad de avance", "Precisión en ms", "Celebrar FC", "Recorrido alrededor", "Tamaño del círculo", "Imagen", "Modificadores", "Colores propios", "Volver"},
+     "Ver adelante", "Ver atrás", "Centrar vista", "Efectos de sonido", "Vibración", "Desfase de sonido", "Salir de la canción", "Reanudar", "Rendimiento", "Puntos en números", "Recorridos fijos", "Volumen de efectos", "Velocidad de avance", "Precisión en ms", "Celebrar FC", "Recorrido alrededor", "Tamaño del círculo", "Imagen", "Modificadores", "Colores propios", "Volver",
+     "Línea", "Bloque", "Foso", "Rizo", "Onda", "Bloque + Foso", "Bloque + Rizo", "Bloque + Onda", "Foso + Rizo", "Foso + Onda",
+     "Rizo + Onda", "Vibri ángel", "Vibri conejo", "Vibri rana", "Vibri gusano", "Fondo", "Restablecer colores"},
     // French
     {"Continuer", "Taille du tremblement", "Rythme du tremblement", "Mouvement fluide", "Épaisseur des lignes", "Zoom",
      "Angle de vue", "Voir devant", "Voir derrière", "Recentrer la vue", "Effets sonores", "Vibration", "Décalage du son",
-     "Quitter la chanson", "Reprise", "Performances", "Score en chiffres", "Parcours fixes", "Volume des effets", "Vitesse de défilement", "Précision en ms", "Fête du FC", "Parcours autour de toi", "Taille du cercle", "Visuel", "Modificateurs", "Couleurs perso", "Retour"},
+     "Quitter la chanson", "Reprise", "Performances", "Score en chiffres", "Parcours fixes", "Volume des effets", "Vitesse de défilement", "Précision en ms", "Fête du FC", "Parcours autour de toi", "Taille du cercle", "Visuel", "Modificateurs", "Couleurs perso", "Retour",
+     "Ligne", "Bloc", "Fosse", "Boucle", "Vague", "Bloc + Fosse", "Bloc + Boucle", "Bloc + Vague", "Fosse + Boucle", "Fosse + Vague",
+     "Boucle + Vague", "Vibri ange", "Vibri lapin", "Vibri grenouille", "Vibri ver", "Fond", "Réinitialiser couleurs"},
     // Italian
     {"Continua", "Ampiezza del tremolio", "Ritmo del tremolio", "Movimento fluido", "Spessore delle linee", "Zoom",
      "Angolo di vista", "Vista avanti", "Vista indietro", "Ricentra la vista", "Effetti sonori", "Vibrazione", "Ritardo audio",
-     "Esci dalla canzone", "Ripresa", "Prestazioni", "Punteggio in cifre", "Percorsi fissi", "Volume effetti", "Velocità di scorrimento", "Precisione in ms", "Festa FC", "Percorso intorno a te", "Dimensione del cerchio", "Grafica", "Modificatori", "Colori personalizzati", "Indietro"},
+     "Esci dalla canzone", "Ripresa", "Prestazioni", "Punteggio in cifre", "Percorsi fissi", "Volume effetti", "Velocità di scorrimento", "Precisione in ms", "Festa FC", "Percorso intorno a te", "Dimensione del cerchio", "Grafica", "Modificatori", "Colori personalizzati", "Indietro",
+     "Linea", "Blocco", "Fossa", "Giro", "Onda", "Blocco + Fossa", "Blocco + Giro", "Blocco + Onda", "Fossa + Giro", "Fossa + Onda",
+     "Giro + Onda", "Vibri angelo", "Vibri coniglio", "Vibri rana", "Vibri verme", "Sfondo", "Ripristina colori"},
 };
 const char* const kMore[kLanguages] = {"Weitere Einstellungen (Start)", "More options (Start)", "Más ajustes (Start)", "Autres réglages (Start)",
                                        "Altre impostazioni (Start)"};
+// The palettes' names, in vib/colours.h's order.
+const char* const kLineColourNames[kLanguages][kLineColours] = {
+    {"Weiß", "Rot", "Orange", "Gelb", "Grün", "Cyan", "Blau", "Pink"},
+    {"White", "Red", "Orange", "Yellow", "Green", "Cyan", "Blue", "Pink"},
+    {"Blanco", "Rojo", "Naranja", "Amarillo", "Verde", "Cian", "Azul", "Rosa"},
+    {"Blanc", "Rouge", "Orange", "Jaune", "Vert", "Cyan", "Bleu", "Rose"},
+    {"Bianco", "Rosso", "Arancione", "Giallo", "Verde", "Ciano", "Blu", "Rosa"},
+};
+const char* const kBackgroundNames[kLanguages][kBackgroundColours] = {
+    {"Schwarz", "Marine", "Lila", "Dunkelgrün", "Grau"},
+    {"Black", "Navy", "Purple", "Dark green", "Grey"},
+    {"Negro", "Marino", "Morado", "Verde oscuro", "Gris"},
+    {"Noir", "Marine", "Violet", "Vert foncé", "Gris"},
+    {"Nero", "Blu notte", "Viola", "Verde scuro", "Grigio"},
+};
 const char* const kRewind[kLanguages] = {"Zurückspulen", "Rewind", "Rebobinar", "Rembobiner", "Riavvolgi"};
 const char* const kCountIn[kLanguages] = {"Countdown", "Countdown", "Cuenta atrás", "Compte à rebours", "Conto alla rovescia"};
 const char* const kOn[kLanguages] = {"An", "On", "Sí", "Oui", "Sì"};
 const char* const kOff[kLanguages] = {"Aus", "Off", "No", "Non", "No"};
 const char* const kWholeSong[kLanguages] = {"Ganzes Lied", "Whole song", "Toda la canción", "Toute la chanson", "Tutta la canzone"};
 const char* const kDetailed[kLanguages] = {"Ausführlich", "Detailed", "Detallado", "Détaillé", "Dettagliato"};
+
+// A colour item's slot (vib/colours.h), or -1.
+int colour_item_slot(SettingsPanel::Item item) {
+  const int i = int(item) - int(SettingsPanel::Item::ColourRoad);
+  return i >= 0 && i < kColourSlots ? i : -1;
+}
 
 int table_language(int language) { return language >= 0 && language < kLanguages ? language : 1; }  // Japanese: English
 
@@ -169,6 +202,10 @@ std::string SettingsPanel::label(Item item, bool vr) const {
     case Item::WobbleSize: case Item::WobbleHold: case Item::Smooth: case Item::LineWidth: case Item::Zoom:
     case Item::ViewAngle: case Item::SeeAhead: case Item::SeeBehind: case Item::SoundTiming: case Item::FixedCourses:
     case Item::EffectsVolume: case Item::ScrollSpeed: case Item::WrapCourse: case Item::WrapSize:
+    case Item::ColourRoad: case Item::ColourBlock: case Item::ColourPit: case Item::ColourLoop: case Item::ColourWave:
+    case Item::ColourBlockPit: case Item::ColourBlockLoop: case Item::ColourBlockWave: case Item::ColourPitLoop:
+    case Item::ColourPitWave: case Item::ColourLoopWave: case Item::ColourAngel: case Item::ColourRabbit: case Item::ColourFrog:
+    case Item::ColourWorm: case Item::ColourBackground:
       text += " (" + value(item, original_options(), vr) + ")";  // the original game's value
       break;
     default: break;
@@ -207,7 +244,13 @@ std::string SettingsPanel::value(Item item, const Options& o, bool vr) const {
     case Item::WrapCourse: return on_off(o.vr_wrap);
     case Item::WrapSize: std::snprintf(buf, sizeof buf, "%.1f m", o.vr_wrap_radius); break;
     case Item::Visual: case Item::Modifiers: case Item::CustomColours: return ">";
-    default: return {};
+    case Item::ResetColours: return {};
+    default:
+      if (const int slot = colour_item_slot(item); slot >= 0) {
+        const int c = std::clamp(int(o.colours[std::size_t(slot)]), 0, colour_choices(slot) - 1);
+        return to_font_text(slot == kColourBackground ? kBackgroundNames[l][c] : kLineColourNames[l][c]);
+      }
+      return {};
   }
   return buf;
 }
@@ -277,6 +320,20 @@ bool SettingsPanel::change(Item item, int d, Options& o, bool vr) {
     case Item::FcCelebration: o.fc_celebration = !o.fc_celebration; return true;
     case Item::WrapCourse: o.vr_wrap = !o.vr_wrap; return true;
     case Item::WrapSize: return step(o.vr_wrap_radius, 0.5 * d, 1.0, 10.0);
+    case Item::ResetColours: {
+      const bool any = std::any_of(o.colours.begin(), o.colours.end(), [](std::uint8_t c) { return c != 0; });
+      o.colours.fill(0);
+      return any;
+    }
+    case Item::ColourRoad: case Item::ColourBlock: case Item::ColourPit: case Item::ColourLoop: case Item::ColourWave:
+    case Item::ColourBlockPit: case Item::ColourBlockLoop: case Item::ColourBlockWave: case Item::ColourPitLoop:
+    case Item::ColourPitWave: case Item::ColourLoopWave: case Item::ColourAngel: case Item::ColourRabbit: case Item::ColourFrog:
+    case Item::ColourWorm: case Item::ColourBackground: {  // round the palette, either way
+      const int slot = colour_item_slot(item), n = colour_choices(slot);
+      std::uint8_t& c = o.colours[std::size_t(slot)];
+      c = std::uint8_t(((int(c) + d) % n + n) % n);
+      return true;
+    }
     case Item::ScrollSpeed: {
       const double before = o.scroll_speed;
       o.scroll_speed = clamp_scroll_speed(o.scroll_speed + kScrollSpeedStep * d);
@@ -349,6 +406,10 @@ SettingsPanel::Action SettingsPanel::tick(const Input& in, double seconds, Optio
       case Item::Recentre: return Action::Recentre;
       case Item::QuitSong: return Action::QuitSong;
       case Item::Smooth: case Item::SoundEffects: case Item::Vibration: case Item::ResumeStyle: case Item::Performance: case Item::ScoreNumbers: case Item::FixedCourses: case Item::TimingFeedback: case Item::FcCelebration: case Item::WrapCourse:
+      case Item::ResetColours: case Item::ColourRoad: case Item::ColourBlock: case Item::ColourPit: case Item::ColourLoop:
+      case Item::ColourWave: case Item::ColourBlockPit: case Item::ColourBlockLoop: case Item::ColourBlockWave:
+      case Item::ColourPitLoop: case Item::ColourPitWave: case Item::ColourLoopWave: case Item::ColourAngel:
+      case Item::ColourRabbit: case Item::ColourFrog: case Item::ColourWorm: case Item::ColourBackground:
         change(item, 1, o, vr);
         return Action::Changed;
       default: return Action::None;

@@ -76,6 +76,7 @@
 #include "vib/title.h"
 #include "vib/title_intro.h"
 #include "vib/kiosk_movie.h"
+#include "vib/colours.h"
 #include "vib/course_wrap.h"
 #include "vib/settings_panel.h"
 #include "vib/perf_overlay.h"
@@ -534,7 +535,9 @@ void setup_panel(SettingsPanel& p, bool vr, bool pause) {
                                I::CustomColours});
   else
     p.set_group(I::Modifiers, {I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::ScoreNumbers, I::FixedCourses, I::CustomColours});
-  p.set_group(I::CustomColours, {});  // (the colour options come next)
+  p.set_group(I::CustomColours, {I::ColourRoad, I::ColourBlock, I::ColourPit, I::ColourLoop, I::ColourWave, I::ColourBlockPit,
+                                  I::ColourBlockLoop, I::ColourBlockWave, I::ColourPitLoop, I::ColourPitWave, I::ColourLoopWave,
+                                  I::ColourAngel, I::ColourRabbit, I::ColourFrog, I::ColourWorm, I::ColourBackground, I::ResetColours});
   std::vector<I> top;
   if (pause) top.push_back(I::Continue);
   top.insert(top.end(), {I::Visual, I::Modifiers});
@@ -559,7 +562,8 @@ void to_instances(const Session& s, const std::vector<SceneLine>& in, std::uint3
       a = scaled_jitter(l.a, l.jitter_a, o.jitter_scale);
       b = scaled_jitter(l.b, l.jitter_b, o.jitter_scale);
     }
-    out.push_back({{a.x, a.y, a.z}, {b.x, b.y, b.z}, {l.colour.r / 255.0f, l.colour.g / 255.0f, l.colour.b / 255.0f, 1.0f}});
+    const Rgb c = tinted(l.colour, l.part, o.colours);  // (custom colours; untagged lines keep theirs)
+    out.push_back({{a.x, a.y, a.z}, {b.x, b.y, b.z}, {c.r / 255.0f, c.g / 255.0f, c.b / 255.0f, 1.0f}});
   }
 }
 
@@ -597,6 +601,8 @@ void draw_frame(Session& s, std::vector<vibr::Layer>& layers, double update_ms, 
   for (const vibr::Layer& l : layers) lines += l.lines ? int(l.lines->size()) : 0;
   const double build_more = double(SDL_GetTicksNS() - now) * 1e-6;  // (the overlay's own lines count as building)
   // The original's lines are one pixel on a 288-line picture.
+  const Rgb bg = background_colour(s.save.options.colours);  // (custom colours: the background, on every screen)
+  s.renderer.set_background(bg.r / 255.0f, bg.g / 255.0f, bg.b / 255.0f);
   s.renderer.draw(layers, float(s.line_width * std::max(1, s.renderer.height()) / 288.0));
   const vibr::FrameTiming t = s.renderer.timing();
   FrameSample f;
@@ -1421,7 +1427,8 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
           a = scaled_jitter(l.a, l.jitter_a, s.save.options.jitter_scale);
           b = scaled_jitter(l.b, l.jitter_b, s.save.options.jitter_scale);
         }
-        dst.push_back({{a.x, a.y, a.z}, {b.x, b.y, b.z}, {l.colour.r / 255.0f, l.colour.g / 255.0f, l.colour.b / 255.0f, 1.0f}});
+        const Rgb c = tinted(l.colour, l.part, s.save.options.colours);  // (custom colours; untagged lines keep theirs)
+        dst.push_back({{a.x, a.y, a.z}, {b.x, b.y, b.z}, {c.r / 255.0f, c.g / 255.0f, c.b / 255.0f, 1.0f}});
       }
     };
     auto matrix = [](const SceneView& v) {

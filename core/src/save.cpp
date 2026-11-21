@@ -78,6 +78,9 @@ std::string SaveData::to_text() const {
   out << "timing_feedback " << (options.timing_feedback ? 1 : 0) << '\n';
   out << "fc_celebration " << (options.fc_celebration ? 1 : 0) << '\n';
   out << "vr_wrap " << (options.vr_wrap ? 1 : 0) << '\n';
+  out << "colours";
+  for (const std::uint8_t c : options.colours) out << ' ' << int(c);
+  out << '\n';
   std::snprintf(buf, sizeof buf, "%.2f", options.vr_wrap_radius);
   out << "vr_wrap_radius " << buf << '\n';
   if (!options.music_folder.empty()) out << "music_folder " << options.music_folder << '\n';  // (the rest of the line)
@@ -127,6 +130,12 @@ SaveData SaveData::from_text(const std::string& text) {
           std::array<int, 3> t{};
           if (fields >> t[0] >> t[1] >> t[2]) d.high_scores[std::size_t(c)] = t;
         }
+      continue;
+    }
+    if (key == "colours") {  // one palette choice per slot; missing ones stay 0
+      int c = 0;
+      for (std::size_t k = 0; k < std::size_t(kColourSlotCount) && fields >> c; ++k)
+        d.options.colours[k] = std::uint8_t(std::clamp(c, 0, 7));
       continue;
     }
     if (key == "music_folder") {  // a path: the rest of the line, spaces and all

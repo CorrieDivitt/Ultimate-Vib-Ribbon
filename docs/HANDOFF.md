@@ -19,6 +19,7 @@ Confidence labels used below: **[measured]** = computed this session from the di
 - 4.18 full combo celebration built; owner: "that was perfect". Then (owner): a full course combo in the same setting, bigger; built; owner: "that worked well", locked in. **Task 4.18 done.**
 - 4.11 course wrapped around the player built, then the right stick for its size and the walking-speed fix; owner: "works great", locked in. **Task 4.11 done** (section 2ab).
 - Settings reorganised into groups (owner's layout) before 4.13 colour options (section 2ac).
+- 4.13 custom colours built, waiting for the test (section 2ad).
 
 **End of session 3 (2026-11-21, about 00:40 Toronto):** the owner locked in everything built this session. Done:
 - 4.6 to 4.10: performance overlay, infinite horizon, score above Vibri, progress meter below her, score in numbers.
@@ -583,6 +584,17 @@ Owner's layout for the headset pause (indented = a group of its own): Continue; 
 - `SettingsPanel`: items `Visual`, `Modifiers`, `CustomColours` (groups) and `Back`; `set_group(group, items)` (Back is added at the end; groups nest), `depth()`, `open_group()`. Confirm on a group opens it (cursor on its first row); B, or confirm on Back, returns to the row it was opened from (`Moved`, the quiet click); B at the top still closes. A group's row shows ">" (our own stroke glyph) as its value; inside a group its name is drawn dimmed above the list. Labels: Grafik / Visual / Imagen / Visuel / Grafica; Modifikatoren / Modifiers / Modificadores / Modificateurs / Modificatori; Eigene Farben / Custom colors / Colores propios / Couleurs perso / Colori personalizzati; Zurück / Back / Volver / Retour / Indietro.
 - vibplay `setup_panel(panel, vr, pause)` replaces pause_items/menu_items. Custom colors is an empty group (Back only) until the colour options are added.
 - Test: groups open, nest, return to their row, B closes at the top, ">" value, a group's title drawn.
+
+## 2ad. Custom colours, task 4.13 (session 4)
+
+Owner's spec: a colour setting for each single obstacle, each double obstacle, the line, each of Vibri's forms, and the background; headset and monitor; a short palette of five to eight colours. Built:
+- `core/include/vib/colours.h`: 16 slots (`ColourSlot`: road 0, obstacles 1-10 by road 0-9, forms 11-14, background 15); line palette of 8 (White, Red, Orange, Yellow, Green, Cyan, Blue, Pink), background palette of 5 dark ones (Black, Navy, Purple, Dark green, Grey); `colour_slot(part)`, `tinted(colour, part, choices)` (each channel times the tint's, so dimmed, missed and hidden lines keep their brightness; white = unchanged), `background_colour`.
+- `SceneLine::part` and `line_part` (scene.h): Scene tags every line: the far points and every join line `kRoad`, a piece's own lines `kObstacle + road` (checked on the disc: no obstacle object has a flat line, the flat road is only the joins), Vibri's lines `kVibri + form`, the evolution ring `kEvo` (not coloured). The tag survives the ring wrap.
+- `Options::colours` (save key `colours` with 16 numbers, missing ones 0, clamped 0-7). Settings items `ColourRoad` ... `ColourBackground` and `ResetColours` in the `CustomColours` group; labels show the original's colour in brackets (\"Road line (White)\", \"Background (Black)\"); left/right go round the palette, confirm steps forward; Reset colors sets all back. Names in five languages (German Linie, Block, Grube, Schleife, Welle, Vibri Engel/Hase/Frosch/Wurm, Hintergrund; Spanish Línea, Bloque, Foso, Rizo, Onda, Vibri ángel/conejo/rana/gusano, Fondo; French Ligne, Bloc, Fosse, Boucle, Vague, Vibri ange/lapin/grenouille/ver, Fond; Italian Linea, Blocco, Fossa, Giro, Onda, Vibri angelo/coniglio/rana/verme, Sfondo).
+- vibplay: play's line conversion and `to_instances` (menus' preview) tint by part; `draw_frame` sets the background every frame (all screens) through `Display::set_background` (monitor: as display values; headset: decoded from sRGB like the lines when the swapchain is sRGB).
+- Tests: the scene's tags on the disc (road joins, each of six pieces, one form, the ring), tinting (white takes it, dark stays dark, road and ring unaffected), background, the settings items (brackets, cycling both ways, five backgrounds then round, reset), save round trip and clamp.
+
+Not coloured (not asked): the evolution ring, the HUD (score, meter, numbers, celebrations), the menus' own models. Possible later: themes, a brightness or saturation control, a missed-obstacle flash colour.
 
 ## 2o. Idea dropped: Vibri speaking English (session 3, 2026-11-20)
 

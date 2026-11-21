@@ -499,11 +499,16 @@ void Scene::draw(const Frame& f, std::vector<SceneLine>& out, SceneView& view) {
   }
   Vec3f join{0, 0, float(to_z(before))};
   const int side = camera_.side();
+  std::uint8_t part = line_part::kRoad;  // (the far points are the road's; each piece its own)
   auto piece = [&](const TmdObject& obj, Fixed position, bool missed, int lean) {
     LineBuilder::Xform xf;
     xf.m = lean ? rotation_z(lean) : Mat3{};
     const int range = (missed ? speed_jitter.times(5) : jitter * Fixed::from(1.5)).integer();
+    const std::size_t from = out.size();
     lines_.object(obj, xf, range, to_z(offset_ + position), &join, out);
+    // The piece's own lines take its road's part; the join to it is the road's.
+    for (std::size_t i = from; i < out.size(); ++i) out[i].part = part;
+    if (out.size() > from) out.back().part = line_part::kRoad;
   };
   piece(point_.objects.front(), before, false, 0);
   for (const RoadPiece& p : f.road) {
@@ -517,15 +522,19 @@ void Scene::draw(const Frame& f, std::vector<SceneLine>& out, SceneView& view) {
       }
       if (!side) lean = -lean;
     }
+    part = std::uint8_t(line_part::kObstacle + p.road);
     piece(road_.objects[std::size_t(p.road)], p.position, p.missed, lean);
   }
+  part = line_part::kRoad;
   piece(point_.objects.front(), after, false, 0);
 
   // Vibri, shaking harder for a while after a miss.
   const Fixed vibri_jitter = Fixed() < f.shake ? jitter + f.shake * jitter.times(8) : jitter;
   Move& mv = current();
   mv.clip.set_speed((f.speed * Fixed::from(0.5)).to_double());
+  const std::size_t vibri_from = out.size();
   lines_.animated(forms_[std::size_t(form_)], mv.anim, mv.clip.pose(), {0, 0, vibri_z}, vibri_jitter.integer(), out);
+  for (std::size_t i = vibri_from; i < out.size(); ++i) out[i].part = std::uint8_t(line_part::kVibri + form_);
   mv.clip.advance(f.seconds);
   if (mv.clip.finished()) {  // on to running
     alternate_ = false;
@@ -536,6 +545,7 @@ void Scene::draw(const Frame& f, std::vector<SceneLine>& out, SceneView& view) {
   // The evolution meter rides with her.
   evo_first_ = out.size();
   lines_.animated(evo_model_, evo_anim_, evo_.pose(), {0, 0, vibri_z}, evo_jitter_, out);
+  for (std::size_t i = evo_first_; i < out.size(); ++i) out[i].part = line_part::kEvo;
   evo_.advance(f.seconds);
   if (evo_.speed() > 0 && kEvoEnds[form_] < evo_.position()) {
     evo_.set_speed(0);

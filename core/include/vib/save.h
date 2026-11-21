@@ -5,6 +5,7 @@
 // missing ones keep their defaults, so older and newer files both load.
 
 #include <array>
+#include <cstdint>
 #include <string>
 
 #include "vib/gameplay.h"
@@ -19,6 +20,9 @@ constexpr double kWholeSongSeconds = 10000.0;
 constexpr double kScrollSpeedMin = 0.5, kScrollSpeedMax = 10.0, kScrollSpeedStep = 0.25;
 // Into the range, on the nearest step.
 double clamp_scroll_speed(double v);
+
+// Custom colours: how many slots (see vib/colours.h for what each is).
+constexpr int kColourSlotCount = 16;
 
 struct Options {
   // The language of the menus and words: 0 German, 1 English, 2 Spanish, 3 French,
@@ -59,6 +63,9 @@ struct Options {
   // round the other, both fading out behind the player.
   bool vr_wrap = false;
   double vr_wrap_radius = 3.0;
+  // Ours: custom colours, a palette choice per slot (vib/colours.h); all 0 is the
+  // original's white lines on black.
+  std::array<std::uint8_t, kColourSlotCount> colours{};
   std::string music_folder;       // ours: the player's music folder (UTF-8), picked the first time; empty until then
   double vr_angle = 45.0;       // and where around her, degrees: 0 behind, 90 to her right, -90 to her left
   double audio_offset_ms = 0;  // added to the estimated output latency
