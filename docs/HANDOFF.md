@@ -16,7 +16,7 @@ Confidence labels used below: **[measured]** = computed this session from the di
 - P1: nothing to build. Since cc3b9b0 the time-up screen returns ResultsDone, and main.cpp sends ResultsDone from Screen::Again to AGAIN SELECT; PlayAgain on a speed course restarts from its first track. Section 2w's "no again? after time up yet" was out of date (corrected there).
 - 4.14 built; owner's first test: "worked really well". Then (owner): maximum 10x, and L2/R2 change it mid-song without pausing. Built; owner: "works surprisingly well at 10x", locked in. **Task 4.14 done.**
 - 4.12 timing feedback built; moved below the road at the owner's request; locked in. **Task 4.12 done.**
-- 4.18 full combo celebration built; owner: "that was perfect". Then (owner): a full course combo in the same setting, bigger; built, waiting for the test (section 2aa, last part).
+- 4.18 full combo celebration built; owner: "that was perfect". Then (owner): a full course combo in the same setting, bigger; built; owner: "that worked well", locked in. **Task 4.18 done.**
 
 **End of session 3 (2026-11-21, about 00:40 Toronto):** the owner locked in everything built this session. Done:
 - 4.6 to 4.10: performance overlay, infinite horizon, score above Vibri, progress meter below her, score in numbers.
