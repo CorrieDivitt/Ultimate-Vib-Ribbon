@@ -570,7 +570,11 @@ Owner's idea: instead of the line running off into the distance and becoming a m
 - Not wrapped: the speed dial (its own camera, raised), the Round sign, the perf overlay (anchored). Zoom and view angle have no effect while wrapped. Far road: needs See ahead / See behind to cover half the circumference (pi x radius of road; at 3 m and 2 lengths a second about 8 s each way, so the 30 s defaults fill it).
 - Tests: `the_course_wraps_round_the_player_and_fades_behind_them` (on the ring at any angle, inward side, a quarter of the ring walked, HUD placement agrees with the bend at her place, not mirrored, split and faded, nothing at the point behind the player, speed easing), `the_road_under_vibri_moves_at_the_next_parts_speed`, save round trip and clamp, the settings items.
 
-To judge in the headset: the default radius and eye height (0.5 m above the road), the fade length, whether Vibri's walking speed round the ring looks right (pieces near her should look still in the room), comfort of turning, whether zoom or the right stick should change the radius.
+Owner's first test: "worked surprisingly well"; on a very big circle the objects looked like they were sliding slightly. Changes (owner asked for the right stick too):
+- Right stick: with the ring on, `zoom_or_circle_with_stick` turns it into the circle size (as a zoom of 3 / radius: up smaller, down bigger, x2 a second at full tilt, clamped 1-10 m), in play and in the menus' settings preview; prints "Circle size n m" when let go; saved with the options.
+- Sliding: the walk followed the next part's rate eased over 0.5 s (`follow`), so after each change of speed the pieces near her drifted until the easing caught up; a big ring shows many more parts, so more of it. Now `Gameplay::ground_rate_near(1.0)`: the parts in parts_ (ahead and the ones just passed) averaged by speed with weights exp(-(d / 1 length)^2), no easing; the nearest part decides and the hand-over to the next is smooth (test `vibris_walk_follows_the_parts_nearest_her`). Kept when no part is within reach. `CourseWrap::follow` stays in the header (unused by vibplay). Far parts at other speeds still drift relative to the room: they move at their own speeds in the original too (they overtake each other ahead on songs 3, 5, 6).
+
+To judge in the headset: whether the pieces near Vibri now stand still on a big circle, the default radius and eye height (0.5 m above the road), the fade length.
 
 ## 2o. Idea dropped: Vibri speaking English (session 3, 2026-11-20)
 

@@ -1,6 +1,7 @@
 #include "vib/gameplay.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include "vib/bytes.h"
 
@@ -265,6 +266,19 @@ double Gameplay::ground_rate() const {
   for (const Part& p : parts_)
     if (!(p.position < Fixed())) return p.rate.to_double() / 64.0;  // (sorted by position: the first ahead)
   return 0.0;
+}
+
+double Gameplay::ground_rate_near(double width) const {
+  if (speed_course_) return speed_.over(kSampleRate >> 6).to_double() / 64.0;
+  double sum = 0, weights = 0;
+  for (const Part& p : parts_) {
+    const double d = p.position.to_double() / width;
+    if (std::abs(d) > 6.0) continue;
+    const double w = std::exp(-d * d);
+    sum += w * p.rate.to_double() / 64.0;
+    weights += w;
+  }
+  return weights > 1e-9 ? sum / weights : 0.0;
 }
 
 std::vector<RoadPiece> Gameplay::road(bool far) const {

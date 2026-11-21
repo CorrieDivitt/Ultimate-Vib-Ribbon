@@ -131,6 +131,11 @@ class Gameplay {
   // own speed (speed courses: their one speed); 0 with no part ahead. For drawing the
   // course wrapped round a headset player, where Vibri walks the ring at this speed.
   double ground_rate() const;
+  // The same from the parts near her: their speeds averaged with weights falling off
+  // as exp(-(d / width)^2) with their distance d from her (part lengths), so the
+  // nearest decides and the speed passes smoothly from one part to the next as they go
+  // by. Speed courses: their one speed. 0 with no part within reach (keep the last).
+  double ground_rate_near(double width) const;
   // Where the far road draws a part behind Vibri at `now` (relative to her).
   Fixed far_behind(const Part& p, std::int32_t now) const;
   // The same road as it was (or will be) at an earlier `position`, from the parts

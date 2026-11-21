@@ -513,3 +513,25 @@ TEST(the_road_under_vibri_moves_at_the_next_parts_speed) {
   // One part length per its own length in samples.
   CHECK(std::abs(r.g.ground_rate() - double(r.g.parts()[0].rate.to_double()) / 64.0) < 1e-12);
 }
+
+TEST(vibris_walk_follows_the_parts_nearest_her) {
+  // Two parts at different speeds (one twice as long a part, so half as fast). Near the
+  // first the speed is the first's; near the second, the second's; between, a blend.
+  Run r;
+  r.g.add_event(part(44100, 0, kLen));
+  r.g.add_event(part(44100 + 5 * kLen, 1, kLen * 2));
+  r.step();
+  const double fast = r.g.parts()[0].rate.to_double() / 64.0, slow = r.g.parts()[1].rate.to_double() / 64.0;
+  CHECK(fast > slow * 1.9);
+  r.run_to(44100 - kLen / 20);  // the first part almost at Vibri, the second far
+  CHECK(std::abs(r.g.ground_rate_near(1.0) - fast) < 0.02 * fast);
+  double last = r.g.ground_rate_near(1.0);
+  bool smooth = true;
+  for (int i = 0; i < 400 && r.g.parts().size() > 1; ++i) {  // as the first goes by: no jumps
+    r.step();
+    const double now = r.g.ground_rate_near(1.0);
+    if (now > 0 && last > 0) smooth = smooth && std::abs(now - last) < 0.2 * fast;
+    if (now > 0) last = now;
+  }
+  CHECK(smooth);
+}

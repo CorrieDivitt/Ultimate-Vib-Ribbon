@@ -426,6 +426,22 @@ void zoom_with_stick(Session& s, double seconds, double& zoom) {
   }
 }
 
+// The right stick in play and in the settings' preview: the zoom, or, with the course
+// wrapped round the player, the circle's size (up: smaller, nearer; down: bigger),
+// live, twice or half as big for each second at full tilt, 1 to 10 m. Saved with the
+// options.
+void zoom_or_circle_with_stick(Session& s, double seconds, double& zoom) {
+  if (!s.save.options.vr_wrap) {
+    zoom_with_stick(s, seconds, zoom);
+    return;
+  }
+  const bool was = s.zooming;
+  double nearer = 3.0 / s.save.options.vr_wrap_radius;  // (as a zoom: larger is nearer)
+  zoom_with_stick(s, seconds, nearer);
+  s.save.options.vr_wrap_radius = std::clamp(3.0 / nearer, 1.0, 10.0);
+  if (was && !s.zooming) std::printf("Circle size %.2f m\n", s.save.options.vr_wrap_radius);
+}
+
 // A gamepad trigger pulled past halfway (once until it is let go): the press it
 // stands for in play, or in a headset, thicker lines (R2) or thinner (L2).
 // Returns the press for play, 0 for none.
@@ -1188,7 +1204,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
 
     const std::uint64_t now_ns = SDL_GetTicksNS();
     const double dt = double(now_ns - last_ns) * 1e-9;
-    zoom_with_stick(s, dt, s.save.options.vr_zoom);
+    zoom_or_circle_with_stick(s, dt, s.save.options.vr_zoom);
     last_ns = now_ns;
     scroll_shown = ease_scroll(scroll_shown, scroll_wanted(), dt);
     scroll_note = std::max(0.0, scroll_note - dt);
@@ -1368,8 +1384,10 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     }
     if (wrapped) {
       wrap.radius = float(s.save.options.vr_wrap_radius / double(s.opt.vr_scale));
-      const double per_sample = game.ground_rate() * 600.0 * scroll_shown;  // units of road a heard sample
-      wrap.follow(per_sample * kSampleRate, still_frame ? 0.0 : dt);
+      // Her walking speed: the speed of the parts nearest her, weighted to the nearest,
+      // so the pieces by her stand still in the room (no easing to lag behind a change).
+      const double near_rate = game.ground_rate_near(1.0);
+      if (near_rate > 0) wrap.rate = near_rate * 600.0 * scroll_shown * kSampleRate;  // units a second
       if (wrap_started) wrap.advance(wrap.rate * double(view_at - wrap_heard) / kSampleRate);
       wrap_started = true;
       wrap_heard = view_at;
@@ -2079,7 +2097,8 @@ int run(int argc, char** argv) {
         }
         toggle_settings = false;
         // (In the settings the right stick zooms play's view, which the preview shows.)
-        zoom_with_stick(s, frame_dt, in_settings ? s.save.options.vr_zoom : s.save.options.vr_menu_zoom);
+        if (in_settings) zoom_or_circle_with_stick(s, frame_dt, s.save.options.vr_zoom);
+        else zoom_with_stick(s, frame_dt, s.save.options.vr_menu_zoom);
         behind = std::min(behind + double(now_ns - last_ns) * 1e-9, 0.1);
         last_ns = now_ns;
         while (behind >= 1.0 / TitleScreens::kFrameRate) {
