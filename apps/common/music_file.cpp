@@ -51,7 +51,55 @@ std::vector<std::int16_t> to_cd(const std::int16_t* in, std::uint64_t frames, un
   return out;
 }
 
+// A file name as the C libraries want it: wide on Windows, so any characters open.
+#ifdef _WIN32
+std::wstring native_name(const std::string& utf8_path) {
+  return std::filesystem::path(std::u8string(utf8_path.begin(), utf8_path.end())).wstring();
+}
+#endif
+
+// The frame count to_cd() gives for `frames` at `rate`.
+std::uint64_t cd_frames(std::uint64_t frames, unsigned rate) {
+  if (rate == 44100 || rate == 0 || frames == 0) return frames;
+  return static_cast<std::uint64_t>(double(frames) * 44100.0 / rate);
+}
+
+constexpr std::uint64_t kShortest = 44100 * 10;  // a course needs 10 s at least
+
 }  // namespace
+
+std::uint64_t probe_music_frames(const std::string& utf8_path) {
+  std::uint64_t frames = 0;
+  unsigned rate = 0;
+  if (ends_with(utf8_path, ".mp3")) {
+    drmp3 mp3;
+#ifdef _WIN32
+    const bool ok = drmp3_init_file_w(&mp3, native_name(utf8_path).c_str(), nullptr);
+#else
+    const bool ok = drmp3_init_file(&mp3, utf8_path.c_str(), nullptr);
+#endif
+    if (!ok) throw std::runtime_error("not a readable MP3: " + utf8_path);
+    rate = mp3.sampleRate;
+    frames = drmp3_get_pcm_frame_count(&mp3);
+    drmp3_uninit(&mp3);
+  } else if (ends_with(utf8_path, ".flac")) {
+#ifdef _WIN32
+    drflac* flac = drflac_open_file_w(native_name(utf8_path).c_str(), nullptr);
+#else
+    drflac* flac = drflac_open_file(utf8_path.c_str(), nullptr);
+#endif
+    if (!flac) throw std::runtime_error("not a readable FLAC: " + utf8_path);
+    rate = flac->sampleRate;
+    frames = flac->totalPCMFrameCount;
+    drflac_close(flac);
+    if (frames == 0) return std::uint64_t(load_music(utf8_path).pcm.size() / 2);  // (a stream that does not say)
+  } else {
+    throw std::runtime_error("only MP3 and FLAC files are supported for now: " + utf8_path);
+  }
+  frames = cd_frames(frames, rate);
+  if (frames < kShortest) throw std::runtime_error("too short to make a course from (under 10 seconds): " + utf8_path);
+  return frames;
+}
 
 Music load_music(const std::string& utf8_path) {
   const std::vector<unsigned char> data = read_file(utf8_path);
@@ -77,7 +125,7 @@ Music load_music(const std::string& utf8_path) {
   } else {
     throw std::runtime_error("only MP3 and FLAC files are supported for now: " + utf8_path);
   }
-  if (m.pcm.size() < 44100 * 2 * 10) throw std::runtime_error("too short to make a course from (under 10 seconds): " + utf8_path);
+  if (m.pcm.size() < kShortest * 2) throw std::runtime_error("too short to make a course from (under 10 seconds): " + utf8_path);
   return m;
 }
 

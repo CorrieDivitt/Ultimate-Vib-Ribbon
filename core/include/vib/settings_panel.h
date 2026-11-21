@@ -46,6 +46,7 @@ class SettingsPanel {
     Performance,   // perf_overlay: off, one line, detailed
     ScoreNumbers,  // score_numbers: the score in numbers too, during play
     FixedCourses,  // fixed_courses: consistent mode, the same course every play of a song
+    EffectsVolume, // effects_volume: the sound effects' loudness, 0 to 10 tenths
   };
   enum class Action { None, Moved, Changed, Close, Recentre, QuitSong, LeaveTop };
 

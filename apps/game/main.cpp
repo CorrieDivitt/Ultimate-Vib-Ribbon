@@ -35,6 +35,8 @@
 #include <SDL3/SDL_main.h>
 
 #include <algorithm>
+#include <future>
+#include <atomic>
 #include <cctype>
 #include <chrono>
 #include <cmath>
@@ -491,6 +493,7 @@ void apply_settings(Session& s) {
   s.line_width = s.opt.vr ? o.vr_line_width : o.line_width;
   s.audio.adjust_offset(o.audio_offset_ms - s.audio.offset_ms());
   Clip::set_smooth(s.opt.smooth || o.smooth_animation || s.opt.vr);  // always smooth in a headset
+  s.audio.set_volumes(s.opt.music.value_or(o.music_volume), s.opt.sfx.value_or(o.effects_volume));
 }
 
 // The settings in play's pause, and below the Options screen (which has the
@@ -499,16 +502,16 @@ std::vector<SettingsPanel::Item> pause_items(bool vr) {
   using I = SettingsPanel::Item;
   if (vr)
     return {I::Continue, I::WobbleSize, I::WobbleHold, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind,
-            I::Recentre, I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses, I::QuitSong};
-  return {I::Continue, I::WobbleSize, I::Smooth, I::LineWidth, I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle,
+            I::Recentre, I::SoundEffects, I::EffectsVolume, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses, I::QuitSong};
+  return {I::Continue, I::WobbleSize, I::Smooth, I::LineWidth, I::SoundEffects, I::EffectsVolume, I::Vibration, I::SoundTiming, I::ResumeStyle,
           I::Performance, I::ScoreNumbers, I::FixedCourses, I::QuitSong};
 }
 std::vector<SettingsPanel::Item> menu_items(bool vr) {
   using I = SettingsPanel::Item;
   if (vr)
     return {I::WobbleSize, I::WobbleHold, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind, I::Recentre,
-            I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses};
-  return {I::WobbleSize, I::Smooth, I::LineWidth, I::SoundEffects, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses};
+            I::SoundEffects, I::EffectsVolume, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses};
+  return {I::WobbleSize, I::Smooth, I::LineWidth, I::SoundEffects, I::EffectsVolume, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses};
 }
 
 // Scene lines to the renderer's, jittered as play does: in a headset afresh every
@@ -1630,6 +1633,57 @@ int run(int argc, char** argv) {
         prev_layers.clear();
         std::printf("Demo: the kiosk movie\n");
       };
+      // Ours: a loading screen while the player's music is read (owner: a big folder gave
+      // no sign of life). The game's font, three rows, the settings panel's camera; it
+      // runs until `ready()`, and Back, Select or Esc cancels (false; also when the
+      // window closes, which ends the menus).
+      bool quit_requested = false;  // (the window closed during a loading screen)
+      auto show_loading = [&](const std::function<std::string()>& detail, const std::function<std::string()>& count,
+                              const std::function<bool()>& ready) {
+        static const char* const kLoading[5] = {"Laden", "Loading", "Cargando", "Chargement", "Caricamento"};
+        const std::string heading = to_font_text(kLoading[language >= 0 && language < 5 ? language : 1]);
+        std::vector<vibr::LineInstance> loading_lines;
+        while (!ready()) {
+          SDL_Event ev;
+          while (SDL_PollEvent(&ev)) {
+            if (ev.type == SDL_EVENT_QUIT) {
+              quit_requested = true;
+              return false;
+            }
+            if (ev.type == SDL_EVENT_GAMEPAD_ADDED) {
+              if (SDL_Gamepad* g = SDL_OpenGamepad(ev.gdevice.which)) s.pads[ev.gdevice.which] = g;
+            } else if (ev.type == SDL_EVENT_GAMEPAD_REMOVED) {
+              if (auto it = s.pads.find(ev.gdevice.which); it != s.pads.end()) SDL_CloseGamepad(it->second), s.pads.erase(it);
+            } else if ((ev.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN &&
+                        (ev.gbutton.button == SDL_GAMEPAD_BUTTON_EAST || ev.gbutton.button == SDL_GAMEPAD_BUTTON_BACK)) ||
+                       (ev.type == SDL_EVENT_KEY_DOWN && (ev.key.key == SDLK_ESCAPE || ev.key.key == SDLK_BACKSPACE))) {
+              return false;
+            } else if (ev.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED || ev.type == SDL_EVENT_WINDOW_RESIZED) {
+              renderer.request_resize();
+            }
+          }
+          const std::uint64_t t0 = SDL_GetTicksNS();
+          const float size = opt.vr ? 0.25f : 1.0f;
+          Hud::Layer layer;
+          layer.view.eye = {0, 0, 0};
+          layer.view.target = {0, 0, 4730};
+          layer.view.fov_y = float(682 * 6.28318530717958647692 / 4096.0);
+          const auto seed_now = next_random(static_cast<std::uint32_t>(double(t0) * 1e-9 * kOriginalRefresh) * 2654435761u);
+          const std::string rows[3] = {heading, to_font_text(detail()), to_font_text(count())};
+          const float scales[3] = {1.6f, 0.9f, 1.0f}, ys[3] = {-260.0f, 20.0f, 260.0f};
+          for (int k = 0; k < 3; ++k)
+            for (SceneLine l : panel.text_lines(rows[k], scales[k], seed_now + std::uint32_t(k), 3)) {
+              for (Vec3f* q : {&l.a, &l.b}) *q = {q->x * size, (q->y + ys[k]) * size, 4000.0f * size};
+              l.jitter_a = {l.jitter_a.x * size, l.jitter_a.y * size, 0}, l.jitter_b = {l.jitter_b.x * size, l.jitter_b.y * size, 0};
+              l.shake_a *= size, l.shake_b *= size;
+              layer.lines.push_back(l);
+            }
+          to_instances(s, layer.lines, ++menu_display_frame, loading_lines);
+          std::vector<vibr::Layer> out{{&loading_lines, vibr::look_at({0, 0, 0}, {0, 0, 4730}, {0, -1, 0}), layer.view.fov_y}};
+          draw_frame(s, out, 0.0, double(SDL_GetTicksNS() - t0) * 1e-6);
+        }
+        return true;
+      };
       // Ours: Start (or P / Tab) opens the settings anywhere in the menus, beside a preview of play.
       bool in_settings = false, toggle_settings = false, settings_after_film = false;
       PlayPreview preview;
@@ -1659,20 +1713,9 @@ int run(int argc, char** argv) {
         own_play = true;
         title.go_to(S::Done);
       };
-      auto load_own_cd = [&]() {
+      auto load_own_cd = [&]() {  // (the tracks are read and decoded as they play: see own_play)
         own_tracks.clear();
-        std::vector<std::pair<std::string, std::uint32_t>> names;
-        for (const std::string& name : own_files) {
-          try {
-            own_tracks.push_back(vibr::load_music(child_folder(own_folder, name)));
-            names.push_back({name, std::uint32_t(own_tracks.back().pcm.size() / 2)});
-            std::printf("Track %zu: %s\n", own_tracks.size(), name.c_str());
-          } catch (const std::exception& error) {
-            std::printf("Left out %s: %s\n", name.c_str(), error.what());
-          }
-        }
-        own_cd = make_own_cd(names);
-        title.num_tracks = std::max(1, int(own_tracks.size()));
+        title.num_tracks = std::max(1, int(own_files.size()));
       };
       auto show_folder = [&](FilePicker::Mode mode, const std::string& folder) {
         picker.show(mode, folder, list_folder(folder), !folder.empty());
@@ -2043,29 +2086,88 @@ int run(int argc, char** argv) {
         if (!running) break;
         const std::uint64_t ticked_ns = SDL_GetTicksNS();  // (the menus' work this frame, for the overlay)
         if (own_play && title.done()) {
-          // The CD's tracks in `own_order`, through the original's audio-CD course rules,
-          // the score carried from track to track in all tracks.
+          // The player's music: first every file's length (read without decoding, so it
+          // is quick) for the CD's table of contents and key; then each track decoded
+          // just before it plays, the next one in the background while one plays, and
+          // let go once played, so even a big folder starts at once and fits in memory.
           own_play = false;
           music.stop();
           voices.stop();
-          s.music_key = own_cd.key;
-          s.music_disc = own_cd.track_samples();
-          s.course = own_course;
-          int points = 0;
-          Result r = Result::Clear;
-          for (std::size_t k = 0; k < own_order.size() && r == Result::Clear; ++k) {
-            const int t = own_order[k];
-            if (t < 1 || t > int(own_tracks.size())) continue;
-            s.music = &own_tracks[std::size_t(t - 1)];
-            s.music_track = t;
-            std::printf("Track %d of %zu\n", t, own_tracks.size());
-            r = play_song(s, 0, int(k), points, seed);
-            seed = next_random(seed);
-            if (own_course != Course::AllTracks) points = 0;
+          const std::size_t count = own_files.size();
+          std::atomic<std::size_t> probed{0};
+          std::atomic<bool> stop_probing{false};
+          auto probing = std::async(std::launch::async, [&]() {
+            std::vector<std::pair<std::string, std::uint32_t>> names;
+            std::vector<std::string> paths;
+            for (std::size_t k = 0; k < count && !stop_probing; ++k) {
+              const std::string file = child_folder(own_folder, own_files[k]);
+              try {
+                names.push_back({own_files[k], std::uint32_t(vibr::probe_music_frames(file))});
+                paths.push_back(file);
+              } catch (const std::exception& error) {
+                std::printf("Left out %s: %s\n", own_files[k].c_str(), error.what());
+              }
+              ++probed;
+            }
+            return std::make_pair(names, paths);
+          });
+          const bool read_all = show_loading([&]() { return own_folder; },
+                                             [&]() { return std::to_string(probed.load()) + " / " + std::to_string(count); },
+                                             [&]() { return probing.wait_for(std::chrono::seconds(0)) == std::future_status::ready; });
+          stop_probing = true;
+          const auto probed_files = probing.get();
+          const auto& names = probed_files.first;
+          const auto& paths = probed_files.second;
+          if (quit_requested) {
+            running = false;
+            break;
           }
-          s.music = nullptr;
+          Result r = Result::Clear;
+          if (read_all && !names.empty()) {
+            const OwnCd cd = make_own_cd(names);
+            s.music_key = cd.key;
+            s.music_disc = cd.track_samples();
+            s.course = own_course;
+            auto decode = [&paths](std::size_t k) { return std::async(std::launch::async, [path = paths[k]]() { return vibr::load_music(path); }); };
+            std::future<vibr::Music> next = decode(0);
+            int points = 0;
+            for (std::size_t k = 0; k < names.size() && r == Result::Clear; ++k) {
+              std::future<vibr::Music> current = std::move(next);
+              const std::string& name = names[k].first;
+              const bool loaded = show_loading([&]() { return name; },
+                                               [&]() { return std::to_string(k + 1) + " / " + std::to_string(names.size()); },
+                                               [&]() { return current.wait_for(std::chrono::seconds(0)) == std::future_status::ready; });
+              if (!loaded) {
+                r = quit_requested ? Result::Quit : Result::Abort;
+                current.wait();
+                break;
+              }
+              vibr::Music track;
+              try {
+                track = current.get();
+              } catch (const std::exception& error) {
+                std::printf("Left out %s: %s\n", name.c_str(), error.what());
+                if (k + 1 < names.size()) next = decode(k + 1);
+                continue;
+              }
+              if (track.pcm.size() / 2 != names[k].second)
+                std::printf("Note: %s decoded to %zu frames, not the %u its header gave\n", name.c_str(), track.pcm.size() / 2, names[k].second);
+              if (k + 1 < names.size()) next = decode(k + 1);  // the next one, while this plays
+              s.music = &track;
+              s.music_track = int(k) + 1;
+              std::printf("Track %zu of %zu: %s\n", k + 1, names.size(), name.c_str());
+              r = play_song(s, 0, int(k), points, seed);
+              seed = next_random(seed);
+              if (own_course != Course::AllTracks) points = 0;
+              s.music = nullptr;
+            }
+            if (next.valid()) next.wait();
+          }
           audio.play_music({});
-          if (r == Result::Quit) break;
+          if (r == Result::Quit || quit_requested) {
+            running = false;
+            break;
+          }
           // Back to the own-CD mode select.
           title.go_to(S::UnknownModeSelect);
           prev_layers.clear();

@@ -18,4 +18,10 @@ struct Music {
 // is not MP3 or FLAC.
 Music load_music(const std::string& utf8_path);
 
+// The file's length as load_music() would give it (44.1 kHz frames), read without
+// decoding the sound (FLAC: its header; MP3: its frames counted), so a whole folder's
+// table of contents can be had quickly. Throws as load_music does, including for a
+// file too short to make a course from.
+std::uint64_t probe_music_frames(const std::string& utf8_path);
+
 }  // namespace vibr

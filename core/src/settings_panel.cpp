@@ -10,28 +10,28 @@ namespace vib {
 namespace {
 
 constexpr double kTau = 6.28318530717958647692;
-constexpr int kItemCount = 18;
+constexpr int kItemCount = 19;
 constexpr int kLanguages = 5;  // German, English, Spanish, French, Italian (the PAL menus)
 
 // Our own words. Order as SettingsPanel::Item.
 const char* const kLabels[kLanguages][kItemCount] = {
     // German
     {"Weiter", "Wackelgröße", "Wackeltakt", "Weiche Bewegung", "Linienstärke", "Zoom", "Blickwinkel", "Sicht nach vorn",
-     "Sicht nach hinten", "Ansicht zentrieren", "Soundeffekte", "Vibration", "Tonversatz", "Lied beenden", "Fortsetzen", "Leistung", "Punkte als Zahl", "Gleiche Strecke"},
+     "Sicht nach hinten", "Ansicht zentrieren", "Soundeffekte", "Vibration", "Tonversatz", "Lied beenden", "Fortsetzen", "Leistung", "Punkte als Zahl", "Gleiche Strecke", "Effektlautstärke"},
     // English
     {"Continue", "Wobble size", "Wobble hold", "Smooth motion", "Line width", "Zoom", "View angle", "See ahead", "See behind",
-     "Recentre view", "Sound effects", "Vibration", "Sound timing", "Quit song", "Resume", "Performance", "Score in numbers", "Consistent courses"},
+     "Recentre view", "Sound effects", "Vibration", "Sound timing", "Quit song", "Resume", "Performance", "Score in numbers", "Consistent courses", "Effects volume"},
     // Spanish
     {"Continuar", "Tamaño del temblor", "Ritmo del temblor", "Movimiento suave", "Grosor de línea", "Zoom", "Ángulo de vista",
-     "Ver adelante", "Ver atrás", "Centrar vista", "Efectos de sonido", "Vibración", "Desfase de sonido", "Salir de la canción", "Reanudar", "Rendimiento", "Puntos en números", "Recorridos fijos"},
+     "Ver adelante", "Ver atrás", "Centrar vista", "Efectos de sonido", "Vibración", "Desfase de sonido", "Salir de la canción", "Reanudar", "Rendimiento", "Puntos en números", "Recorridos fijos", "Volumen de efectos"},
     // French
     {"Continuer", "Taille du tremblement", "Rythme du tremblement", "Mouvement fluide", "Épaisseur des lignes", "Zoom",
      "Angle de vue", "Voir devant", "Voir derrière", "Recentrer la vue", "Effets sonores", "Vibration", "Décalage du son",
-     "Quitter la chanson", "Reprise", "Performances", "Score en chiffres", "Parcours fixes"},
+     "Quitter la chanson", "Reprise", "Performances", "Score en chiffres", "Parcours fixes", "Volume des effets"},
     // Italian
     {"Continua", "Ampiezza del tremolio", "Ritmo del tremolio", "Movimento fluido", "Spessore delle linee", "Zoom",
      "Angolo di vista", "Vista avanti", "Vista indietro", "Ricentra la vista", "Effetti sonori", "Vibrazione", "Ritardo audio",
-     "Esci dalla canzone", "Ripresa", "Prestazioni", "Punteggio in cifre", "Percorsi fissi"},
+     "Esci dalla canzone", "Ripresa", "Prestazioni", "Punteggio in cifre", "Percorsi fissi", "Volume effetti"},
 };
 const char* const kMore[kLanguages] = {"Weitere Einstellungen (Start)", "More options (Start)", "Más ajustes (Start)", "Autres réglages (Start)",
                                        "Altre impostazioni (Start)"};
@@ -135,6 +135,7 @@ std::string SettingsPanel::label(Item item, bool vr) const {
   switch (item) {
     case Item::WobbleSize: case Item::WobbleHold: case Item::Smooth: case Item::LineWidth: case Item::Zoom:
     case Item::ViewAngle: case Item::SeeAhead: case Item::SeeBehind: case Item::SoundTiming: case Item::FixedCourses:
+    case Item::EffectsVolume:
       text += " (" + value(item, original_options(), vr) + ")";  // the original game's value
       break;
     default: break;
@@ -166,6 +167,7 @@ std::string SettingsPanel::value(Item item, const Options& o, bool vr) const {
     case Item::Performance: return to_font_text(o.perf_overlay == 0 ? kOff[l] : o.perf_overlay == 1 ? kOn[l] : kDetailed[l]);
     case Item::ScoreNumbers: return on_off(o.score_numbers);
     case Item::FixedCourses: return on_off(o.fixed_courses);
+    case Item::EffectsVolume: std::snprintf(buf, sizeof buf, "%d", int(std::lround(o.effects_volume * 10.0f))); break;
     default: return {};
   }
   return buf;
@@ -227,6 +229,11 @@ bool SettingsPanel::change(Item item, int d, Options& o, bool vr) {
     case Item::Performance: o.perf_overlay = (o.perf_overlay + (d > 0 ? 1 : 2)) % 3; return true;  // round: off, on, detailed
     case Item::ScoreNumbers: o.score_numbers = !o.score_numbers; return true;
     case Item::FixedCourses: o.fixed_courses = !o.fixed_courses; return true;
+    case Item::EffectsVolume: {  // tenths, 0 (silent) to 10 (as loud as the original)
+      const float before = o.effects_volume;
+      o.effects_volume = std::clamp(std::round(o.effects_volume * 10.0f + float(d)) / 10.0f, 0.0f, 1.0f);
+      return o.effects_volume != before;
+    }
     default: return false;
   }
 }
