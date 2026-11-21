@@ -208,6 +208,23 @@ std::uint8_t pad_bits(Uint8 button) {
   }
 }
 
+// In a headset the opening (the title's intro and its menus) is seen 1 m further
+// forward (owner's choice): each camera moved 1 m along its line of sight, never past
+// what it looks at. The headset draws narrow cameras (the intro's first shot is a 3
+// degree telephoto) with their depth squeezed by tan(fov/2) / tan(12.5 degrees) (see
+// depth_for in xr_display.cpp), so the move in game units is 1 m divided by that.
+SceneView opening_forward(SceneView v) {
+  constexpr float kMetres = 1.0f, kMetresPerUnit = 0.001f;
+  constexpr float kNarrowest = 25.0f * 3.14159265f / 180.0f;
+  const float squeeze = std::clamp(std::tan(0.5f * v.fov_y) / std::tan(0.5f * kNarrowest), 0.02f, 1.0f);
+  const float dx = v.target.x - v.eye.x, dy = v.target.y - v.eye.y, dz = v.target.z - v.eye.z;
+  const float dist = std::sqrt(dx * dx + dy * dy + dz * dz);
+  if (dist < 1.0f) return v;
+  const float move = std::min(kMetres / kMetresPerUnit / squeeze, dist * 0.9f);
+  v.eye = {v.eye.x + dx / dist * move, v.eye.y + dy / dist * move, v.eye.z + dz / dist * move};
+  return v;
+}
+
 // ---------------------------------------------------------------- one song
 
 // Command line. Anything given here overrides the saved options for this run only.
@@ -1534,8 +1551,8 @@ int run(int argc, char** argv) {
         prev_layers.clear();
         std::printf("Demo: the kiosk movie\n");
       };
-      // Ours: View (or P / Tab) opens the settings anywhere in the menus, beside a preview of play.
-      bool in_settings = false, toggle_settings = false;
+      // Ours: Start (or P / Tab) opens the settings anywhere in the menus, beside a preview of play.
+      bool in_settings = false, toggle_settings = false, settings_after_film = false;
       PlayPreview preview;
       std::vector<SceneLine> preview_lines;
       std::vector<vibr::LineInstance> settings_lines[2];
@@ -1608,9 +1625,17 @@ int run(int argc, char** argv) {
                 case SDL_GAMEPAD_BUTTON_DPAD_DOWN: press(1, down); break;
                 case SDL_GAMEPAD_BUTTON_DPAD_LEFT: press(2, down); break;
                 case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: press(3, down); break;
-                case SDL_GAMEPAD_BUTTON_SOUTH: case SDL_GAMEPAD_BUTTON_START: press(4, down); break;
+                case SDL_GAMEPAD_BUTTON_SOUTH: press(4, down); break;
+                // Start: our settings, on every screen (owner's choice; the original's
+                // menus took it as confirm). During the kiosk film it ends the film first.
+                case SDL_GAMEPAD_BUTTON_START:
+                  if (down) {
+                    if (in_kiosk) press(4, true), settings_after_film = true;
+                    else toggle_settings = true;
+                  }
+                  break;
                 case SDL_GAMEPAD_BUTTON_EAST: case SDL_GAMEPAD_BUTTON_NORTH: press(5, down); break;
-                case SDL_GAMEPAD_BUTTON_BACK: if (down) toggle_settings = true; break;  // View: our settings
+                case SDL_GAMEPAD_BUTTON_BACK: break;  // (Select: nothing in the menus; in play the original's Start)
                 case SDL_GAMEPAD_BUTTON_RIGHT_STICK: if (down) renderer.recentre(); break;  // R3
                 case SDL_GAMEPAD_BUTTON_LEFT_STICK:  // L3
                   if (down) {
@@ -1628,6 +1653,7 @@ int run(int argc, char** argv) {
         if (!running) break;
         const std::uint64_t now_ns = SDL_GetTicksNS();
         const double frame_dt = double(now_ns - last_ns) * 1e-9;
+        if (settings_after_film && !in_kiosk) settings_after_film = false, toggle_settings = true;
         if (toggle_settings && !in_kiosk) {
           toggle_settings = false;
           in_settings = !in_settings;
@@ -1931,6 +1957,7 @@ int run(int argc, char** argv) {
             v.eye = {v.target.x + (v.eye.x - v.target.x) * k, v.target.y + (v.eye.y - v.target.y) * k,
                      v.target.z + (v.eye.z - v.target.z) * k};
           }
+          if (opt.vr && at_title && !in_kiosk) v = opening_forward(v);
           out.push_back({&menu_lines[i], vibr::look_at({v.eye.x, v.eye.y, v.eye.z}, {v.target.x, v.target.y, v.target.z}, {0, -1, 0}), v.fov_y});
         }
         draw_frame(s, out, double(ticked_ns - now_ns) * 1e-6, double(SDL_GetTicksNS() - ticked_ns) * 1e-6);
