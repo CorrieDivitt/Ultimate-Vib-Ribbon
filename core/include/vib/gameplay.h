@@ -120,6 +120,13 @@ class Gameplay {
   // so a slow one keeps moving away instead of seeming to stay with her. Parts at
   // this speed or faster move as in the original.
   void set_trail_min_speed(double lengths_per_second) { trail_min_speed_ = lengths_per_second; }
+  // Ours, a scroll speed as DDR's speed modifier (drawing only): road(), road_at() and
+  // preview() give each part's distance from Vibri times this, so the road runs
+  // towards her faster (above 1) or slower and every part still reaches her at the
+  // moment the rules judge it. The original's horizon applies to the drawn distance,
+  // so a slower scroll shows more of the course in the same space. 1: the original.
+  void set_scroll(double scroll) { scroll_ = scroll > 0 ? scroll : 1.0; }
+  double scroll() const { return scroll_; }
   // Where the far road draws a part behind Vibri at `now` (relative to her).
   Fixed far_behind(const Part& p, std::int32_t now) const;
   // The same road as it was (or will be) at an earlier `position`, from the parts
@@ -175,6 +182,8 @@ class Gameplay {
   std::vector<Part> passed_;     // gone from parts_, kept for drawing (oldest first)
   std::int32_t keep_passed_ = 0;
   double trail_min_speed_ = 0;
+  double scroll_ = 1.0;
+  Fixed drawn(Fixed from_vibri) const;  // a distance from Vibri as drawn, with the scroll speed
   std::int32_t position_ = 0;  // of the last update
   std::vector<GameEvent> events_, incoming_;
   Interval start_, end_, quiet_, fade_;

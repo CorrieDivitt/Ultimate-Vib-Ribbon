@@ -789,6 +789,30 @@ TEST(disc_sces02873_settings_panel) {
   CHECK(p.label(I::ScoreNumbers) == "Score in numbers");  // (owner: none)
   CHECK(p.label(I::EffectsVolume) == "Effects volume (10)" && p.value(I::EffectsVolume, o, true) == "10");
   CHECK(p.label(I::FixedCourses) == "Consistent courses (Off)" && p.value(I::FixedCourses, o, true) == "Off");  // the original varies
+  CHECK(p.label(I::ScrollSpeed) == "Scroll speed (1x)" && p.value(I::ScrollSpeed, o, true) == "1x");
+  {  // 0.5x to 4x in quarters, stopping at the ends
+    Options so;
+    so.scroll_speed = 3.75;
+    p.set_items({I::ScrollSpeed});
+    SettingsPanel::Input right;
+    right.right = true;
+    CHECK(p.tick(right, 0.0, so, true) == A::Changed && so.scroll_speed == 4.0 && p.value(I::ScrollSpeed, so, true) == "4x");
+    CHECK(p.tick(right, 0.0, so, true) == A::None && so.scroll_speed == 4.0);
+    so.scroll_speed = 0.75;
+    SettingsPanel::Input left;
+    left.left = true;
+    CHECK(p.tick(left, 0.0, so, true) == A::Changed && so.scroll_speed == 0.5 && p.value(I::ScrollSpeed, so, true) == "0.5x");
+    CHECK(p.tick(left, 0.0, so, true) == A::None);
+    so.scroll_speed = 1.25;
+    CHECK(p.value(I::ScrollSpeed, so, true) == "1.25x");
+    // The course selects' line at the bottom middle, in the font.
+    const Hud::Layer line = p.draw_scroll_speed(so, 7);
+    float lo = 1e9f, hi = -1e9f;
+    for (const SceneLine& l : line.lines) lo = std::min({lo, l.a.x, l.b.x}), hi = std::max({hi, l.a.x, l.b.x});
+    CHECK(!line.lines.empty() && std::abs(lo + hi) < 150.0f);  // centred
+    CHECK(!line.lines.empty() && line.lines.front().a.y > 0);  // below the middle (y down)
+    p.set_items(all);
+  }
   // The score in numbers: the font's digits, centred, and on the monitor a layer of its own.
   {
     const auto digits = p.text_lines("116279", 1.0f, 3, 4);
@@ -914,8 +938,9 @@ TEST(disc_sces02873_settings_labels_with_defaults_fit_beside_their_values) {
   using I = SettingsPanel::Item;
   const std::vector<I> all = {I::WobbleSize, I::WobbleHold, I::Smooth, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead,
                               I::SeeBehind, I::Recentre, I::SoundEffects, I::Vibration, I::SoundTiming, I::QuitSong,
-                              I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses, I::EffectsVolume, I::Continue};
+                              I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses, I::EffectsVolume, I::ScrollSpeed, I::Continue};
   Options longest;
+  longest.scroll_speed = 2.75;
   longest.vr_ahead_seconds = longest.vr_behind_seconds = kWholeSongSeconds;
   longest.resume_countdown = true;
   longest.perf_overlay = 2;

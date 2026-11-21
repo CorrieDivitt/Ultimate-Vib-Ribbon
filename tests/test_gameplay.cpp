@@ -289,6 +289,52 @@ TEST(far_road_keeps_passed_parts_for_drawing_only) {
   CHECK(kept.g.road(true).empty());  // gone once 8 s behind
 }
 
+TEST(the_scroll_speed_moves_only_where_parts_are_drawn) {
+  // The same course and presses at 1x, 2x and 0.5x: the same hits, points and events;
+  // each part drawn at its distance from Vibri times the scroll; 1x is the original's.
+  Run one, two, half;
+  two.g.set_scroll(2.0);
+  half.g.set_scroll(0.5);
+  for (Run* r : {&one, &two, &half}) {
+    r->g.add_event(part(44100, 0));
+    r->g.add_event(part(66150, 3));
+    r->g.add_event(part(88200, 1));
+  }
+  // Part way: compare where each would be drawn, then play on.
+  for (Run* r : {&one, &two, &half}) r->run_to(22050);
+  const auto a = one.g.road(true), b = two.g.road(true), c = half.g.road(true);
+  CHECK(a.size() == 3 && b.size() == 3 && c.size() == 3);
+  const Fixed vibri = Fixed::from(1.25);
+  for (std::size_t i = 0; i < 3 && i < b.size() && i < c.size(); ++i) {
+    const double d = (a[i].position - vibri).to_double();
+    CHECK(std::abs((b[i].position - vibri).to_double() - 2 * d) < 1e-3);
+    CHECK(std::abs((c[i].position - vibri).to_double() - 0.5 * d) < 1e-3);
+  }
+  // The original's horizon is on the drawn distance: a slow scroll shows more of what
+  // play already knows, a fast one less.
+  CHECK(half.g.road().size() >= one.g.road().size() && two.g.road().size() <= one.g.road().size());
+  for (Run* r : {&one, &two, &half}) {
+    r->press_at(44100, kPressBlock);
+    r->press_at(66150, kPressWave);
+    r->press_at(88200, kPressPit);
+    r->run_to(44100 * 4);
+  }
+  CHECK(one.hits == 3 && two.hits == 3 && half.hits == 3);
+  CHECK(one.g.points() == two.g.points() && one.g.points() == half.g.points());
+  CHECK(one.g.level() == two.g.level() && one.g.combo() == half.g.combo());
+  // A preview is scaled the same way.
+  Run p;
+  p.g.set_scroll(2.0);
+  p.run_to(44100);
+  RoadPiece ahead;
+  CHECK(p.g.preview(part(44100 * 3, 2), p.now, ahead));
+  Run q;
+  q.run_to(44100);
+  RoadPiece plain;
+  CHECK(q.g.preview(part(44100 * 3, 2), q.now, plain));
+  CHECK(std::abs((ahead.position - vibri).to_double() - 2 * (plain.position - vibri).to_double()) < 1e-3);
+}
+
 TEST(a_part_built_further_ahead_is_drawn_where_play_will_put_it) {
   Run r;
   r.run_to(44100);

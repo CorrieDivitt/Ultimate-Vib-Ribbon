@@ -502,17 +502,17 @@ void apply_settings(Session& s) {
 std::vector<SettingsPanel::Item> pause_items(bool vr) {
   using I = SettingsPanel::Item;
   if (vr)
-    return {I::Continue, I::WobbleSize, I::WobbleHold, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind,
+    return {I::Continue, I::ScrollSpeed, I::WobbleSize, I::WobbleHold, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind,
             I::Recentre, I::SoundEffects, I::EffectsVolume, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses, I::QuitSong};
-  return {I::Continue, I::WobbleSize, I::Smooth, I::LineWidth, I::SoundEffects, I::EffectsVolume, I::Vibration, I::SoundTiming, I::ResumeStyle,
+  return {I::Continue, I::ScrollSpeed, I::WobbleSize, I::Smooth, I::LineWidth, I::SoundEffects, I::EffectsVolume, I::Vibration, I::SoundTiming, I::ResumeStyle,
           I::Performance, I::ScoreNumbers, I::FixedCourses, I::QuitSong};
 }
 std::vector<SettingsPanel::Item> menu_items(bool vr) {
   using I = SettingsPanel::Item;
   if (vr)
-    return {I::WobbleSize, I::WobbleHold, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind, I::Recentre,
+    return {I::ScrollSpeed, I::WobbleSize, I::WobbleHold, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind, I::Recentre,
             I::SoundEffects, I::EffectsVolume, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses};
-  return {I::WobbleSize, I::Smooth, I::LineWidth, I::SoundEffects, I::EffectsVolume, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses};
+  return {I::ScrollSpeed, I::WobbleSize, I::Smooth, I::LineWidth, I::SoundEffects, I::EffectsVolume, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses};
 }
 
 // Scene lines to the renderer's, jittered as play does: in a headset afresh every
@@ -577,6 +577,14 @@ void draw_frame(Session& s, std::vector<vibr::Layer>& layers, double update_ms, 
   s.stats.add(f);
 }
 
+// The scroll speed shown, moved towards the setting: most of the way in about a
+// fifth of a second, landing exactly on it.
+double ease_scroll(double shown, double target, double dt) {
+  if (shown == target) return shown;
+  const double next = target + (shown - target) * std::exp(-std::max(0.0, dt) / 0.07);
+  return std::abs(next - target) < 0.002 ? target : next;
+}
+
 // The menus' settings screen shows play beside the settings: Vibri walking a road of
 // obstacles that never ends, seen as in play (in a headset from beside her, with the
 // zoom and angle set, the road as far ahead and behind as set), clearing each piece as
@@ -584,8 +592,10 @@ void draw_frame(Session& s, std::vector<vibr::Layer>& layers, double update_ms, 
 // a fixed made-up order.
 struct PlayPreview {
   double t = 0;
+  double scroll = 1.0;  // the scroll speed shown, eased as play's is
   void start(Session& s) {
     t = 0;
+    scroll = s.save.options.scroll_speed;
     s.scene.reset(true, false);
   }
   void draw(Session& s, double dt, std::uint32_t jitter_seed, std::vector<SceneLine>& lines, SceneView& view) {
@@ -595,13 +605,15 @@ struct PlayPreview {
     t += std::min(dt, 0.1);
     const double now = t * kSpeed;
     const Options& o = s.save.options;
-    // (Its endless road shows at most 2 minutes each way, enough to reach the horizon.)
-    const double ahead = s.opt.vr ? std::min(o.vr_ahead_seconds, 120.0) * kSpeed : 14.0;
-    const double behind = s.opt.vr ? std::min(o.vr_behind_seconds, 120.0) * kSpeed : 3.0;
+    scroll = ease_scroll(scroll, o.scroll_speed, dt);
+    // (Its endless road shows at most 2 minutes each way, enough to reach the horizon;
+    // on the monitor as far as the original's horizon as drawn, whatever the scroll.)
+    const double ahead = s.opt.vr ? std::min(o.vr_ahead_seconds, 120.0) * kSpeed : 14.0 / scroll;
+    const double behind = s.opt.vr ? std::min(o.vr_behind_seconds, 120.0) * kSpeed : 3.0 / scroll;
     Scene::Frame f;
     f.seconds = dt;
     f.jitter_seed = jitter_seed;
-    f.speed = Fixed::from(kSpeed);
+    f.speed = Fixed::from(kSpeed * scroll);
     const auto first = std::max<long long>(1, (long long)std::ceil((now - behind) / kSpacing));
     const auto last = (long long)std::floor((now + ahead) / kSpacing);
     for (long long k = first; k <= last; ++k) {
@@ -611,7 +623,7 @@ struct PlayPreview {
         s.scene.set_move(road, false);
         if (o.sound_effects) s.fx.number(16 + road, 100, 3);
       }
-      f.road.push_back({road, Fixed::from(x - now + 1.25), false, false});  // (Vibri stands 1.25 along)
+      f.road.push_back({road, Fixed::from((x - now) * scroll + 1.25), false, false});  // (Vibri stands 1.25 along)
     }
     s.scene.draw(f, lines, view);
     if (s.opt.vr) {
@@ -642,20 +654,38 @@ void panel_sound(Session& s, SettingsPanel::Action a) {
   else if (a != SettingsPanel::Action::None) s.fx.number(1, 90, 5);
 }
 
-std::uint8_t trigger_pulled(Session& s, const SDL_GamepadAxisEvent& a) {
+// A trigger pulled past halfway (+1 right, -1 left) since it was last let go; 0 otherwise.
+int trigger_edge(Session& s, const SDL_GamepadAxisEvent& a) {
   if (a.axis != SDL_GAMEPAD_AXIS_LEFT_TRIGGER && a.axis != SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) return 0;
   const std::uint8_t bit = a.axis == SDL_GAMEPAD_AXIS_LEFT_TRIGGER ? 1 : 2;
   std::uint8_t& held = s.triggers[a.which];
-  if (a.value > 16000 && !(held & bit)) {  // pulled past halfway
+  if (a.value > 16000 && !(held & bit)) {
     held = std::uint8_t(held | bit);
-    if (s.opt.vr) {
-      change_line_width(s, bit == 2);
-      return 0;
-    }
-    return bit == 1 ? std::uint8_t(kPressBlock) : std::uint8_t(kPressLoop);
+    return bit == 2 ? 1 : -1;
   }
   if (a.value < 8000) held = std::uint8_t(held & ~bit);
   return 0;
+}
+
+std::uint8_t trigger_pulled(Session& s, const SDL_GamepadAxisEvent& a) {
+  const int d = trigger_edge(s, a);
+  if (d == 0) return 0;
+  if (s.opt.vr) {
+    change_line_width(s, d > 0);
+    return 0;
+  }
+  return d < 0 ? std::uint8_t(kPressBlock) : std::uint8_t(kPressLoop);
+}
+
+// The scroll speed a step faster (d 1) or slower (-1), with the click; false at an end.
+bool change_scroll_speed(Session& s, int d) {
+  double& v = s.save.options.scroll_speed;
+  const double before = v;
+  v = clamp_scroll_speed(v + kScrollSpeedStep * d);
+  if (v == before) return false;
+  s.fx.number(1, 90, 5);
+  std::printf("Scroll speed %s (saved)\n", SettingsPanel::scroll_text(v).c_str());
+  return true;
 }
 
 // After a pause, the tape-rewind sound: the music from `to` back to `from` (heard
@@ -875,6 +905,12 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   // every part built so far (8 s ahead) shows ahead.
   if (s.opt.vr) game.keep_passed(static_cast<std::int32_t>(std::min(s.save.options.vr_behind_seconds, kWholeSongSeconds) * kSampleRate));
   if (s.opt.vr) game.set_trail_min_speed(kTrailMinSpeed);
+  // The scroll speed (display only), eased towards the setting so a change in the
+  // pause or between songs stretches or squeezes the road smoothly.
+  // (The idle demo shows the original's look: 1x.)
+  auto scroll_wanted = [&]() { return s.demo ? 1.0 : s.save.options.scroll_speed; };
+  double scroll_shown = scroll_wanted();
+  game.set_scroll(scroll_shown);
   // Further ahead than play builds: a second generator on the same music and timing,
   // running ahead, drawn only. Its course is the same course (it is checked below),
   // so its parts become play's own as play reaches them.
@@ -1100,6 +1136,8 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     const double dt = double(now_ns - last_ns) * 1e-9;
     zoom_with_stick(s, dt, s.save.options.vr_zoom);
     last_ns = now_ns;
+    scroll_shown = ease_scroll(scroll_shown, scroll_wanted(), dt);
+    game.set_scroll(scroll_shown);
 
     if (pause && !paused && going == Going::No && s.panel) {
       paused = true;
@@ -1223,7 +1261,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     const bool still_frame = paused || going == Going::Rewinding || going == Going::Counting;  // Vibri waits
     f.seconds = still_frame ? 0.0 : dt;
     f.jitter_seed = next_random(static_cast<std::uint32_t>(double(now_ns - start_ns) * 1e-9 * kOriginalRefresh) * 2654435761u);
-    f.speed = game.speed();
+    f.speed = scroll_shown == 1.0 ? game.speed() : Fixed::from(game.speed().to_double() * scroll_shown);  // Vibri runs as fast as the road comes
     f.road = frozen ? game.road_at(view_at, s.opt.vr) : game.road(s.opt.vr);
     if (s.opt.vr && far_extra() > 0 && !speed_level) {  // (a speed course's beat changes as the player scores)
       // At most about 2 ms of analysis a frame: with the whole song asked for, the far
@@ -1640,6 +1678,11 @@ int run(int argc, char** argv) {
       std::optional<Effects> kiosk_fx;
       constexpr int kKioskVoice = 8;  // its voices 0 and 1 play on 8 and 9
       bool in_kiosk = false;
+      // The screens where a course is chosen: L2 and R2 change the scroll speed there.
+      auto choosing_course = [&]() {
+        const S screen = title.screen();
+        return !in_kiosk && !at_title && (screen == S::PsjModeSelect || screen == S::UnknownModeSelect || screen == S::SpeedSelect);
+      };
       // Its music is a CD track of the game's disc, as the original's kiosk program
       // plays it: audio track 7 (disc track 8, after the data track and the six songs).
       std::vector<std::int16_t> kiosk_track;
@@ -1803,6 +1846,9 @@ int run(int argc, char** argv) {
                     write_save();
                   }
                   break;
+                case SDLK_PAGEUP: case SDLK_PAGEDOWN:  // the scroll speed, on the course selects (as L2 and R2)
+                  if (down && choosing_course() && change_scroll_speed(s, e.key.key == SDLK_PAGEUP ? 1 : -1)) write_save();
+                  break;
                 default: break;
               }
               break;
@@ -1817,7 +1863,9 @@ int run(int argc, char** argv) {
               }
               break;
             case SDL_EVENT_GAMEPAD_AXIS_MOTION:
-              if (opt.vr) {  // the line width, in the menus too
+              if (choosing_course()) {  // L2 and R2: the scroll speed, on the course selects
+                if (const int d = trigger_edge(s, e.gaxis); d && change_scroll_speed(s, d)) write_save();
+              } else if (opt.vr) {  // the line width, in the other menus
                 const double before = s.line_width;
                 trigger_pulled(s, e.gaxis);
                 if (s.line_width != before) write_save();
@@ -2416,12 +2464,14 @@ int run(int argc, char** argv) {
                        b.z + (n.z - b.z) * alpha + now_jitter.z};
         };
         // On the Options screen, the hint that View opens our settings, drawn as its other layers are.
-        const bool show_panel = !in_kiosk && !at_title && title.screen() == S::Option;
+        // On the course selects, the scroll speed at the bottom (L2 and R2 change it).
+        const bool show_panel = !in_kiosk && !at_title && (title.screen() == S::Option || choosing_course());
         Hud::Layer panel_layer;
         if (show_panel) {  // a dimmed "More options (Select)" at the bottom left, away from Vibri and the menu
           panel.set_place(-0.8f, 1, 0.65f);
           panel.set_columns(-1850.0f, 450.0f);
-          panel_layer = panel.draw_hint(next_random(menu_display_frame * 2654435761u));
+          const std::uint32_t seed = next_random(menu_display_frame * 2654435761u);
+          panel_layer = title.screen() == S::Option ? panel.draw_hint(seed) : panel.draw_scroll_speed(save.options, seed);
         }
         menu_lines.resize(layers.size() + 1);
         for (std::size_t i = 0; i < layers.size() + (show_panel ? 1 : 0); ++i) {

@@ -1,6 +1,6 @@
 # Vib Ribbon VR: Handoff Document
 
-Last updated 2026-11-20 (session 3). Read this first in any new session, then the tracker.
+Last updated 2026-11-21 (session 4). Read this first in any new session, then the tracker.
 
 - Repository: https://github.com/CorrieDivitt/Vib-Ribbon-VR. Master copies of this file, the plan and the tracker source live in its `docs/` folder.
 
@@ -10,6 +10,11 @@ Last updated 2026-11-20 (session 3). Read this first in any new session, then th
 Confidence labels used below: **[measured]** = computed this session from the disc or repo files. **[source]** = stated by the linked project or page. **[summary]** = from an automated summary of a decompiled source file, not yet read line by line. **[inferred]** = my reasoning from measured data, needs confirming.
 
 ## 1. Where things stand
+
+**Session 4 (2026-11-21, quality of life):** the owner's order: P4 (line endings), P1 (again? after a speed time-up), then 4.14 (scroll speed). P5 (fading the lines at the whole-song horizon) dropped as unnecessary. New tracker tasks from the owner: 4.16 the Ultimate PC version (a flat-screen Windows build shipped with the VR build, with most VR settings; maybe Android), 4.17 difficulty setting, 4.18 full combo (both from the notes box).
+- P4 done: `.gitattributes` (`* text=auto`, `*.sh` LF). Cause of the recurring "changed" files: the owner's Windows git writes CRLF in the working tree; without attributes, files touched from the Linux side showed as wholly changed. Repository content is LF throughout (checked).
+- P1: nothing to build. Since cc3b9b0 the time-up screen returns ResultsDone, and main.cpp sends ResultsDone from Screen::Again to AGAIN SELECT; PlayAgain on a speed course restarts from its first track. Section 2w's "no again? after time up yet" was out of date (corrected there).
+- 4.14 built, waiting for the headset test (section 2y).
 
 **End of session 3 (2026-11-21, about 00:40 Toronto):** the owner locked in everything built this session. Done:
 - 4.6 to 4.10: performance overlay, infinite horizon, score above Vibri, progress meter below her, score in numbers.
@@ -485,7 +490,7 @@ The rotating obstacles the owner saw with own music: the original's **screw** ef
   - Voices: 8, 8, 9, 13, 90, 218; the time said in the speed form at 366/60 s; then 206 and 220.
   - Words: `GameText::List::SpeedTime`, pointer table 0x8006CEE8, 3 per language. Null entries read as empty; Japanese uses all three, the others two.
   - Time up (`again()` when `results_time_up`): END/SPD_MOJA.TMD (SPD_M01, SPD_M02), END/SPD_G02 on CL_OV, Vibri V_OV/SPD_V02/03, EndWords 0 then 1, voices 9, 12, 176, 182, ending by itself at 390/60 s.
-  - Both go back to the speed select. results_rank is 0 for now, so no table follows; the speed tables are stage 3. There is no "again?" after time up yet.
+  - Both go back to the speed select. results_rank is 0 for now, so no table follows; the speed tables are stage 3. "again?" follows time up (added with stage 3, section 2x).
   - Test: test_disc checks both screens on the disc (words read, lines drawn, ending by themselves).
 - Zoom: the furthest zoom out is now 1/36 (was 1/24), 50% further, in both the settings item and the right stick.
 - Owner tested the speed results and the zoom: locked in.
@@ -511,6 +516,22 @@ The rotating obstacles the owner saw with own music: the original's **screw** ef
 - Test: test_disc runs UNKNOWN HISCORE (cycling, back), one-track and all-tracks clears, a speed clear with a table, and "again?".
 - Speed dial in VR: the owner asked for it higher above Vibri. `Hud::Layer.speed` marks the dial. In a headset its lines are raised 400 in the meter camera's space (`kSpeedDialRaise` in main.cpp). Its lines span y -1333 to -307 there (y is down), camera eye (0, 0, -2905), fov 0.445. The monitor is unchanged.
 - Unchecked (no disc here): whether SPD_LBL1-3.ANM need a language prefix. If the label is missing, check `localized()` for those names.
+
+## 2y. Scroll speed, task 4.14 (session 4)
+
+Owner's spec: like DDR's or StepMania's speed modifier. Obstacles and Vibri move faster or slower; timing, judging and the music are identical at every speed. 0.5x to 4x in steps of 0.25, default 1x. A pause item, and L2/R2 on the stage select with "Scroll speed: 1x" near the bottom of the screen. Changing it mid-song stretches or squeezes the road live.
+
+Built (display only; play's rules untouched):
+- `Options::scroll_speed` (save key `scroll_speed`, `clamp_scroll_speed` snaps to the range and step; `kScrollSpeedMin/Max/Step` in save.h).
+- `Gameplay::set_scroll(double)`: `road()`, `road_at()` and `preview()` return each part's distance from Vibri times the scroll (`Gameplay::drawn`; exactly the old values at 1x). The original's horizon (11.75 lengths ahead in the non-far road) applies to the drawn distance, so 0.5x shows twice as much of the course in the same space and 4x a quarter. The erase point behind Vibri is unchanged (time-based), so at 4x passed parts are drawn up to 17 lengths behind before they go; in the headset the far road keeps them as before. Order is kept (a positive factor).
+- vibplay `play_song`: `scroll_shown` eases to the setting (`ease_scroll`, time constant 0.07 s, lands exactly), so a change in the pause shows at once over the frozen road and mid-song changes are smooth. Vibri's run clip speed is `game.speed() x scroll` (`Scene::Frame::speed`). The idle demo always uses 1x.
+- Settings item `ScrollSpeed` ("Scroll speed (1x)", values "0.5x" ... "4x"; German Scrolltempo, Spanish Velocidad de avance, French Vitesse de défilement, Italian Velocità di scorrimento), second in the pause list and first in the menus' settings, monitor and headset. The menus' play preview uses it too.
+- Course selects (`choosing_course()`: PSJ MODE SELECT, UNKNOWN MODE SELECT, MODE SPEED SELECT): L2/R2 (`trigger_edge`) or PageDown/PageUp step it with the click, saved; `SettingsPanel::draw_scroll_speed` draws "Scroll speed: 1.25x" dimmed, centred, 86% down the text camera's half-height (the colon is our own glyph). On those screens the triggers no longer change the headset line width (still in the settings and on the other menus).
+- Tests: `the_scroll_speed_moves_only_where_parts_are_drawn` (1x, 2x, 0.5x: same hits, points, level, combo; drawn distances scale; horizon; preview), save round trip and clamping, the panel's steps and ends, the bottom line centred, every language's label fits beside its value. 82 tests pass against the disc; main.cpp checked with -fsyntax-only -Werror against SDL 3.2.26, Vulkan-Headers and OpenXR 1.1.65 (the 5 GCC-only missing-field-initializer warnings on the Session aggregate are older than this session; MSVC does not raise them).
+
+Known limit: on the monitor, play knows the course only 8 s ahead, so at 0.5x-0.75x on slow songs obstacles can appear partway to the horizon instead of at it. In the headset the far generator covers the See ahead time, so this does not arise. If it matters on the monitor, run the far generator there too when the scroll is below 1.
+
+To judge in the headset: whether L2/R2 on the course selects and the line at the bottom read well; how the stretch feels mid-song; whether Vibri's faster run at 3x-4x looks right.
 
 ## 2o. Idea dropped: Vibri speaking English (session 3, 2026-11-20)
 

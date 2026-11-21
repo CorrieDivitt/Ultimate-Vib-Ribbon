@@ -15,6 +15,11 @@ namespace vib {
 // drawn to its end, or kept from its start), so the line runs on into the horizon.
 constexpr double kWholeSongSeconds = 10000.0;
 
+// The scroll speed's range and step (Options::scroll_speed).
+constexpr double kScrollSpeedMin = 0.5, kScrollSpeedMax = 4.0, kScrollSpeedStep = 0.25;
+// Into the range, on the nearest step.
+double clamp_scroll_speed(double v);
+
 struct Options {
   // The language of the menus and words: 0 German, 1 English, 2 Spanish, 3 French,
   // 4 Italian; -1 until the player has chosen one (the title then asks first).
@@ -40,6 +45,10 @@ struct Options {
   bool resume_countdown = false;  // after a pause: count in at the same place, instead of rewinding a little
   int perf_overlay = 0;           // ours: the performance overlay, 0 off, 1 one line, 2 detailed
   bool score_numbers = false;     // ours: the score in numbers as well as the marks, during play
+  // Ours, as DDR's and StepMania's speed modifier: how fast the road is drawn coming
+  // towards Vibri (0.5 to 4 in steps of 0.25). Display only: every part still reaches
+  // her at the same moment and is judged the same; the music is untouched.
+  double scroll_speed = 1.0;
   std::string music_folder;       // ours: the player's music folder (UTF-8), picked the first time; empty until then
   double vr_angle = 45.0;       // and where around her, degrees: 0 behind, 90 to her right, -90 to her left
   double audio_offset_ms = 0;  // added to the estimated output latency

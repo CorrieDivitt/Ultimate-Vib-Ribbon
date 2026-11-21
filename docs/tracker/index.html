@@ -146,7 +146,7 @@ button.copy{font-family:var(--display);font-size:12px;background:var(--ink);colo
    status values: done | active | todo | blocked | ask (needs the owner's answer) */
 const T = {
   goal: "A version of Vib-Ribbon playable in VR on PCVR and Meta Quest 3, with responsive, consistent timing and visuals that do justice to the original. Steam Frame and levels from your own music are stretch goals.",
-  updated: "2026-11-21, end of session 3 (4.6 to 4.10 done; 3.7 own music done: picker, speed courses, own-CD high scores; next session: quality-of-life enhancements)",
+  updated: "2026-11-21, session 4 (quality of life: line endings fixed, scroll speed 4.14 built and waiting for your headset test)",
   approach: "Native VR port. Game logic from the decompilation, assets read from your own disc, emulator used as the reference to test against.",
   asks: [
             {id:"Q13", t:"When you want to try fixed courses: open save.txt (path printed when vibplay starts), change fixed_courses 0 to 1, and play. Or add --fixed for one run.", why:"Your decision: courses vary from play to play like the original by default; the same-every-time courses are an option for you to judge by playing."},
@@ -214,8 +214,12 @@ const T = {
       {id:"4.11", s:"todo", t:"Wrap the course around the player so it looks endless, with no horizon"},
       {id:"4.12", s:"todo", t:"Timing feedback to the player during a song (early, late, how close)"},
       {id:"4.13", s:"todo", t:"Colour options"},
-      {id:"4.14", s:"todo", t:"Speed modifier"},
-      {id:"4.15", s:"todo", t:"Play with passthrough"}
+      {id:"4.14", s:"active", t:"Speed modifier (scroll speed, display only, as in DDR and StepMania)", note:"Built (session 4), waiting for your headset test. Scroll speed 0.5x to 4x in steps of 0.25, default 1x. Obstacles come at you faster or slower and Vibri runs to match, but every obstacle reaches her at the same moment and is judged exactly the same; the music is untouched. Set it in the pause (second item) or the menus' settings, or with L2 and R2 (PageUp and PageDown on the keyboard) on the course selects (bronze/silver/gold, the own-music menu and the speed select), where Scroll speed: 1x shows at the bottom. Changing it mid-song (in the pause) stretches or squeezes the road smoothly in about a fifth of a second. The idle demo always plays at 1x. On the monitor at 0.5x and 0.75x, obstacles may appear partway up the road, because play only knows the course 8 s ahead."},
+      {id:"4.15", s:"todo", t:"Play with passthrough"},
+      {id:"4.16", s:"todo", t:"Ultimate PC version: a flat-screen Windows build shipped with the VR build, offering most of the VR settings; maybe Android too", note:"Your idea (session 4). The monitor build already exists (vibplay without --vr); this task is about bringing the VR enhancements to it and packaging both."},
+      {id:"4.17", s:"todo", t:"Difficulty setting (easier or harder courses from the generator; Normal = the original)", note:"From your notes box."},
+      {id:"4.18", s:"todo", t:"Full combo: track no-miss runs, show it at the results and beside the high score", note:"From your notes box."},
+      {id:"4.19", s:"done", t:"Small fixes (session 4)", note:"Line endings: a .gitattributes file now stores text with LF and checks it out with your Windows line endings, so git no longer shows files as changed when only line endings differ. Again? after a speed course time-up: already in the session 3 build (time up, then again?, which restarts the speed run from its first track); the handoff said otherwise by mistake, now corrected. Fading the lines with distance at the whole-song horizon: dropped as unnecessary (your call)."}
      ]},
     {n:5, name:"Standalone Quest 3", goal:"The same game running on the Quest 3 itself.",
      exit:"Standalone build holds 90 Hz or better with timing equal to PCVR.",
@@ -265,8 +269,8 @@ const T = {
     {id:"R7", t:"PAL disc. Video ran at 50 Hz on the original.", why:"Low risk because gameplay follows the audio clock."}
   ],
   commands: [
-    {state:"Session 4", what:"Start of the next session: get the latest build (everything from session 3, locked in), build, run the tests against your disc and play in the headset.",
-     code:'cd F:\\VibRibbonVR\\Vib-Ribbon-VR\ngit pull\ncmake --build --preset dev\nctest --preset dev\n.\\build\\dev\\apps\\game\\vibplay.exe "F:\\VibRibbonVR\\research\\Gamefiles\\Vib-Ribbon (Europe) (En,Fr,De,Es,It).cue" --vr'},
+    {state:"Session 4", what:"Get the latest build and try the scroll speed. The first line throws away the line-ending-only changes in your folder (after this pull they should stop appearing). On a course select, L2 and R2 change Scroll speed at the bottom; in play, Start opens the pause, where Scroll speed is the second item. Try it mid-song and at 0.5x, 1x, 2x and 4x.",
+     code:'cd F:\\VibRibbonVR\\Vib-Ribbon-VR\ngit checkout -- .\ngit pull\ncmake --build --preset dev\nctest --preset dev\n.\\build\\dev\\apps\\game\\vibplay.exe "F:\\VibRibbonVR\\research\\Gamefiles\\Vib-Ribbon (Europe) (En,Fr,De,Es,It).cue" --vr'},
     {state:"Session 3", what:"Your repo folder had 13 files switched to Windows line endings (no real changes) and is two commits behind, so a plain git pull refuses. The first line throws away those line-ending changes only; then pull, build and try the overlay in the headset. In the game, click L3 (left stick) or press F3 to step the overlay: off, one line, detailed. Tell me the numbers you see in play (Hz, worst, late) and whether the corner placement and text size work.",
      code:'cd F:\\VibRibbonVR\\Vib-Ribbon-VR\ngit checkout -- .\ngit pull\ncmake --build --preset dev\nctest --preset dev\n.\\build\\dev\\apps\\game\\vibplay.exe "F:\\VibRibbonVR\\research\\Gamefiles\\Vib-Ribbon (Europe) (En,Fr,De,Es,It).cue" --vr'},
     {state:"Common", what:"Play a course made from your own music (MP3 or FLAC), the way the original makes courses from an audio CD: the same file always gives the same course, with the original's short breaks in seconds 52 to 59 of every minute. Change the file path to yours. Add --vr to play it in the headset.",

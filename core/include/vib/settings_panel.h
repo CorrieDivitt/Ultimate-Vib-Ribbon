@@ -47,6 +47,7 @@ class SettingsPanel {
     ScoreNumbers,  // score_numbers: the score in numbers too, during play
     FixedCourses,  // fixed_courses: consistent mode, the same course every play of a song
     EffectsVolume, // effects_volume: the sound effects' loudness, 0 to 10 tenths
+    ScrollSpeed,   // scroll_speed: how fast the road is drawn coming, 0.5x to 4x (display only)
   };
   enum class Action { None, Moved, Changed, Close, Recentre, QuitSong, LeaveTop };
 
@@ -85,6 +86,11 @@ class SettingsPanel {
   // Just a dimmed "More options (Select)" at the first row's place: the Options
   // screen's hint that View opens ours.
   Hud::Layer draw_hint(std::uint32_t seed);
+  // The course selects' line at the bottom middle, "Scroll speed: 1.25x" (L2 and R2
+  // change it there), dimmed as the hint is.
+  Hud::Layer draw_scroll_speed(const Options& o, std::uint32_t seed);
+  // A scroll speed as shown: "1x", "1.25x", "0.5x".
+  static std::string scroll_text(double speed);
   // `text` (font codes) large in the middle of the screen: the count-in's numbers.
   Hud::Layer draw_big(const std::string& text, std::uint32_t seed);
   // `text` (font codes) as lines centred on the origin, as if seen from -z (x right,
