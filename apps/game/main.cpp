@@ -880,7 +880,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     else if (hit && !form_up && game.form() != 0) s.scene.show_evo(game.combo());
   };
 
-  // Ours, not the original's (it has no pause): View (or P / Tab) freezes the song and
+  // Ours, not the original's (it has no pause): Start (or P / Tab) freezes the song and
   // shows the settings over the frozen course. Going on, as the Resume setting says:
   // Rewind runs the road back about 2 s, to where no part is at Vibri, with a
   // tape-rewind sound, then plays from there with Vibri clearing again what she had
@@ -974,12 +974,12 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
             }
             break;
           }
-          if (e.gbutton.button == SDL_GAMEPAD_BUTTON_BACK) {  // View: the pause
+          if (e.gbutton.button == SDL_GAMEPAD_BUTTON_START) {  // Start: our pause and settings (owner's choice)
             pause = true;
             break;
           }
-          // Start: as the original, the song ends and "again?" is asked.
-          if (e.gbutton.button == SDL_GAMEPAD_BUTTON_START) return Result::Abort;
+          // Select (View): the original's own Start, which ends the song and asks "again?".
+          if (e.gbutton.button == SDL_GAMEPAD_BUTTON_BACK) return Result::Abort;
           if (e.gbutton.button == SDL_GAMEPAD_BUTTON_RIGHT_STICK) s.renderer.recentre();  // R3
           if (e.gbutton.button == SDL_GAMEPAD_BUTTON_LEFT_STICK) l3_pressed(s);           // L3
           if (e.gbutton.button == SDL_GAMEPAD_BUTTON_DPAD_LEFT || e.gbutton.button == SDL_GAMEPAD_BUTTON_DPAD_RIGHT)

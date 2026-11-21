@@ -673,7 +673,7 @@ TEST(disc_sces02873_settings_panel) {
   CHECK(p.label(I::WobbleHold, true) == "Wobble hold (1)" && p.label(I::WobbleSize, true) == "Wobble size (1.0)");
   CHECK(p.label(I::Smooth) == "Smooth motion (Off)" && p.label(I::SoundTiming) == "Sound timing (0 ms)");
   CHECK(p.label(I::Performance) == "Performance" && p.label(I::ResumeStyle) == "Resume");  // (owner: none for these)
-  CHECK(p.label(I::ScoreNumbers) == "Score in numbers (Off)");  // the original shows only the marks
+  CHECK(p.label(I::ScoreNumbers) == "Score in numbers");  // (owner: none)
   // The score in numbers: the font's digits, centred, and on the monitor a layer of its own.
   {
     const auto digits = p.text_lines("116279", 1.0f, 3, 4);

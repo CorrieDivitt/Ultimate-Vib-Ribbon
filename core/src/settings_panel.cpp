@@ -99,7 +99,7 @@ std::string SettingsPanel::label(Item item, bool vr) const {
   std::string text = to_font_text(kLabels[table_language(language_)][int(item)]);
   switch (item) {
     case Item::WobbleSize: case Item::WobbleHold: case Item::Smooth: case Item::LineWidth: case Item::Zoom:
-    case Item::ViewAngle: case Item::SeeAhead: case Item::SeeBehind: case Item::SoundTiming: case Item::ScoreNumbers:
+    case Item::ViewAngle: case Item::SeeAhead: case Item::SeeBehind: case Item::SoundTiming:
       text += " (" + value(item, original_options(), vr) + ")";  // the original game's value
       break;
     default: break;
