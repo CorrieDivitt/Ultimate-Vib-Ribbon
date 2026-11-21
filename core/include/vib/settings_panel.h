@@ -50,6 +50,8 @@ class SettingsPanel {
     ScrollSpeed,   // scroll_speed: how fast the road is drawn coming, 0.5x to 10x (display only)
     TimingFeedback,// timing_feedback: each hit's offset in ms (- early, + late)
     FcCelebration, // fc_celebration: "Full Combo!" at the end of a song with no misses
+    WrapCourse,    // vr_wrap: the course wrapped round the player (headset)
+    WrapSize,      // vr_wrap_radius: that ring's radius, 1 to 10 m (headset)
   };
   enum class Action { None, Moved, Changed, Close, Recentre, QuitSong, LeaveTop };
 

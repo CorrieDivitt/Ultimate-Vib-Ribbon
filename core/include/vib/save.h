@@ -54,6 +54,11 @@ struct Options {
   bool timing_feedback = false;
   // Ours: "Full Combo!" pops up at the end of a song cleared without a miss.
   bool fc_celebration = false;
+  // Ours, headset only: the course wrapped round the player in a ring of this radius
+  // (metres), Vibri walking it, the new road coming round one side and the old going
+  // round the other, both fading out behind the player.
+  bool vr_wrap = false;
+  double vr_wrap_radius = 3.0;
   std::string music_folder;       // ours: the player's music folder (UTF-8), picked the first time; empty until then
   double vr_angle = 45.0;       // and where around her, degrees: 0 behind, 90 to her right, -90 to her left
   double audio_offset_ms = 0;  // added to the estimated output latency

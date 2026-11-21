@@ -260,6 +260,13 @@ Fixed Gameplay::drawn(Fixed from_vibri) const {
   return Fixed::raw(static_cast<std::int32_t>(v));
 }
 
+double Gameplay::ground_rate() const {
+  if (speed_course_) return speed_.over(kSampleRate >> 6).to_double() / 64.0;
+  for (const Part& p : parts_)
+    if (!(p.position < Fixed())) return p.rate.to_double() / 64.0;  // (sorted by position: the first ahead)
+  return 0.0;
+}
+
 std::vector<RoadPiece> Gameplay::road(bool far) const {
   std::vector<RoadPiece> out;
   if (far) {

@@ -47,6 +47,8 @@ TEST(save_text_round_trips_and_tolerates_old_files) {
   d.options.scroll_speed = 2.75;
   d.options.timing_feedback = true;
   d.options.fc_celebration = true;
+  d.options.vr_wrap = true;
+  d.options.vr_wrap_radius = 4.5;
   d.options.music_folder = "C:/Users/Me/My Music/Vib Ribbon";
   const SaveData back = SaveData::from_text(d.to_text());
   CHECK(back.high_scores == d.high_scores);
@@ -56,6 +58,8 @@ TEST(save_text_round_trips_and_tolerates_old_files) {
   CHECK(back.options.scroll_speed == 2.75 && SaveData().options.scroll_speed == 1.0);
   CHECK(back.options.timing_feedback && !SaveData().options.timing_feedback);
   CHECK(back.options.fc_celebration && !SaveData().options.fc_celebration);
+  CHECK(back.options.vr_wrap && back.options.vr_wrap_radius == 4.5 && !SaveData().options.vr_wrap && SaveData().options.vr_wrap_radius == 3.0);
+  CHECK(SaveData::from_text("vr_wrap_radius 50\n").options.vr_wrap_radius == 10.0);
   CHECK(SaveData::from_text("scroll_speed 12\n").options.scroll_speed == 10.0 && SaveData::from_text("scroll_speed 9\n").options.scroll_speed == 9.0 && SaveData::from_text("scroll_speed 0.1\n").options.scroll_speed == 0.5);
   CHECK(SaveData::from_text("scroll_speed 1.3\n").options.scroll_speed == 1.25);  // on a step
   CHECK(SaveData().options.music_folder.empty());

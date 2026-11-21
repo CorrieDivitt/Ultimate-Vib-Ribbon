@@ -838,6 +838,17 @@ TEST(disc_sces02873_settings_panel) {
     for (const SceneLine& l : p.full_course_combo(SettingsPanel::kFullCourseComboSeconds - 0.01, 1)) course_dim = course_dim && l.colour.r < 10;
     CHECK(course_dim);
     CHECK(!p.draw_full_combo(2.0, 2, true).lines.empty());
+    // The course around you: off, a ring of 3 m by default, 1 to 10 m in half metres.
+    CHECK(p.label(I::WrapCourse, true) == "Course around you (Off)" && p.label(I::WrapSize, true) == "Circle size (3.0 m)");
+    {
+      Options wo;
+      wo.vr_wrap_radius = 9.5;
+      p.set_items({I::WrapSize});
+      SettingsPanel::Input bigger;
+      bigger.right = true;
+      CHECK(p.tick(bigger, 0.0, wo, true) == A::Changed && wo.vr_wrap_radius == 10.0);
+      CHECK(p.tick(bigger, 0.0, wo, true) == A::None && p.value(I::WrapSize, wo, true) == "10.0 m");
+    }
     p.set_items({I::ScrollSpeed});
     SettingsPanel::Input faster;
     faster.right = true;
@@ -995,7 +1006,7 @@ TEST(disc_sces02873_settings_labels_with_defaults_fit_beside_their_values) {
   using I = SettingsPanel::Item;
   const std::vector<I> all = {I::WobbleSize, I::WobbleHold, I::Smooth, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead,
                               I::SeeBehind, I::Recentre, I::SoundEffects, I::Vibration, I::SoundTiming, I::QuitSong,
-                              I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses, I::EffectsVolume, I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::Continue};
+                              I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses, I::EffectsVolume, I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::WrapCourse, I::WrapSize, I::Continue};
   Options longest;
   longest.scroll_speed = 9.75;
   longest.vr_ahead_seconds = longest.vr_behind_seconds = kWholeSongSeconds;

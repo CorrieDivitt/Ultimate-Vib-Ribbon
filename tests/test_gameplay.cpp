@@ -2,6 +2,7 @@
 #include <cmath>
 
 #include "test.h"
+#include "vib/course_wrap.h"
 #include "vib/gameplay.h"
 #include "vib/scene.h"
 #include "vib/title.h"
@@ -449,4 +450,66 @@ TEST(slow_passed_parts_speed_up_to_the_least_trail_speed) {
   const auto monitor_after = r.g.road(false);
   CHECK(monitor_after.size() == monitor_before.size());
   for (std::size_t i = 0; i < monitor_after.size(); ++i) CHECK(monitor_after[i].position == monitor_before[i].position);
+}
+
+TEST(the_course_wraps_round_the_player_and_fades_behind_them) {
+  CourseWrap w;
+  w.radius = 3000.0f;
+  const float vz = 5000.0f;
+  // Vibri (s = 0, on the road x = 0) stands on the ring straight ahead at first...
+  Vec3f v = w.bend({0, 0, vz}, vz);
+  CHECK(std::abs(v.x) < 1e-3f && std::abs(v.z - 3000.0f) < 1e-3f);
+  // ...and every point of the road is the ring's radius from the middle, whatever its angle.
+  for (float s : {-8000.0f, -1000.0f, 0.0f, 2500.0f, 9000.0f}) {
+    const Vec3f p = w.bend({0, -100, vz + s}, vz);
+    CHECK(std::abs(std::sqrt(p.x * p.x + p.z * p.z) - 3000.0f) < 0.5f && p.y == -100.0f);
+  }
+  // +x (towards the default view's side) is towards the middle.
+  CHECK(std::sqrt(w.bend({200, 0, vz}, vz).x * w.bend({200, 0, vz}, vz).x + w.bend({200, 0, vz}, vz).z * w.bend({200, 0, vz}, vz).z) < 3000.0f);
+  // Walking: a quarter of the ring passed puts her a quarter of the way round.
+  w.advance(3.14159265 * 3000.0 / 2.0);
+  v = w.bend({0, 0, vz}, vz);
+  CHECK(std::abs(v.x - 3000.0f) < 1.0f && std::abs(v.z) < 1.0f);
+  // The HUD carried whole: at her own place, the same as the bent road there.
+  std::vector<SceneLine> hud(1);
+  hud[0].a = {0, -1400, vz}, hud[0].b = {150, -1400, vz + 300};
+  w.place(hud, vz);
+  const Vec3f bent = w.bend({0, -1400, vz}, vz);
+  CHECK(std::abs(hud[0].a.x - bent.x) < 1e-2f && std::abs(hud[0].a.z - bent.z) < 1e-2f);
+  // Not mirrored: seen from the middle (looking along +z after a recentre), the road
+  // ahead of her runs to the right, as play's +z does in the view beside her.
+  CourseWrap w0;
+  w0.radius = 3000.0f;
+  CHECK(w0.bend({0, 0, vz + 300}, vz).x > 0);
+  // Lines are split so they curve, fade towards the point opposite her, and are gone there.
+  std::vector<SceneLine> road(1);
+  road[0].a = {0, 0, vz - 9000}, road[0].b = {0, 0, vz + 9000};
+  road[0].colour = {255, 255, 255};
+  w0.bend_lines(road, vz);
+  CHECK(road.size() > 50);
+  float dimmest = 255, brightest = 0;
+  for (const SceneLine& l : road) {
+    dimmest = std::min(dimmest, float(l.colour.r));
+    brightest = std::max(brightest, float(l.colour.r));
+    CHECK(std::abs(l.a.z - (-3000.0f)) > 10.0f || std::abs(l.a.x) > 10.0f);  // nothing at the point behind the player
+  }
+  CHECK(brightest == 255.0f && dimmest < 60.0f);
+  // Speed: eased, and kept while no part is ahead.
+  CourseWrap w1;
+  w1.follow(1000.0, 0.1);
+  CHECK(w1.rate == 1000.0);
+  w1.follow(2000.0, 0.5);
+  CHECK(w1.rate > 1500.0 && w1.rate < 2000.0);
+  w1.follow(0.0, 1.0);
+  CHECK(w1.rate > 1500.0);
+}
+
+TEST(the_road_under_vibri_moves_at_the_next_parts_speed) {
+  Run r;
+  CHECK(r.g.ground_rate() == 0.0);
+  r.g.add_event(part(44100, 0));
+  r.step();
+  CHECK(r.g.ground_rate() > 0.0);
+  // One part length per its own length in samples.
+  CHECK(std::abs(r.g.ground_rate() - double(r.g.parts()[0].rate.to_double()) / 64.0) < 1e-12);
 }

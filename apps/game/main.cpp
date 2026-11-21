@@ -76,6 +76,7 @@
 #include "vib/title.h"
 #include "vib/title_intro.h"
 #include "vib/kiosk_movie.h"
+#include "vib/course_wrap.h"
 #include "vib/settings_panel.h"
 #include "vib/perf_overlay.h"
 #include "vib/own_cd.h"
@@ -507,14 +508,14 @@ std::vector<SettingsPanel::Item> pause_items(bool vr) {
   using I = SettingsPanel::Item;
   if (vr)
     return {I::Continue, I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::WobbleSize, I::WobbleHold, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind,
-            I::Recentre, I::SoundEffects, I::EffectsVolume, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses, I::QuitSong};
+            I::WrapCourse, I::WrapSize, I::Recentre, I::SoundEffects, I::EffectsVolume, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses, I::QuitSong};
   return {I::Continue, I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::WobbleSize, I::Smooth, I::LineWidth, I::SoundEffects, I::EffectsVolume, I::Vibration, I::SoundTiming, I::ResumeStyle,
           I::Performance, I::ScoreNumbers, I::FixedCourses, I::QuitSong};
 }
 std::vector<SettingsPanel::Item> menu_items(bool vr) {
   using I = SettingsPanel::Item;
   if (vr)
-    return {I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::WobbleSize, I::WobbleHold, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind, I::Recentre,
+    return {I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::WobbleSize, I::WobbleHold, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind, I::WrapCourse, I::WrapSize, I::Recentre,
             I::SoundEffects, I::EffectsVolume, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses};
   return {I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::WobbleSize, I::Smooth, I::LineWidth, I::SoundEffects, I::EffectsVolume, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses};
 }
@@ -597,6 +598,7 @@ double ease_scroll(double shown, double target, double dt) {
 struct PlayPreview {
   double t = 0;
   double scroll = 1.0;  // the scroll speed shown, eased as play's is
+  CourseWrap wrap;      // the course round the player, if set (headset)
   void start(Session& s) {
     t = 0;
     scroll = s.save.options.scroll_speed;
@@ -633,6 +635,12 @@ struct PlayPreview {
     if (s.opt.vr) {
       view = vr_play_view(s.scene.vibri_z(), float(o.vr_zoom), o.vr_angle);
       evo_behind_road(lines, s.scene.evo_first());
+    }
+    if (s.opt.vr && o.vr_wrap) {
+      wrap.radius = float(o.vr_wrap_radius / double(s.opt.vr_scale));
+      wrap.advance(kSpeed * 600.0 * scroll * std::min(dt, 0.1));
+      view = wrap.view();
+      wrap.bend_lines(lines, s.scene.vibri_z());
     }
   }
 };
@@ -928,6 +936,11 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   // Changed mid-song (L2/R2 in a headset, PageUp/PageDown): saved, and "Scroll speed:
   // 2x" shows for a moment (below Vibri in a headset, at the bottom on the monitor).
   double scroll_note = 0;
+  // The course wrapped round the player (task 4.11; headset, if set): Vibri's place on
+  // the ring moves with the heard music (still while paused, back while rewinding).
+  CourseWrap wrap;
+  std::int32_t wrap_heard = 0;
+  bool wrap_started = false;
   // The timing feedback (task 4.12): the last hit's offset, shown for a moment.
   constexpr double kTimingNoteSeconds = 0.6;
   double timing_ms = 0, timing_note = 0;
@@ -1347,10 +1360,28 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     f.stage = game.stage();
     SceneView view;
     s.scene.draw(f, scene_lines, view);
+    const bool wrapped = s.opt.vr && s.save.options.vr_wrap;
+    const float vz = s.scene.vibri_z();
     if (s.opt.vr) {
-      view = vr_play_view(s.scene.vibri_z(), float(s.save.options.vr_zoom), s.save.options.vr_angle);
+      view = vr_play_view(vz, float(s.save.options.vr_zoom), s.save.options.vr_angle);
       evo_behind_road(scene_lines, s.scene.evo_first());
     }
+    if (wrapped) {
+      wrap.radius = float(s.save.options.vr_wrap_radius / double(s.opt.vr_scale));
+      const double per_sample = game.ground_rate() * 600.0 * scroll_shown;  // units of road a heard sample
+      wrap.follow(per_sample * kSampleRate, still_frame ? 0.0 : dt);
+      if (wrap_started) wrap.advance(wrap.rate * double(view_at - wrap_heard) / kSampleRate);
+      wrap_started = true;
+      wrap_heard = view_at;
+      view = wrap.view();
+      wrap.bend_lines(scene_lines, vz);
+    }
+    // The HUD's viewer and its place: as seen from the view, or (wrapped) from the
+    // ring's middle and then carried to Vibri's place on it.
+    const Vec3f hud_eye = wrapped ? wrap.eye_play(vz) : view.eye;
+    auto to_ring = [&](std::vector<SceneLine>& v) {
+      if (wrapped) wrap.place(v, vz);
+    };
     ++display_frame;
     auto convert = [&](const std::vector<SceneLine>& in, std::vector<vibr::LineInstance>& dst) {
       dst.clear();
@@ -1391,7 +1422,8 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
       if (s.opt.vr && hud_layers[i].time) {
         // In a headset the original's time meter sits below Vibri (task 4.9).
         std::vector<SceneLine> bar;
-        meter_below_vibri(hud_layers[i], s.scene.vibri_z(), view.eye, bar);
+        meter_below_vibri(hud_layers[i], s.scene.vibri_z(), hud_eye, bar);
+        to_ring(bar);
         convert(bar, hud_lines[i]);
         layers.push_back({&hud_lines[i], matrix(view), view.fov_y});
         continue;
@@ -1400,7 +1432,8 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
         // In a headset the score floats above Vibri in the world (task 4.8), not in
         // front of the player: at a fixed height, turned to face the view.
         std::vector<SceneLine> above;
-        score_above_vibri(hud_layers[i].lines, s.scene.vibri_z(), view.eye, above);
+        score_above_vibri(hud_layers[i].lines, s.scene.vibri_z(), hud_eye, above);
+        to_ring(above);
         convert(above, hud_lines[i]);
         layers.push_back({&hud_lines[i], matrix(view), view.fov_y});
         continue;
@@ -1421,7 +1454,8 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
       const int shown = std::min(game.score(), Hud::kMaxScore);
       if (s.opt.vr) {
         std::vector<SceneLine> placed;
-        number_below_vibri(s.panel->text_lines(std::to_string(shown), 1.2f, h.jitter_seed, 4), s.scene.vibri_z(), view.eye, placed);
+        number_below_vibri(s.panel->text_lines(std::to_string(shown), 1.2f, h.jitter_seed, 4), s.scene.vibri_z(), hud_eye, placed);
+        to_ring(placed);
         score_number_lines.emplace_back();
         convert(placed, score_number_lines.back());
         layers.push_back({&score_number_lines.back(), matrix(view), view.fov_y});
@@ -1441,7 +1475,8 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
       timing_lines.clear();
       if (s.opt.vr) {
         std::vector<SceneLine> placed;
-        number_below_vibri(s.panel->text_lines(text, kTimingScale, h.jitter_seed, 4), s.scene.vibri_z(), view.eye, placed, kTimingBelowRoad);
+        number_below_vibri(s.panel->text_lines(text, kTimingScale, h.jitter_seed, 4), s.scene.vibri_z(), hud_eye, placed, kTimingBelowRoad);
+        to_ring(placed);
         const auto grey = static_cast<std::uint8_t>(bright * 255.0f);
         for (SceneLine& l : placed) l.colour = {grey, grey, grey};
         convert(placed, timing_lines);
@@ -1457,7 +1492,8 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
       if (s.opt.vr) {
         std::vector<SceneLine> placed;
         number_below_vibri(whole_course ? s.panel->full_course_combo(fc_time, h.jitter_seed) : s.panel->full_combo(fc_time, h.jitter_seed),
-                           s.scene.vibri_z(), view.eye, placed, whole_course ? kFullCourseComboAboveRoad : kFullComboAboveRoad);
+                           s.scene.vibri_z(), hud_eye, placed, whole_course ? kFullCourseComboAboveRoad : kFullComboAboveRoad);
+        to_ring(placed);
         convert(placed, fc_lines);
         layers.push_back({&fc_lines, matrix(view), view.fov_y});
       } else {
@@ -1470,7 +1506,8 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
       scroll_note_lines.clear();
       if (s.opt.vr) {
         std::vector<SceneLine> placed;
-        number_below_vibri(s.panel->text_lines(s.panel->scroll_line(s.save.options), 1.0f, h.jitter_seed, 4), s.scene.vibri_z(), view.eye, placed, kScrollNoteBelowRoad);
+        number_below_vibri(s.panel->text_lines(s.panel->scroll_line(s.save.options), 1.0f, h.jitter_seed, 4), s.scene.vibri_z(), hud_eye, placed, kScrollNoteBelowRoad);
+        to_ring(placed);
         convert(placed, scroll_note_lines);
         layers.push_back({&scroll_note_lines, matrix(view), view.fov_y});
       } else {

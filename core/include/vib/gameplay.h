@@ -127,6 +127,10 @@ class Gameplay {
   // so a slower scroll shows more of the course in the same space. 1: the original.
   void set_scroll(double scroll) { scroll_ = scroll > 0 ? scroll : 1.0; }
   double scroll() const { return scroll_; }
+  // How fast the road under Vibri moves, part lengths per heard sample: the next part's
+  // own speed (speed courses: their one speed); 0 with no part ahead. For drawing the
+  // course wrapped round a headset player, where Vibri walks the ring at this speed.
+  double ground_rate() const;
   // Where the far road draws a part behind Vibri at `now` (relative to her).
   Fixed far_behind(const Part& p, std::int32_t now) const;
   // The same road as it was (or will be) at an earlier `position`, from the parts
