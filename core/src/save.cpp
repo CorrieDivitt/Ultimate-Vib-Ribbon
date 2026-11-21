@@ -76,6 +76,7 @@ std::string SaveData::to_text() const {
   std::snprintf(buf, sizeof buf, "%.2f", options.scroll_speed);
   out << "scroll_speed " << buf << '\n';
   out << "timing_feedback " << (options.timing_feedback ? 1 : 0) << '\n';
+  out << "fc_celebration " << (options.fc_celebration ? 1 : 0) << '\n';
   if (!options.music_folder.empty()) out << "music_folder " << options.music_folder << '\n';  // (the rest of the line)
   std::snprintf(buf, sizeof buf, "%.3f", options.line_width);
   out << "line_width " << buf << '\n';
@@ -144,6 +145,7 @@ SaveData SaveData::from_text(const std::string& text) {
     else if (key == "perf_overlay" && number >= 0 && number <= 2) d.options.perf_overlay = int(number);
     else if (key == "score_numbers") d.options.score_numbers = parse_bool(value);
     else if (key == "timing_feedback") d.options.timing_feedback = parse_bool(value);
+    else if (key == "fc_celebration") d.options.fc_celebration = parse_bool(value);
     else if (key == "scroll_speed" && number > 0) d.options.scroll_speed = clamp_scroll_speed(number);
     else if (key == "line_width" && number > 0) d.options.line_width = number;
     else if (key == "vr_line_width" && number > 0) d.options.vr_line_width = number;

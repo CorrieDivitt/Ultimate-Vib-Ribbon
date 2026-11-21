@@ -52,6 +52,8 @@ struct Options {
   // Ours, as StepMania's offset display: each hit shows how early (-) or late (+) the
   // press was, in milliseconds, for a moment near Vibri.
   bool timing_feedback = false;
+  // Ours: "Full Combo!" pops up at the end of a song cleared without a miss.
+  bool fc_celebration = false;
   std::string music_folder;       // ours: the player's music folder (UTF-8), picked the first time; empty until then
   double vr_angle = 45.0;       // and where around her, degrees: 0 behind, 90 to her right, -90 to her left
   double audio_offset_ms = 0;  // added to the estimated output latency

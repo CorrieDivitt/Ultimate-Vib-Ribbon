@@ -793,6 +793,28 @@ TEST(disc_sces02873_settings_panel) {
   {  // 0.5x to 4x in quarters, stopping at the ends
     Options so;
     so.scroll_speed = 9.75;
+    // FC celebration: off by default, no bracket; the word pops in letter by letter, rays
+    // burst out, and it fades by the end.
+    CHECK(p.label(I::FcCelebration) == "FC celebration" && p.value(I::FcCelebration, Options{}, true) == "Off");
+    CHECK(to_font_text("Full Combo!") == "Full Combo!");  // (every character is in the font)
+    auto width_of = [](const std::vector<SceneLine>& ls) {
+      float lo = 1e9f, hi = -1e9f;
+      for (const SceneLine& l : ls)
+        if (l.colour.r > 0) lo = std::min({lo, l.a.x, l.b.x}), hi = std::max({hi, l.a.x, l.b.x});
+      return std::pair<float, float>{lo, hi};
+    };
+    CHECK(p.full_combo(0.0, 1).empty());
+    const auto early = p.full_combo(0.2, 1), settled = p.full_combo(2.05, 1), burst = p.full_combo(0.8, 1);
+    CHECK(!early.empty() && early.size() < settled.size());  // letters still coming
+    const auto [fc_lo, fc_hi] = width_of(settled);
+    CHECK(fc_hi - fc_lo > 1400.0f && fc_hi - fc_lo < 2200.0f && std::abs(fc_lo + fc_hi) < 200.0f);  // the whole word, centred
+    bool rays = false;
+    for (const SceneLine& l : burst) rays = rays || std::abs(l.b.x) > 1000.0f;
+    CHECK(rays);  // (the first burst is out past the word at 0.8 s)
+    bool dim = true;
+    for (const SceneLine& l : p.full_combo(SettingsPanel::kFullComboSeconds - 0.01, 1)) dim = dim && l.colour.r < 10;
+    CHECK(dim);  // faded out at the end
+    CHECK(!p.draw_full_combo(1.0, 2).lines.empty());
     p.set_items({I::ScrollSpeed});
     SettingsPanel::Input faster;
     faster.right = true;
@@ -950,7 +972,7 @@ TEST(disc_sces02873_settings_labels_with_defaults_fit_beside_their_values) {
   using I = SettingsPanel::Item;
   const std::vector<I> all = {I::WobbleSize, I::WobbleHold, I::Smooth, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead,
                               I::SeeBehind, I::Recentre, I::SoundEffects, I::Vibration, I::SoundTiming, I::QuitSong,
-                              I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses, I::EffectsVolume, I::ScrollSpeed, I::TimingFeedback, I::Continue};
+                              I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses, I::EffectsVolume, I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::Continue};
   Options longest;
   longest.scroll_speed = 9.75;
   longest.vr_ahead_seconds = longest.vr_behind_seconds = kWholeSongSeconds;

@@ -49,6 +49,7 @@ class SettingsPanel {
     EffectsVolume, // effects_volume: the sound effects' loudness, 0 to 10 tenths
     ScrollSpeed,   // scroll_speed: how fast the road is drawn coming, 0.5x to 10x (display only)
     TimingFeedback,// timing_feedback: each hit's offset in ms (- early, + late)
+    FcCelebration, // fc_celebration: "Full Combo!" at the end of a song with no misses
   };
   enum class Action { None, Moved, Changed, Close, Recentre, QuitSong, LeaveTop };
 
@@ -107,6 +108,15 @@ class SettingsPanel {
   // The score in numbers on the monitor: centred near the bottom, just above the time
   // meter's strip, with the game's text jitter.
   Hud::Layer draw_score(int score, std::uint32_t seed);
+  // "Full Combo!" `t` seconds into its celebration (it lasts kFullComboSeconds): the
+  // letters pop in one by one, swelling past their size and settling, with a hop; two
+  // bursts of rays fly out from behind; then the word rides a wave, and all of it
+  // fades at the end. Lines centred on the origin as text_lines() gives them (seen
+  // from -z, y down), the word about 1,500 across.
+  static constexpr double kFullComboSeconds = 2.6;
+  std::vector<SceneLine> full_combo(double t, std::uint32_t seed);
+  // The same through the text camera, upper middle of the screen (the monitor).
+  Hud::Layer draw_full_combo(double t, std::uint32_t seed);
   // The timing feedback on the monitor: `text` centred a little above the score's
   // number, dimmed by `brightness` (0-1).
   Hud::Layer draw_timing(const std::string& text, float brightness, std::uint32_t seed);

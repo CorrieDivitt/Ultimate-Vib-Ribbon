@@ -15,7 +15,8 @@ Confidence labels used below: **[measured]** = computed this session from the di
 - P4 done: `.gitattributes` (`* text=auto`, `*.sh` LF). Cause of the recurring "changed" files: the owner's Windows git writes CRLF in the working tree; without attributes, files touched from the Linux side showed as wholly changed. Repository content is LF throughout (checked).
 - P1: nothing to build. Since cc3b9b0 the time-up screen returns ResultsDone, and main.cpp sends ResultsDone from Screen::Again to AGAIN SELECT; PlayAgain on a speed course restarts from its first track. Section 2w's "no again? after time up yet" was out of date (corrected there).
 - 4.14 built; owner's first test: "worked really well". Then (owner): maximum 10x, and L2/R2 change it mid-song without pausing. Built; owner: "works surprisingly well at 10x", locked in. **Task 4.14 done.**
-- 4.12 timing feedback built, waiting for the test (section 2z).
+- 4.12 timing feedback built; moved below the road at the owner's request; locked in. **Task 4.12 done.**
+- 4.18 full combo celebration built, waiting for the test (section 2aa).
 
 **End of session 3 (2026-11-21, about 00:40 Toronto):** the owner locked in everything built this session. Done:
 - 4.6 to 4.10: performance overlay, infinite horizon, score above Vibri, progress meter below her, score in numbers.
@@ -544,7 +545,18 @@ Owner's spec: as StepMania, when on, each press shows how far it was from perfec
 - vibplay `play_song`: on each Hit event, `timing_ms` and `timing_note` (0.6 s, `kTimingNoteSeconds`; counts down only while not paused); drawn while it lasts, full white then dimming linearly over the last 0.2 s. Headset: `number_below_vibri(..., kTimingAboveRoad)` with the middle 1,240 above the road (Vibri runs under 805, every move but the angel's block under 1,360; the score marks' lowest point is 1,388), upright, facing the eye, scale 1 (142 tall). Monitor: `SettingsPanel::draw_timing`, scale 1.2, halfway down the lower half of the text camera (above the score's number at 0.72). Not in the demo.
 - Tests: the item's label, toggle and text, `draw_timing` dims its colour, save round trip; the width test covers it.
 
-Owner's first test: worked well. **Moved (owner):** below the play line, a little smaller, no colour for now. Headset layout below the road now (all `main.cpp` constants, the monitor unchanged): timing feedback middle 720 (`kTimingBelowRoad`, scale 0.8 = `kTimingScale`, about 114 tall: 663 to 777, under the deepest pit at 559); time meter strip middle 1,100 (`meter_below_vibri` kY, was 900); score number middle 1,290 (`number_below_vibri` default, was 1,090); scroll-speed note 1,530 (`kScrollNoteBelowRoad`, was 1,330). Waiting for the owner's look.
+Owner's first test: worked well. **Moved (owner):** below the play line, a little smaller, no colour for now. Headset layout below the road now (all `main.cpp` constants, the monitor unchanged): timing feedback middle 720 (`kTimingBelowRoad`, scale 0.8 = `kTimingScale`, about 114 tall: 663 to 777, under the deepest pit at 559); time meter strip middle 1,100 (`meter_below_vibri` kY, was 900); score number middle 1,290 (`number_below_vibri` default, was 1,090); scroll-speed note 1,530 (`kScrollNoteBelowRoad`, was 1,330). Owner: "those changes were great", locked in.
+
+## 2aa. Full combo celebration, task 4.18 (session 4)
+
+Owner's spec: a menu option "FC celebration"; when on, "Full Combo!" pops up at the end of a stage with 0 obstacles missed, in an exciting way. Built:
+- `Options::fc_celebration` (save key, default off), settings item `FcCelebration` ("FC celebration", no bracket; German FC-Jubel, Spanish Celebrar FC, French Fête du FC, Italian Festa FC) after Timing feedback, pause and menus' settings. The word itself is "Full Combo!" in every language.
+- vibplay `play_song`: `song_hits` / `song_misses` counted in `handle()` from Hit and Miss events (strays do not count). When the rules report Clear with the option on, no misses, at least one hit, score above 0, not the demo and not an auto-play course (In order): `celebrating`, the form-up sound (bank 1, 14) and Vibri's evolution ring; for `SettingsPanel::kFullComboSeconds` (2.6 s) the loop goes on drawing the scene, HUD and the word, with presses dropped, no rule updates and no pause; then the usual Clear path (score, bonus, records unchanged). Per song: in a two-song course each song can have its own.
+- `SettingsPanel::full_combo(t, seed)` (our own animation): letters in the line font at scale 2.2 (word about 1,630 across) pop in 0.07 s apart, each over 0.32 s with a back-ease swell to about 1.35 and a 90-unit hop, with stronger jitter (14) while popping, 5 after; once all are in, a wave runs along them (30 units, 1.4 Hz); two bursts of short rays (18 at 0.55 s, 24 at 1.15 s, offset half a step) fly out on an ellipse 1.25 x 0.55 from 300 to 1,700, shrinking and fading over 0.85 s; everything fades over the last 0.45 s. Headset: placed with `number_below_vibri` at 1,000 above the road (`kFullComboAboveRoad`), facing the eye. Monitor: `draw_full_combo`, through the text camera, 35% up from the middle.
+- Tests: label and default, every character in the font, nothing at 0 s, letters arriving, the whole word centred at 2.05 s, rays out at 0.8 s, faded at the end, save round trip.
+- Quick test: `--last 15` (the skipped part is played perfectly, so a full combo needs only the last 15 s).
+
+To judge: the size and height over Vibri, the timing (2.6 s), whether the rays read as a celebration in line art, whether it should also show on the clear screen or count for a whole course.
 
 ## 2o. Idea dropped: Vibri speaking English (session 3, 2026-11-20)
 

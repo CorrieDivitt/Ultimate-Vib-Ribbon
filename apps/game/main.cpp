@@ -502,17 +502,17 @@ void apply_settings(Session& s) {
 std::vector<SettingsPanel::Item> pause_items(bool vr) {
   using I = SettingsPanel::Item;
   if (vr)
-    return {I::Continue, I::ScrollSpeed, I::TimingFeedback, I::WobbleSize, I::WobbleHold, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind,
+    return {I::Continue, I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::WobbleSize, I::WobbleHold, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind,
             I::Recentre, I::SoundEffects, I::EffectsVolume, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses, I::QuitSong};
-  return {I::Continue, I::ScrollSpeed, I::TimingFeedback, I::WobbleSize, I::Smooth, I::LineWidth, I::SoundEffects, I::EffectsVolume, I::Vibration, I::SoundTiming, I::ResumeStyle,
+  return {I::Continue, I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::WobbleSize, I::Smooth, I::LineWidth, I::SoundEffects, I::EffectsVolume, I::Vibration, I::SoundTiming, I::ResumeStyle,
           I::Performance, I::ScoreNumbers, I::FixedCourses, I::QuitSong};
 }
 std::vector<SettingsPanel::Item> menu_items(bool vr) {
   using I = SettingsPanel::Item;
   if (vr)
-    return {I::ScrollSpeed, I::TimingFeedback, I::WobbleSize, I::WobbleHold, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind, I::Recentre,
+    return {I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::WobbleSize, I::WobbleHold, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind, I::Recentre,
             I::SoundEffects, I::EffectsVolume, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses};
-  return {I::ScrollSpeed, I::TimingFeedback, I::WobbleSize, I::Smooth, I::LineWidth, I::SoundEffects, I::EffectsVolume, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses};
+  return {I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::WobbleSize, I::Smooth, I::LineWidth, I::SoundEffects, I::EffectsVolume, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses};
 }
 
 // Scene lines to the renderer's, jittered as play does: in a headset afresh every
@@ -833,6 +833,9 @@ void meter_below_vibri(const Hud::Layer& meter, float vibri_z, Vec3f eye, std::v
 // The timing feedback's middle in a headset: just below the road, under the deepest
 // pit (559) and above the time meter's strip (its middle 1,100 below, about 36 each
 // way); y is down. The scroll speed's note goes under the score's number.
+// "Full Combo!" in a headset: its middle 1,000 above the road, over Vibri's head (she
+// runs under 805) and under the score marks once settled.
+constexpr float kFullComboAboveRoad = -1000.0f;
 constexpr float kTimingBelowRoad = 720.0f, kScrollNoteBelowRoad = 1530.0f, kTimingScale = 0.8f;
 
 void number_below_vibri(const std::vector<SceneLine>& text, float vibri_z, Vec3f eye, std::vector<SceneLine>& out, float kY = 1290.0f) {
@@ -996,6 +999,10 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   // (the menus' music and voice are not effects). Read as each sound comes: the
   // pause can change it.
   const bool& effects_on = s.save.options.sound_effects;
+  // The full combo (task 4.18): a song cleared with no miss, celebrated if set.
+  int song_hits = 0, song_misses = 0;
+  bool celebrating = false;
+  double fc_time = 0;
   auto handle = [&](const std::vector<GameEvent>& events) {
     bool form_up = false, hit = false, miss = false;
     for (const GameEvent& e : events) {
@@ -1004,6 +1011,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
           if (effects_on) s.fx.number(16 + e.road, 127, 3);
           s.scene.set_move(e.road, false);
           hit = true;
+          ++song_hits;
           break;
         case GameEvent::Type::Stray: {
           const int n = e.value == 1 ? 31 : e.value == 2 ? 28 : e.value == 4 ? 29 : 27;
@@ -1016,6 +1024,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
           if (s.save.options.vibration)
             for (auto& [id, pad] : s.pads) SDL_RumbleGamepad(pad, 0x6000, 0xC000, 200);
           miss = true;
+          ++song_misses;
           break;
         case GameEvent::Type::FormUp:
           if (effects_on) s.fx.play(1, 14, 127, 4);
@@ -1051,7 +1060,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   constexpr double kCountStep = 0.5;  // seconds per number of the count-in
   SettingsPanel::Input pin;
   Hud::Layer panel_layer;
-  std::vector<vibr::LineInstance> panel_lines, scroll_note_lines, timing_lines;
+  std::vector<vibr::LineInstance> panel_lines, scroll_note_lines, timing_lines, fc_lines;
 
   s.stats.reset_audio();
   for (;;) {
@@ -1164,7 +1173,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     if (!paused) timing_note = std::max(0.0, timing_note - dt);
     game.set_scroll(scroll_shown);
 
-    if (pause && !paused && going == Going::No && s.panel) {
+    if (pause && !paused && going == Going::No && s.panel && !celebrating) {
       paused = true;
       pause_at = last_position;
       s.audio.play_music({});
@@ -1252,7 +1261,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     const bool frozen = paused || going != Going::No;  // the rules stand still
     const std::int32_t heard = frozen ? last_position : std::max(raw, last_position);
     const std::int32_t view_at = frozen ? std::min(raw, pause_at) : heard;  // where the road is drawn
-    if (frozen) presses.clear();
+    if (frozen || celebrating) presses.clear();
     if (s.opt.vr) game.keep_passed(static_cast<std::int32_t>(std::min(s.save.options.vr_behind_seconds, kWholeSongSeconds) * kSampleRate));
 
     if (!frozen) analyse_up_to(heard);
@@ -1274,7 +1283,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
       handle(game.events());
       if (outcome != Outcome::Playing) break;
     }
-    if (outcome == Outcome::Playing && !frozen) {
+    if (outcome == Outcome::Playing && !frozen && !celebrating) {  // (the song is over while celebrating)
       outcome = game.update(heard, 0, s.scene.move_done(0.5));
       if (speed_level) gen.set_fixed_cue(game.fixed_period());
       last_position = heard;
@@ -1434,6 +1443,19 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
         layers.push_back({&timing_lines, matrix(note.view), note.view.fov_y});
       }
     }
+    if (celebrating && s.panel) {  // "Full Combo!", over everything but the pause
+      fc_lines.clear();
+      if (s.opt.vr) {
+        std::vector<SceneLine> placed;
+        number_below_vibri(s.panel->full_combo(fc_time, h.jitter_seed), s.scene.vibri_z(), view.eye, placed, kFullComboAboveRoad);
+        convert(placed, fc_lines);
+        layers.push_back({&fc_lines, matrix(view), view.fov_y});
+      } else {
+        const Hud::Layer word = s.panel->draw_full_combo(fc_time, h.jitter_seed);
+        convert(word.lines, fc_lines);
+        layers.push_back({&fc_lines, matrix(word.view), word.view.fov_y});
+      }
+    }
     if (scroll_note > 0 && s.panel && !paused) {  // the scroll speed, just changed
       scroll_note_lines.clear();
       if (s.opt.vr) {
@@ -1466,6 +1488,20 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
       title_timer = 0.25;
     }
 
+    // A full combo: the song is over, the rules stand still, and "Full Combo!" plays for
+    // its 2.6 s over the running scene before the clear goes on as usual.
+    if (celebrating) {
+      fc_time += dt;
+      if (fc_time >= SettingsPanel::kFullComboSeconds) outcome = Outcome::Clear;
+    } else if (outcome == Outcome::Clear && s.save.options.fc_celebration && !s.demo && !course_info(s.course).auto_play &&
+               song_misses == 0 && song_hits > 0 && game.score() > 0) {
+      std::printf("Full combo: %d hits, no misses\n", song_hits);
+      celebrating = true;
+      fc_time = 0;
+      if (effects_on) s.fx.play(1, 14, 127, 4);  // the form-up sound
+      s.scene.play_evo();
+      continue;
+    }
     if (outcome == Outcome::Clear) {
       std::printf("Song %d clear: score %d + end bonus %d\n", song, game.score(), game.bonus());
       if (game.speed_course()) {
