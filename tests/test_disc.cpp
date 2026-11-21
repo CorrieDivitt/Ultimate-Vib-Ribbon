@@ -872,6 +872,27 @@ TEST(disc_sces02873_file_picker_ticks_files_and_draws_every_row) {
     p.tick(down, 0.02);  // from the last file it wraps round to Done
     CHECK(p.tick(confirm, 0.02) == A::Done);
     CHECK(p.tick(cancel, 0.02) == A::Cancel);
+    // A long list: held down, it scrolls (a press, then 0.35 s, then fast) and stops at the end.
+    {
+      std::vector<FilePicker::Entry> many;
+      for (int k = 1; k <= 200; ++k) many.push_back({"Song " + std::to_string(k) + ".mp3", false});
+      p.show(FilePicker::Mode::Files, "C:/Big", many, true);
+      SettingsPanel::Input held;
+      held.held_down = true;
+      p.tick(down, 0.02);
+      for (int k = 0; k < 100; ++k) p.tick(held, 0.02);  // 2 s held
+      const std::string at = p.entry() ? p.entry()->name : std::string();
+      CHECK(at.rfind("Song ", 0) == 0 && std::stoi(at.substr(5)) > 60);
+      for (int k = 0; k < 300; ++k) p.tick(held, 0.02);
+      CHECK(p.entry() && p.entry()->name == "Song 200.mp3");  // (stopped, not wrapped)
+      SettingsPanel::Input held_up;
+      held_up.held_up = true;
+      p.tick(up, 0.02);
+      for (int k = 0; k < 400; ++k) p.tick(held_up, 0.02);
+      CHECK(!p.entry());  // back at the top (Done, then Up a folder, then the first song)
+      p.tick(down, 0.02), p.tick(down, 0.02);
+      CHECK(p.entry() && p.entry()->name == "Song 1.mp3");
+    }
     // Another folder clears the ticks.
     p.show(FilePicker::Mode::Files, "C:/Users/me/Music/Albums/Disc 2", {{"x.mp3", false}}, true);
     CHECK(p.ticked().empty());

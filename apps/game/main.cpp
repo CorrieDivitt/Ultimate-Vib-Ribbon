@@ -622,9 +622,13 @@ void held_directions(Session& s, SettingsPanel::Input& in) {
   const bool* keys = SDL_GetKeyboardState(nullptr);
   in.held_left = keys[SDL_SCANCODE_LEFT] || keys[SDL_SCANCODE_A];
   in.held_right = keys[SDL_SCANCODE_RIGHT] || keys[SDL_SCANCODE_D];
+  in.held_up = keys[SDL_SCANCODE_UP] || keys[SDL_SCANCODE_W];
+  in.held_down = keys[SDL_SCANCODE_DOWN] || keys[SDL_SCANCODE_S];
   for (const auto& [id, pad] : s.pads) {
     in.held_left = in.held_left || SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_DPAD_LEFT);
     in.held_right = in.held_right || SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_DPAD_RIGHT);
+    in.held_up = in.held_up || SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_DPAD_UP);
+    in.held_down = in.held_down || SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_DPAD_DOWN);
   }
 }
 

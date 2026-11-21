@@ -80,8 +80,26 @@ FilePicker::Action FilePicker::tick(const SettingsPanel::Input& in, double secon
   const auto l = lines();
   const int count = int(l.size());
   if (in.cancel) return Action::Cancel;
-  // Up and down move (wrapping); left and right page through a long list.
+  // Up and down move (wrapping); held, they scroll: after 0.35 s, 25 rows a second,
+  // after a second of it about 60 (owner: long lists took too long). Left and right
+  // page through a long list.
   int step = in.up ? -1 : in.down ? 1 : 0;
+  bool scrolled = false;
+  if (step) {
+    scroll_dir_ = step;
+    scroll_timer_ = 0.35;
+    scroll_held_ = 0;
+  } else if (scroll_dir_ != 0 && ((scroll_dir_ < 0 && in.held_up) || (scroll_dir_ > 0 && in.held_down))) {
+    scroll_held_ += seconds;
+    scroll_timer_ -= seconds;
+    while (scroll_timer_ <= 0) {
+      scroll_timer_ += scroll_held_ > 1.35 ? 0.016 : 0.04;
+      step += scroll_dir_;
+    }
+    scrolled = step != 0;
+  } else {
+    scroll_dir_ = 0;
+  }
   if (in.left || in.right) {
     step = in.left ? -kRows : kRows;
     repeat_dir_ = step;
@@ -93,7 +111,8 @@ FilePicker::Action FilePicker::tick(const SettingsPanel::Input& in, double secon
     repeat_dir_ = 0;
   }
   if (step) {
-    if (step == 1 || step == -1) cursor_ = (cursor_ + step + count) % count;
+    // A press wraps round; a held scroll and a page stop at the ends.
+    if ((step == 1 || step == -1) && !scrolled) cursor_ = (cursor_ + step + count) % count;
     else cursor_ = std::clamp(cursor_ + step, 0, count - 1);
     first_ = std::clamp(first_, cursor_ - kRows + 1, cursor_);
     return Action::Moved;

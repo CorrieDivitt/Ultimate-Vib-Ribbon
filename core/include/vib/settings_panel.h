@@ -52,6 +52,7 @@ class SettingsPanel {
   struct Input {
     bool up = false, down = false, left = false, right = false, confirm = false, cancel = false;
     bool held_left = false, held_right = false;  // for repeat while held
+    bool held_up = false, held_down = false;     // (the file picker scrolls while these are held)
   };
 
   // `pak`: the game's own archive (for the font). `text`: the program's character
