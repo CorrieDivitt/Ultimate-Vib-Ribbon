@@ -799,6 +799,17 @@ TEST(disc_sces02873_settings_panel) {
     CHECK(p.tick(faster, 0.0, so, true) == A::Changed && so.scroll_speed == 10.0 && p.value(I::ScrollSpeed, so, true) == "10x");
     CHECK(p.tick(faster, 0.0, so, true) == A::None && so.scroll_speed == 10.0);
     CHECK(p.scroll_line(so) == "Scroll speed: 10x");
+    // Timing feedback: no bracket (the original has none), on and off, and its text.
+    CHECK(p.label(I::TimingFeedback) == "Timing feedback" && p.value(I::TimingFeedback, so, true) == "Off");
+    p.set_items({I::TimingFeedback});
+    SettingsPanel::Input ok;
+    ok.confirm = true;
+    CHECK(p.tick(ok, 0.0, so, true) == A::Changed && so.timing_feedback);
+    CHECK(SettingsPanel::offset_text(-12.4) == "-12 ms" && SettingsPanel::offset_text(7.6) == "+8 ms" && SettingsPanel::offset_text(0.2) == "0 ms");
+    CHECK(to_font_text(SettingsPanel::offset_text(23)) == "+23 ms");  // (+ is one of our own strokes)
+    const Hud::Layer t = p.draw_timing("+23 ms", 0.5f, 3);
+    CHECK(!t.lines.empty() && t.lines.front().colour.r == 127);
+    p.set_items({I::ScrollSpeed});
     so.scroll_speed = 0.75;
     SettingsPanel::Input slower;
     slower.left = true;
@@ -939,7 +950,7 @@ TEST(disc_sces02873_settings_labels_with_defaults_fit_beside_their_values) {
   using I = SettingsPanel::Item;
   const std::vector<I> all = {I::WobbleSize, I::WobbleHold, I::Smooth, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead,
                               I::SeeBehind, I::Recentre, I::SoundEffects, I::Vibration, I::SoundTiming, I::QuitSong,
-                              I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses, I::EffectsVolume, I::ScrollSpeed, I::Continue};
+                              I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses, I::EffectsVolume, I::ScrollSpeed, I::TimingFeedback, I::Continue};
   Options longest;
   longest.scroll_speed = 9.75;
   longest.vr_ahead_seconds = longest.vr_behind_seconds = kWholeSongSeconds;

@@ -502,17 +502,17 @@ void apply_settings(Session& s) {
 std::vector<SettingsPanel::Item> pause_items(bool vr) {
   using I = SettingsPanel::Item;
   if (vr)
-    return {I::Continue, I::ScrollSpeed, I::WobbleSize, I::WobbleHold, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind,
+    return {I::Continue, I::ScrollSpeed, I::TimingFeedback, I::WobbleSize, I::WobbleHold, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind,
             I::Recentre, I::SoundEffects, I::EffectsVolume, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses, I::QuitSong};
-  return {I::Continue, I::ScrollSpeed, I::WobbleSize, I::Smooth, I::LineWidth, I::SoundEffects, I::EffectsVolume, I::Vibration, I::SoundTiming, I::ResumeStyle,
+  return {I::Continue, I::ScrollSpeed, I::TimingFeedback, I::WobbleSize, I::Smooth, I::LineWidth, I::SoundEffects, I::EffectsVolume, I::Vibration, I::SoundTiming, I::ResumeStyle,
           I::Performance, I::ScoreNumbers, I::FixedCourses, I::QuitSong};
 }
 std::vector<SettingsPanel::Item> menu_items(bool vr) {
   using I = SettingsPanel::Item;
   if (vr)
-    return {I::ScrollSpeed, I::WobbleSize, I::WobbleHold, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind, I::Recentre,
+    return {I::ScrollSpeed, I::TimingFeedback, I::WobbleSize, I::WobbleHold, I::LineWidth, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind, I::Recentre,
             I::SoundEffects, I::EffectsVolume, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses};
-  return {I::ScrollSpeed, I::WobbleSize, I::Smooth, I::LineWidth, I::SoundEffects, I::EffectsVolume, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses};
+  return {I::ScrollSpeed, I::TimingFeedback, I::WobbleSize, I::Smooth, I::LineWidth, I::SoundEffects, I::EffectsVolume, I::Vibration, I::SoundTiming, I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses};
 }
 
 // Scene lines to the renderer's, jittered as play does: in a headset afresh every
@@ -829,6 +829,11 @@ void meter_below_vibri(const Hud::Layer& meter, float vibri_z, Vec3f eye, std::v
 // facing `eye`, at a fixed height (its middle 1,090 below the road, just under the
 // meter's strip), in the game's own line font with its text jitter. `text`: from
 // SettingsPanel::text_lines, centred on the origin as if seen from -z.
+// The timing feedback's middle in a headset: above Vibri's running height (she stays
+// under 805, every move but the angel's block under 1,360) and under the score marks'
+// lowest point (1,388); y is down, so negative is above the road.
+constexpr float kTimingAboveRoad = -1240.0f;
+
 void number_below_vibri(const std::vector<SceneLine>& text, float vibri_z, Vec3f eye, std::vector<SceneLine>& out, float kY = 1090.0f) {
   float fx, fz;
   facing(vibri_z, eye, fx, fz);
@@ -913,6 +918,9 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   // Changed mid-song (L2/R2 in a headset, PageUp/PageDown): saved, and "Scroll speed:
   // 2x" shows for a moment (below Vibri in a headset, at the bottom on the monitor).
   double scroll_note = 0;
+  // The timing feedback (task 4.12): the last hit's offset, shown for a moment.
+  constexpr double kTimingNoteSeconds = 0.6;
+  double timing_ms = 0, timing_note = 0;
   auto scroll_changed = [&](int d) {
     if (!change_scroll_speed(s, d)) return;
     scroll_note = 1.5;
@@ -1042,7 +1050,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   constexpr double kCountStep = 0.5;  // seconds per number of the count-in
   SettingsPanel::Input pin;
   Hud::Layer panel_layer;
-  std::vector<vibr::LineInstance> panel_lines, scroll_note_lines;
+  std::vector<vibr::LineInstance> panel_lines, scroll_note_lines, timing_lines;
 
   s.stats.reset_audio();
   for (;;) {
@@ -1152,6 +1160,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     last_ns = now_ns;
     scroll_shown = ease_scroll(scroll_shown, scroll_wanted(), dt);
     scroll_note = std::max(0.0, scroll_note - dt);
+    if (!paused) timing_note = std::max(0.0, timing_note - dt);
     game.set_scroll(scroll_shown);
 
     if (pause && !paused && going == Going::No && s.panel) {
@@ -1255,7 +1264,12 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
       outcome = game.update(at, p.bits, s.scene.move_done(0.5));
       last_position = at;
       for (const GameEvent& ev : game.events())  // how early or late, for the performance overlay
-        if (ev.type == GameEvent::Type::Hit) s.stats.add_press(double(at - ev.time) * 1000.0 / kSampleRate);
+        if (ev.type == GameEvent::Type::Hit) {
+          const double ms = double(at - ev.time) * 1000.0 / kSampleRate;  // press minus perfect: - early, + late
+          s.stats.add_press(ms);
+          timing_ms = ms;
+          timing_note = kTimingNoteSeconds;
+        }
       handle(game.events());
       if (outcome != Outcome::Playing) break;
     }
@@ -1397,6 +1411,26 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
         score_number_lines.emplace_back();
         convert(number.lines, score_number_lines.back());
         layers.push_back({&score_number_lines.back(), matrix(number.view), number.view.fov_y});
+      }
+    }
+    if (s.save.options.timing_feedback && timing_note > 0 && s.panel && !s.demo && !paused) {
+      // The last hit's offset in ms, full brightness, dimming over its last 0.2 s. In a
+      // headset just above Vibri (under the score), facing the eye; on the monitor
+      // above the score's number.
+      const float bright = float(std::min(1.0, timing_note / 0.2));
+      const std::string text = SettingsPanel::offset_text(timing_ms);
+      timing_lines.clear();
+      if (s.opt.vr) {
+        std::vector<SceneLine> placed;
+        number_below_vibri(s.panel->text_lines(text, 1.0f, h.jitter_seed, 4), s.scene.vibri_z(), view.eye, placed, kTimingAboveRoad);
+        const auto grey = static_cast<std::uint8_t>(bright * 255.0f);
+        for (SceneLine& l : placed) l.colour = {grey, grey, grey};
+        convert(placed, timing_lines);
+        layers.push_back({&timing_lines, matrix(view), view.fov_y});
+      } else {
+        const Hud::Layer note = s.panel->draw_timing(text, bright, h.jitter_seed);
+        convert(note.lines, timing_lines);
+        layers.push_back({&timing_lines, matrix(note.view), note.view.fov_y});
       }
     }
     if (scroll_note > 0 && s.panel && !paused) {  // the scroll speed, just changed

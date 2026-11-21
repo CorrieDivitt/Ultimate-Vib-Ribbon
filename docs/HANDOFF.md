@@ -14,7 +14,8 @@ Confidence labels used below: **[measured]** = computed this session from the di
 **Session 4 (2026-11-21, quality of life):** the owner's order: P4 (line endings), P1 (again? after a speed time-up), then 4.14 (scroll speed). P5 (fading the lines at the whole-song horizon) dropped as unnecessary. New tracker tasks from the owner: 4.16 the Ultimate PC version (a flat-screen Windows build shipped with the VR build, with most VR settings; maybe Android), 4.17 difficulty setting, 4.18 full combo (both from the notes box).
 - P4 done: `.gitattributes` (`* text=auto`, `*.sh` LF). Cause of the recurring "changed" files: the owner's Windows git writes CRLF in the working tree; without attributes, files touched from the Linux side showed as wholly changed. Repository content is LF throughout (checked).
 - P1: nothing to build. Since cc3b9b0 the time-up screen returns ResultsDone, and main.cpp sends ResultsDone from Screen::Again to AGAIN SELECT; PlayAgain on a speed course restarts from its first track. Section 2w's "no again? after time up yet" was out of date (corrected there).
-- 4.14 built; owner's first test: "worked really well". Then (owner): maximum 10x, and L2/R2 change it mid-song without pausing. Built, waiting for the test (section 2y, last part).
+- 4.14 built; owner's first test: "worked really well". Then (owner): maximum 10x, and L2/R2 change it mid-song without pausing. Built; owner: "works surprisingly well at 10x", locked in. **Task 4.14 done.**
+- 4.12 timing feedback built, waiting for the test (section 2z).
 
 **End of session 3 (2026-11-21, about 00:40 Toronto):** the owner locked in everything built this session. Done:
 - 4.6 to 4.10: performance overlay, infinite horizon, score above Vibri, progress meter below her, score in numbers.
@@ -534,6 +535,16 @@ Known limit: on the monitor, play knows the course only 8 s ahead, so at 0.5x-0.
 **Second version (owner, after "it worked really well"):** `kScrollSpeedMax` is 10 (to find where it breaks; steps still 0.25). In play in a headset, L2/R2 (`trigger_edge`) change it mid-song, paused or not, instead of the line width (which stays in the settings and on the non-course menus); PageUp/PageDown do the same on the keyboard, monitor or headset. On the monitor the triggers still block and loop in play (the original's L2 and R2). Each change is saved and shows "Scroll speed: 2x" for 1.5 s (`scroll_note`): in a headset through `number_below_vibri` at 1,330 below the road (under the score number at 1,090), facing the eye; on the monitor `draw_scroll_speed` at the bottom. `SettingsPanel::scroll_line()` gives that text. Tests updated (10x judged the same, the settings stop at 10x, save clamps at 10). Things that may break at high speeds: on the monitor obstacles appear close to Vibri (the original's horizon on the drawn distance: 11.75 / scroll lengths of course); Vibri's run clip at 10x speed; nothing in the rules.
 
 To judge in the headset: whether L2/R2 on the course selects and the line at the bottom read well; how the stretch feels mid-song; whether Vibri's faster run at 3x-4x looks right.
+
+## 2z. Timing feedback, task 4.12 (session 4)
+
+Owner's spec: as StepMania, when on, each press shows how far it was from perfect, in milliseconds, with - or + for early or late. Built:
+- `Options::timing_feedback` (save key, default off); settings item `TimingFeedback` ("Timing feedback", no bracket since the original has none; German Timing-Anzeige, Spanish/French/Italian Precisión / Précision / Precisione en/in ms) right after Scroll speed, in the pause and the menus' settings; confirm or left/right toggles.
+- Offset = the press's heard position (its own SDL timestamp through `heard_at`, the same as judging) minus the part's time, in ms: negative early, positive late (the overlay's convention). `SettingsPanel::offset_text`: "-12 ms", "+8 ms", "0 ms" (rounded; + is our own stroke glyph). For a pair obstacle it is the press that completed it.
+- vibplay `play_song`: on each Hit event, `timing_ms` and `timing_note` (0.6 s, `kTimingNoteSeconds`; counts down only while not paused); drawn while it lasts, full white then dimming linearly over the last 0.2 s. Headset: `number_below_vibri(..., kTimingAboveRoad)` with the middle 1,240 above the road (Vibri runs under 805, every move but the angel's block under 1,360; the score marks' lowest point is 1,388), upright, facing the eye, scale 1 (142 tall). Monitor: `SettingsPanel::draw_timing`, scale 1.2, halfway down the lower half of the text camera (above the score's number at 0.72). Not in the demo.
+- Tests: the item's label, toggle and text, `draw_timing` dims its colour, save round trip; the width test covers it.
+
+To judge: placement (between Vibri and the score in the headset), size, how long it shows, whether a colour by closeness (StepMania colours by judgement) is wanted.
 
 ## 2o. Idea dropped: Vibri speaking English (session 3, 2026-11-20)
 

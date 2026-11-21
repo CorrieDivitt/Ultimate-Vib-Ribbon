@@ -48,6 +48,7 @@ class SettingsPanel {
     FixedCourses,  // fixed_courses: consistent mode, the same course every play of a song
     EffectsVolume, // effects_volume: the sound effects' loudness, 0 to 10 tenths
     ScrollSpeed,   // scroll_speed: how fast the road is drawn coming, 0.5x to 10x (display only)
+    TimingFeedback,// timing_feedback: each hit's offset in ms (- early, + late)
   };
   enum class Action { None, Moved, Changed, Close, Recentre, QuitSong, LeaveTop };
 
@@ -91,6 +92,9 @@ class SettingsPanel {
   Hud::Layer draw_scroll_speed(const Options& o, std::uint32_t seed);
   // "Scroll speed: 1.25x" in font codes, as the course selects and play show it.
   std::string scroll_line(const Options& o) const;
+  // A hit's offset as shown, from press minus perfect in ms: "-12 ms" (early),
+  // "+7 ms" (late), "0 ms".
+  static std::string offset_text(double ms);
   // A scroll speed as shown: "1x", "1.25x", "0.5x".
   static std::string scroll_text(double speed);
   // `text` (font codes) large in the middle of the screen: the count-in's numbers.
@@ -103,6 +107,9 @@ class SettingsPanel {
   // The score in numbers on the monitor: centred near the bottom, just above the time
   // meter's strip, with the game's text jitter.
   Hud::Layer draw_score(int score, std::uint32_t seed);
+  // The timing feedback on the monitor: `text` centred a little above the score's
+  // number, dimmed by `brightness` (0-1).
+  Hud::Layer draw_timing(const std::string& text, float brightness, std::uint32_t seed);
   // The panel as a layer of its own, with its own camera. `seed`: its jitter.
   Hud::Layer draw(const Options& o, bool vr, std::uint32_t seed);
 

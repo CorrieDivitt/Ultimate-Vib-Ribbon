@@ -49,6 +49,9 @@ struct Options {
   // towards Vibri (0.5 to 10 in steps of 0.25). Display only: every part still reaches
   // her at the same moment and is judged the same; the music is untouched.
   double scroll_speed = 1.0;
+  // Ours, as StepMania's offset display: each hit shows how early (-) or late (+) the
+  // press was, in milliseconds, for a moment near Vibri.
+  bool timing_feedback = false;
   std::string music_folder;       // ours: the player's music folder (UTF-8), picked the first time; empty until then
   double vr_angle = 45.0;       // and where around her, degrees: 0 behind, 90 to her right, -90 to her left
   double audio_offset_ms = 0;  // added to the estimated output latency

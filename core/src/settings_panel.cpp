@@ -10,28 +10,28 @@ namespace vib {
 namespace {
 
 constexpr double kTau = 6.28318530717958647692;
-constexpr int kItemCount = 20;
+constexpr int kItemCount = 21;
 constexpr int kLanguages = 5;  // German, English, Spanish, French, Italian (the PAL menus)
 
 // Our own words. Order as SettingsPanel::Item.
 const char* const kLabels[kLanguages][kItemCount] = {
     // German
     {"Weiter", "Wackelgröße", "Wackeltakt", "Weiche Bewegung", "Linienstärke", "Zoom", "Blickwinkel", "Sicht nach vorn",
-     "Sicht nach hinten", "Ansicht zentrieren", "Soundeffekte", "Vibration", "Tonversatz", "Lied beenden", "Fortsetzen", "Leistung", "Punkte als Zahl", "Gleiche Strecke", "Effektlautstärke", "Scrolltempo"},
+     "Sicht nach hinten", "Ansicht zentrieren", "Soundeffekte", "Vibration", "Tonversatz", "Lied beenden", "Fortsetzen", "Leistung", "Punkte als Zahl", "Gleiche Strecke", "Effektlautstärke", "Scrolltempo", "Timing-Anzeige"},
     // English
     {"Continue", "Wobble size", "Wobble hold", "Smooth motion", "Line width", "Zoom", "View angle", "See ahead", "See behind",
-     "Recentre view", "Sound effects", "Vibration", "Sound timing", "Quit song", "Resume", "Performance", "Score in numbers", "Consistent courses", "Effects volume", "Scroll speed"},
+     "Recentre view", "Sound effects", "Vibration", "Sound timing", "Quit song", "Resume", "Performance", "Score in numbers", "Consistent courses", "Effects volume", "Scroll speed", "Timing feedback"},
     // Spanish
     {"Continuar", "Tamaño del temblor", "Ritmo del temblor", "Movimiento suave", "Grosor de línea", "Zoom", "Ángulo de vista",
-     "Ver adelante", "Ver atrás", "Centrar vista", "Efectos de sonido", "Vibración", "Desfase de sonido", "Salir de la canción", "Reanudar", "Rendimiento", "Puntos en números", "Recorridos fijos", "Volumen de efectos", "Velocidad de avance"},
+     "Ver adelante", "Ver atrás", "Centrar vista", "Efectos de sonido", "Vibración", "Desfase de sonido", "Salir de la canción", "Reanudar", "Rendimiento", "Puntos en números", "Recorridos fijos", "Volumen de efectos", "Velocidad de avance", "Precisión en ms"},
     // French
     {"Continuer", "Taille du tremblement", "Rythme du tremblement", "Mouvement fluide", "Épaisseur des lignes", "Zoom",
      "Angle de vue", "Voir devant", "Voir derrière", "Recentrer la vue", "Effets sonores", "Vibration", "Décalage du son",
-     "Quitter la chanson", "Reprise", "Performances", "Score en chiffres", "Parcours fixes", "Volume des effets", "Vitesse de défilement"},
+     "Quitter la chanson", "Reprise", "Performances", "Score en chiffres", "Parcours fixes", "Volume des effets", "Vitesse de défilement", "Précision en ms"},
     // Italian
     {"Continua", "Ampiezza del tremolio", "Ritmo del tremolio", "Movimento fluido", "Spessore delle linee", "Zoom",
      "Angolo di vista", "Vista avanti", "Vista indietro", "Ricentra la vista", "Effetti sonori", "Vibrazione", "Ritardo audio",
-     "Esci dalla canzone", "Ripresa", "Prestazioni", "Punteggio in cifre", "Percorsi fissi", "Volume effetti", "Velocità di scorrimento"},
+     "Esci dalla canzone", "Ripresa", "Prestazioni", "Punteggio in cifre", "Percorsi fissi", "Volume effetti", "Velocità di scorrimento", "Precisione in ms"},
 };
 const char* const kMore[kLanguages] = {"Weitere Einstellungen (Start)", "More options (Start)", "Más ajustes (Start)", "Autres réglages (Start)",
                                        "Altre impostazioni (Start)"};
@@ -169,6 +169,7 @@ std::string SettingsPanel::value(Item item, const Options& o, bool vr) const {
     case Item::FixedCourses: return on_off(o.fixed_courses);
     case Item::EffectsVolume: std::snprintf(buf, sizeof buf, "%d", int(std::lround(o.effects_volume * 10.0f))); break;
     case Item::ScrollSpeed: return scroll_text(o.scroll_speed);
+    case Item::TimingFeedback: return on_off(o.timing_feedback);
     default: return {};
   }
   return buf;
@@ -235,6 +236,7 @@ bool SettingsPanel::change(Item item, int d, Options& o, bool vr) {
       o.effects_volume = std::clamp(std::round(o.effects_volume * 10.0f + float(d)) / 10.0f, 0.0f, 1.0f);
       return o.effects_volume != before;
     }
+    case Item::TimingFeedback: o.timing_feedback = !o.timing_feedback; return true;
     case Item::ScrollSpeed: {
       const double before = o.scroll_speed;
       o.scroll_speed = clamp_scroll_speed(o.scroll_speed + kScrollSpeedStep * d);
@@ -242,6 +244,13 @@ bool SettingsPanel::change(Item item, int d, Options& o, bool vr) {
     }
     default: return false;
   }
+}
+
+std::string SettingsPanel::offset_text(double ms) {
+  const long v = std::lround(ms);
+  char buf[24];
+  std::snprintf(buf, sizeof buf, v > 0 ? "+%ld ms" : "%ld ms", v);
+  return buf;
 }
 
 std::string SettingsPanel::scroll_text(double speed) {
@@ -287,7 +296,7 @@ SettingsPanel::Action SettingsPanel::tick(const Input& in, double seconds, Optio
       case Item::Continue: return Action::Close;
       case Item::Recentre: return Action::Recentre;
       case Item::QuitSong: return Action::QuitSong;
-      case Item::Smooth: case Item::SoundEffects: case Item::Vibration: case Item::ResumeStyle: case Item::Performance: case Item::ScoreNumbers: case Item::FixedCourses:
+      case Item::Smooth: case Item::SoundEffects: case Item::Vibration: case Item::ResumeStyle: case Item::Performance: case Item::ScoreNumbers: case Item::FixedCourses: case Item::TimingFeedback:
         change(item, 1, o, vr);
         return Action::Changed;
       default: return Action::None;
@@ -433,6 +442,22 @@ Hud::Layer SettingsPanel::draw_score(int score, std::uint32_t seed) {
   for (SceneLine& l : layer.lines) {  // to just above the time meter's strip (its top is about 84% down)
     l.a.y += 0.72f * half_height, l.b.y += 0.72f * half_height;
     l.a.z += 4000.0f, l.b.z += 4000.0f;
+  }
+  return layer;
+}
+
+Hud::Layer SettingsPanel::draw_timing(const std::string& text, float brightness, std::uint32_t seed) {
+  Hud::Layer layer;
+  layer.view.eye = {0, 0, 0};
+  layer.view.target = {0, 0, 4730};
+  layer.view.fov_y = float(682 * kTau / 4096.0);
+  const float half_height = 4000.0f * std::tan(0.5f * layer.view.fov_y);
+  layer.lines = text_lines(text, 1.2f, seed, 4);
+  const auto grey = static_cast<std::uint8_t>(std::clamp(brightness, 0.0f, 1.0f) * 255.0f);
+  for (SceneLine& l : layer.lines) {  // above the score's number (0.72 down), still below the middle
+    l.a.y += 0.5f * half_height, l.b.y += 0.5f * half_height;
+    l.a.z += 4000.0f, l.b.z += 4000.0f;
+    l.colour = {grey, grey, grey};
   }
   return layer;
 }
