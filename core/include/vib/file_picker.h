@@ -51,6 +51,9 @@ class FilePicker {
   const Entry* entry() const;
   // The ticked files' names, in the order shown.
   std::vector<std::string> ticked() const;
+  // Shows "No music here" under the heading for 3 s (owner: a folder with nothing
+  // playable in it chosen to play).
+  void notice_no_music() { notice_seconds_ = 3.0; }
 
   // The screen as a layer with its own camera (the settings panel's). `size`: as the
   // panel's (a headset uses 0.25: about 1 m away). `seed`: the text's jitter.
@@ -77,6 +80,7 @@ class FilePicker {
   int cursor_ = 0, first_ = 0;
   int repeat_dir_ = 0;
   double repeat_timer_ = 0;
+  double notice_seconds_ = 0;   // "No music here" still showing
   int scroll_dir_ = 0;          // up or down held: -1 or 1
   double scroll_timer_ = 0, scroll_held_ = 0;
 };

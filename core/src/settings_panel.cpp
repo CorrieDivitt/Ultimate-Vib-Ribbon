@@ -244,10 +244,27 @@ SettingsPanel::Action SettingsPanel::tick(const Input& in, double seconds, Optio
   if (in.cancel) return Action::Close;
   if (in.up || in.down) {
     repeat_dir_ = 0;
+    scroll_dir_ = in.down ? 1 : -1;
+    scroll_timer_ = 0.35;
     if (in.up && cursor_ == 0 && !wraps_) return Action::LeaveTop;
     cursor_ = (cursor_ + (in.down ? 1 : count - 1)) % count;
     first_ = std::clamp(first_, cursor_ - rows_ + 1, cursor_);
     return Action::Moved;
+  }
+  // Held (owner): after 0.35 s, about 14 rows a second, stopping at the ends.
+  if (scroll_dir_ != 0 && ((scroll_dir_ < 0 && in.held_up) || (scroll_dir_ > 0 && in.held_down))) {
+    scroll_timer_ -= seconds;
+    if (scroll_timer_ <= 0) {
+      scroll_timer_ += 0.07;
+      const int to = std::clamp(cursor_ + scroll_dir_, 0, count - 1);
+      if (to != cursor_) {
+        cursor_ = to;
+        first_ = std::clamp(first_, cursor_ - rows_ + 1, cursor_);
+        return Action::Moved;
+      }
+    }
+  } else {
+    scroll_dir_ = 0;
   }
   const Item item = items_[std::size_t(cursor_)];
   if (in.confirm) {

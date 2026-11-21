@@ -1879,6 +1879,7 @@ int run(int argc, char** argv) {
                   for (const FilePicker::Entry& entry : list_folder(picker.path()))
                     if (!entry.folder) own_files.push_back(entry.name);
                   if (own_files.empty()) {
+                    picker.notice_no_music();  // (shown in the picker, which stays open)
                     std::printf("No music files in that folder.\n");
                     break;
                   }
@@ -2118,6 +2119,19 @@ int run(int argc, char** argv) {
             break;
           }
           Result r = Result::Clear;
+          if (read_all && names.empty()) {
+            // Nothing playable after all (every file unreadable or under 10 s): back to
+            // the picker with the message, as for a folder with no music files.
+            open_picker(picking_folder);
+            if (!own_folder.empty())
+              show_folder(picking_folder ? FilePicker::Mode::Folder : FilePicker::Mode::Files, own_folder);
+            picker.notice_no_music();
+            title.go_to(S::UnknownModeSelect);
+            prev_layers.clear();
+            last_ns = SDL_GetTicksNS();
+            behind = 0;
+            continue;
+          }
           if (read_all && !names.empty()) {
             const OwnCd cd = make_own_cd(names);
             s.music_key = cd.key;

@@ -77,6 +77,7 @@ std::vector<std::string> FilePicker::ticked() const {
 }
 
 FilePicker::Action FilePicker::tick(const SettingsPanel::Input& in, double seconds) {
+  notice_seconds_ = std::max(0.0, notice_seconds_ - seconds);
   const auto l = lines();
   const int count = int(l.size());
   if (in.cancel) return Action::Cancel;
@@ -182,6 +183,7 @@ Hud::Layer FilePicker::draw(float size, std::uint32_t seed) const {
   put(mode_ == Mode::Folder ? word(kChooseFolder, language_) : word(kChooseMusic, language_), left, y, 1.2f, white, seed);
   y += row;
   put(shown_name(path_), left, y, 0.8f, dim, seed + 1);
+  if (notice_seconds_ > 0) put(word(kNothing, language_), 900.0f, y - row, 1.0f, white, seed + 98);  // beside the heading
   y += row * 1.4f;
   const auto texts = rows();
   const auto l = lines();

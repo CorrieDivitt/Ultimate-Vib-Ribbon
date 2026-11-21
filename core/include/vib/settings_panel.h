@@ -126,6 +126,8 @@ class SettingsPanel {
   bool wraps_ = true;
   int repeat_dir_ = 0;
   double repeat_timer_ = 0;
+  int scroll_dir_ = 0;  // up or down held: -1 or 1 (the list scrolls while held)
+  double scroll_timer_ = 0;
 };
 
 }  // namespace vib

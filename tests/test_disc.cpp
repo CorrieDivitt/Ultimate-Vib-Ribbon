@@ -710,6 +710,16 @@ TEST(disc_sces02873_settings_panel) {
   for (int i = 0; i < 80; ++i) p.tick(left, 0.02, o, true);
   CHECK(o.vr_behind_seconds == 2.0);  // (no lower)
   o.vr_ahead_seconds = o.vr_behind_seconds = 30.0;
+  // Held down, the list scrolls (after 0.35 s, about 14 rows a second) and stops at the end.
+  {
+    p.home();
+    SettingsPanel::Input held_down;
+    held_down.held_down = true;
+    p.tick(down, 0.02, o, true);
+    for (int k = 0; k < 100; ++k) p.tick(held_down, 0.02, o, true);  // 2 s
+    CHECK(p.current() == all.back());  // (at the end, not wrapped)
+    p.home();
+  }
   // Our settings show the original game's value after the name; the original's options and the actions do not.
   CHECK(p.label(I::SeeAhead, true) == "See ahead (8 s)" && p.label(I::SeeBehind, true) == "See behind (2 s)");
   CHECK(p.label(I::LineWidth, true) == "Line width (1.000)" && p.label(I::LineWidth, false) == "Line width (1.000)");
@@ -919,6 +929,14 @@ TEST(disc_sces02873_file_picker_ticks_files_and_draws_every_row) {
       CHECK(!p.entry());  // back at the top (Done, then Up a folder, then the first song)
       p.tick(down, 0.02), p.tick(down, 0.02);
       CHECK(p.entry() && p.entry()->name == "Song 1.mp3");
+    }
+    // "No music here" for 3 s when a folder with nothing playable is chosen.
+    {
+      const std::size_t before = p.draw(1.0f, 4).lines.size();
+      p.notice_no_music();
+      CHECK(p.draw(1.0f, 4).lines.size() > before);
+      for (int k = 0; k < 200; ++k) p.tick(none, 0.02);  // 4 s
+      CHECK(p.draw(1.0f, 4).lines.size() == before);
     }
     // Another folder clears the ticks.
     p.show(FilePicker::Mode::Files, "C:/Users/me/Music/Albums/Disc 2", {{"x.mp3", false}}, true);
