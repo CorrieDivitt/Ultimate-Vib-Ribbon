@@ -1185,3 +1185,29 @@ TEST(disc_sces02873_file_picker_ticks_files_and_draws_every_row) {
     CHECK(!p.draw(0.25f, 9).lines.empty());
   }
 }
+
+TEST(disc_sces02873_speed_label_shows_in_every_language) {
+  // The speed courses' level label: its model is each language's own, its three clips
+  // are shared; in every language each level draws its label with the dial.
+  const std::string cue = test_cue();
+  if (cue.empty()) SKIP("set VIB_TEST_CUE to your SCES-02873 .cue to run");
+  DiscImage disc = DiscImage::open(path_from_utf8(cue));
+  Iso9660 iso(disc);
+  for (int language = 0; language < 5; ++language) {
+    const Pak game(iso.read("GAME/" + language_prefix(language) + "FILES.PAK"));
+    CHECK(localized(game, "METERS/SPD_LBL.TMD", language) == "METERS/" + language_prefix(language) + "SPD_LBL.TMD");
+    for (int level = 1; level <= 3; ++level) {
+      Hud hud(game, language);
+      hud.start_speed(level);
+      Hud::Frame f;
+      f.seconds = 0.5;
+      f.speed_course = level;
+      f.target_speed = 2.0;
+      std::vector<Hud::Layer> layers;
+      hud.draw(f, layers);
+      std::size_t lines = 0;
+      for (const Hud::Layer& l : layers) lines += l.lines.size();
+      CHECK(lines > 50);
+    }
+  }
+}

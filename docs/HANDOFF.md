@@ -19,6 +19,8 @@ Confidence labels used below: **[measured]** = computed this session from the di
 - 4.18 full combo celebration built; owner: "that was perfect". Then (owner): a full course combo in the same setting, bigger; built; owner: "that worked well", locked in. **Task 4.18 done.**
 - 4.11 course wrapped around the player built, then the right stick for its size and the walking-speed fix; owner: "works great", locked in. **Task 4.11 done** (section 2ab).
 - Settings reorganised into groups (owner's layout) before 4.13 colour options (section 2ac).
+- Light backgrounds: lines without a custom colour are inverted (section 2ad).
+- P3 visual checks: the speed label checked from the disc (section 2w); the opening camera moved 1 m closer needs the owner's eyes in the headset.
 - 4.13 custom colours built; owner: "works great". Then (owner) Custom colors moved out of Modifiers to the top list, under Modifiers; black and white in both palettes. **Task 4.13 done** (section 2ad).
 
 **End of session 3 (2026-11-21, about 00:40 Toronto):** the owner locked in everything built this session. Done:
@@ -520,7 +522,7 @@ The rotating obstacles the owner saw with own music: the original's **screw** ef
   - In order and leaving during play go straight back to the menu.
 - Test: test_disc runs UNKNOWN HISCORE (cycling, back), one-track and all-tracks clears, a speed clear with a table, and "again?".
 - Speed dial in VR: the owner asked for it higher above Vibri. `Hud::Layer.speed` marks the dial. In a headset its lines are raised 400 in the meter camera's space (`kSpeedDialRaise` in main.cpp). Its lines span y -1333 to -307 there (y is down), camera eye (0, 0, -2905), fov 0.445. The monitor is unchanged.
-- Unchecked (no disc here): whether SPD_LBL1-3.ANM need a language prefix. If the label is missing, check `localized()` for those names.
+- Checked on the disc (session 4): SPD_LBL.TMD is per language (04_, 02_, 08_, 10_, 20_ through `localized()`), SPD_LBL1-3.ANM are shared under their plain names, as the code loads them. Test `disc_sces02873_speed_label_shows_in_every_language` (every language, every level draws).
 
 ## 2y. Scroll speed, task 4.14 (session 4)
 
