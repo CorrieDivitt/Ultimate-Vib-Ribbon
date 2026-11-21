@@ -642,6 +642,7 @@ void Hud::draw(const Frame& f, std::vector<Layer>& layers) {
       return std::clamp(int(double(n) * (speed - kLow) / (kHigh - kLow)), 0, std::max(0, n - 1));
     };
     Layer l;
+    l.speed = true;
     l.view = fixed_view(speed_camera_);
     lines_.set_view(l.view);
     lines_.animated(speed_model_, dial_anim_, 0, {}, 3, l.lines);

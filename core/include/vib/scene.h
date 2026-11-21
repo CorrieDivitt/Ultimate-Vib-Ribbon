@@ -163,6 +163,7 @@ class Hud {
     SceneView view;
     bool score = false;  // the score marks (a headset places them above Vibri instead)
     bool time = false;   // the time meter (a headset draws its own bar below Vibri instead)
+    bool speed = false;  // a speed course's dial (a headset raises it higher)
   };
   void draw(const Frame& f, std::vector<Layer>& layers);
 

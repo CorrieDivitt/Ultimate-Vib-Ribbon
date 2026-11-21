@@ -490,7 +490,7 @@ The rotating obstacles the owner saw with own music: the original's **screw** ef
   - After results, the game returns to the speed select or the own-CD mode select.
   - In order and leaving during play go straight back to the menu.
 - Test: test_disc runs UNKNOWN HISCORE (cycling, back), one-track and all-tracks clears, a speed clear with a table, and "again?".
-- Left for the owner to judge: the speed dial's placement in VR (it is drawn through the original's own meter camera).
+- Speed dial in VR: the owner asked for it higher above Vibri. `Hud::Layer.speed` marks the dial. In a headset its lines are raised 400 in the meter camera's space (`kSpeedDialRaise` in main.cpp). Its lines span y -1333 to -307 there (y is down), camera eye (0, 0, -2905), fov 0.445. The monitor is unchanged.
 - Unchecked (no disc here): whether SPD_LBL1-3.ANM need a language prefix. If the label is missing, check `localized()` for those names.
 
 ## 2o. Idea dropped: Vibri speaking English (session 3, 2026-11-20)
