@@ -1685,7 +1685,7 @@ int run(int argc, char** argv) {
         return true;
       };
       // Ours: Start (or P / Tab) opens the settings anywhere in the menus, beside a preview of play.
-      bool in_settings = false, toggle_settings = false, settings_after_film = false;
+      bool in_settings = false, toggle_settings = false, settings_after_film = false, picker_start = false;
       PlayPreview preview;
       std::vector<SceneLine> preview_lines;
       std::vector<vibr::LineInstance> settings_lines[2];
@@ -1753,7 +1753,12 @@ int run(int argc, char** argv) {
                 case SDLK_RIGHT: case SDLK_D: press(3, down); break;
                 case SDLK_RETURN: case SDLK_SPACE: case SDLK_Z: press(4, down); break;
                 case SDLK_ESCAPE: case SDLK_BACKSPACE: case SDLK_X: press(5, down); break;
-                case SDLK_P: case SDLK_TAB: if (down) toggle_settings = true; break;
+                case SDLK_P: case SDLK_TAB:
+                  if (down) {
+                    if (in_picker) picker_start = true;  // (as Start)
+                    else toggle_settings = true;
+                  }
+                  break;
                 case SDLK_F3:
                   if (down) {
                     l3_pressed(s);
@@ -1800,6 +1805,7 @@ int run(int argc, char** argv) {
                 case SDL_GAMEPAD_BUTTON_START:
                   if (down) {
                     if (in_kiosk) press(4, true), settings_after_film = true;
+                    else if (in_picker) picker_start = true;  // the picker's Done / Use this folder (owner)
                     else toggle_settings = true;
                   }
                   break;
@@ -1823,6 +1829,7 @@ int run(int argc, char** argv) {
         const std::uint64_t now_ns = SDL_GetTicksNS();
         const double frame_dt = double(now_ns - last_ns) * 1e-9;
         if (settings_after_film && !in_kiosk) settings_after_film = false, toggle_settings = true;
+        if (in_picker) toggle_settings = false;  // (never behind the picker)
         if (toggle_settings && !in_kiosk) {
           toggle_settings = false;
           in_settings = !in_settings;
@@ -1860,7 +1867,11 @@ int run(int argc, char** argv) {
             pi.confirm = in.confirm, pi.cancel = in.cancel;
             held_directions(s, pi);
             using PA = FilePicker::Action;
-            const PA act = picker.tick(pi, 1.0 / TitleScreens::kFrameRate);
+            PA act = picker.tick(pi, 1.0 / TitleScreens::kFrameRate);
+            if (picker_start) {
+              picker_start = false;
+              if (act == PA::None || act == PA::Moved) act = picker.start();
+            }
             if (act == PA::Moved) s.fx.number(1, 50, 5);
             else if (act != PA::None) s.fx.number(1, 90, 5);
             const FilePicker::Mode mode = picker.mode();

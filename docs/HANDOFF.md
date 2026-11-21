@@ -439,6 +439,8 @@ The rotating obstacles the owner saw with own music: the original's **screw** ef
 
 **Two more from the owner (same evening):** (1) a folder with nothing playable: "Use this folder" on a folder with no MP3 or FLAC files keeps the picker open and shows "No music here" (five languages) beside the heading for 3 s (`FilePicker::notice_no_music`); if the files are there but none can be played (unreadable or under 10 s, found while reading lengths), the picker reopens at that folder with the same message. (2) The settings list scrolls while up or down is held: after 0.35 s, about 14 rows a second, stopping at the ends (a single press still wraps round). Tests in the settings and picker disc tests.
 
+**Start in the picker (owner):** opening our settings over the picker put them behind it (and they were left open after backing out). Now in the picker, Start (and P or Tab) does Done when choosing tracks (if something is ticked) or Use this folder when choosing a folder, from anywhere in the list (`FilePicker::start`); the settings cannot open while the picker shows.
+
 ## 2o. Idea dropped: Vibri speaking English (session 3, 2026-11-20)
 
 Owner asked whether Vibri could say the menu items in English by restitching her syllables. Finding: only numbers are stitched (about 20 Japanese number syllables, sounds 64-79, plus the juu/hyaku/sen/man units 80-85, on a beat grid in `TitleScreens::say_number`); every menu word, comment and reaction is one whole clip (e.g. 112-114 the course names, 96 back, 129-132 options and on/off, 99/100 again/no). English cannot be built from those. New recordings, TTS or a voice model trained on her clips were offered; the owner declined all of them (no new lines, no other voice). Not to be revisited unless the owner raises it.

@@ -47,6 +47,9 @@ class FilePicker {
 
   // One step of input (the settings panel's Input). Returns what to do.
   Action tick(const SettingsPanel::Input& in, double seconds);
+  // Start (owner): Done in Files mode (when something is ticked), Use this folder in
+  // Folder mode, from anywhere in the list.
+  Action start() const { return mode_ == Mode::Folder ? Action::UseFolder : ticked_.empty() ? Action::None : Action::Done; }
   // The entry under the cursor, for Enter.
   const Entry* entry() const;
   // The ticked files' names, in the order shown.
