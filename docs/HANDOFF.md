@@ -441,6 +441,28 @@ The rotating obstacles the owner saw with own music: the original's **screw** ef
 
 **Start in the picker (owner):** opening our settings over the picker put them behind it (and they were left open after backing out). Now in the picker, Start (and P or Tab) does Done when choosing tracks (if something is ticked) or Use this folder when choosing a folder, from anywhere in the list (`FilePicker::start`); the settings cannot open while the picker shows.
 
+## 2w. Speed courses built (session 3, late night; stage 2 of 3.7)
+
+- Stage 1 locked in by the owner: the picker flow, the loading screen, the effects volume, held scrolling, the no-music notice, and Start doing Done / Use this folder.
+- Flow: own-CD mode select, then Speed courses. That opens MODE SPEED SELECT (`Screen::SpeedSelect`, `TitleScreens::speed_select`).
+  - It is built from the disc's TITLE/SPEED/MD_SPD.TMD with SPD01_02..SPD04_01, OPEN and CLOSE.
+  - Vibri lies down. The voices are 114, 113, 112 and 96. The cursor resets when the screen is entered from the mode select.
+  - Results: Speed1, Speed2, Speed3, SpeedBack. A level opens the picker for tracks. Cancel returns to the speed select.
+  - After a run the game goes back to the speed select.
+- In play (`play_song`): `speed_level` (1 to 3).
+  - `gen.set_fixed_cue(game.fixed_period())` is called after every update. The period is set to the fixed beat and the select period to three beats.
+  - There is no quiet notification and no far preview in speed courses.
+- HUD (`Hud::start_speed`, `Frame.speed_course` / `target_speed`): the dial replaces the score marks.
+  - Parts: METERS/SPEED.TMD with SPEED.ANM (frame 0), SPD_TRGT.ANM at the level's top speed, SPD_NEDL.ANM at `Gameplay::target_speed()`, and camera SPEED_01.ANC.
+  - One scale for every level: 1.5 to 6.2 beats a second.
+  - The level label is SPD_LBL.TMD (localized) with SPD_LBL1-3.ANM, played once.
+  - The time meter stays.
+- Result: a clear returns the seconds taken, which `save.record` stores (fewer is better). The output prints "Speed record: N s (place P)".
+  - If the music ends first (`Session.final_time_up`), the next picked track is a new try.
+  - A real game over ends the run.
+- Not yet: the original's speed results screen, the speed high-score view (stage 3), and a check of the dial's placement in VR.
+- Unchecked (no disc here): whether SPD_LBL1-3.ANM need a language prefix. If the label is missing, check `localized()` for those names.
+
 ## 2o. Idea dropped: Vibri speaking English (session 3, 2026-11-20)
 
 Owner asked whether Vibri could say the menu items in English by restitching her syllables. Finding: only numbers are stitched (about 20 Japanese number syllables, sounds 64-79, plus the juu/hyaku/sen/man units 80-85, on a beat grid in `TitleScreens::say_number`); every menu word, comment and reaction is one whole clip (e.g. 112-114 the course names, 96 back, 129-132 options and on/off, 99/100 again/no). English cannot be built from those. New recordings, TTS or a voice model trained on her clips were offered; the owner declined all of them (no new lines, no other voice). Not to be revisited unless the owner raises it.
