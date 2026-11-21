@@ -10,6 +10,7 @@ add_executable(vibcore_tests
   test_save.cpp
   test_settings.cpp
   test_perf.cpp
+  test_own_cd.cpp
 )
 target_link_libraries(vibcore_tests PRIVATE vibcore vib_warnings)
 add_test(NAME vibcore_tests COMMAND vibcore_tests)

@@ -68,6 +68,7 @@ std::string SaveData::to_text() const {
   out << "resume_countdown " << (options.resume_countdown ? 1 : 0) << '\n';
   out << "perf_overlay " << options.perf_overlay << '\n';
   out << "score_numbers " << (options.score_numbers ? 1 : 0) << '\n';
+  if (!options.music_folder.empty()) out << "music_folder " << options.music_folder << '\n';  // (the rest of the line)
   std::snprintf(buf, sizeof buf, "%.3f", options.line_width);
   out << "line_width " << buf << '\n';
   std::snprintf(buf, sizeof buf, "%.3f", options.vr_line_width);
@@ -114,6 +115,13 @@ SaveData SaveData::from_text(const std::string& text) {
           std::array<int, 3> t{};
           if (fields >> t[0] >> t[1] >> t[2]) d.high_scores[std::size_t(c)] = t;
         }
+      continue;
+    }
+    if (key == "music_folder") {  // a path: the rest of the line, spaces and all
+      std::string rest;
+      std::getline(fields, rest);
+      const std::size_t start = rest.find_first_not_of(" \t");
+      if (start != std::string::npos) d.options.music_folder = rest.substr(start);
       continue;
     }
     fields >> value;

@@ -21,6 +21,7 @@
 #include "vib/kiosk_movie.h"
 #include "vib/settings_panel.h"
 #include "vib/perf_overlay.h"
+#include "vib/file_picker.h"
 #include "vib/course_script.h"
 #include "vib/motion.h"
 #include "vib/sound_bank.h"
@@ -818,5 +819,45 @@ TEST(disc_sces02873_settings_labels_with_defaults_fit_beside_their_values) {
           CHECK(needed <= 2900.0f);
           CHECK(p.label(item, vr).find('?') == std::string::npos);
         }
+  }
+}
+
+TEST(disc_sces02873_file_picker_ticks_files_and_draws_every_row) {
+  const std::string cue = test_cue();
+  if (cue.empty()) SKIP("set VIB_TEST_CUE to your SCES-02873 .cue to run");
+  DiscImage disc = DiscImage::open(path_from_utf8(cue));
+  Iso9660 iso(disc);
+  const GameText words = GameText::from_exe(iso.read("MAIN_G.EXE"));
+  using A = FilePicker::Action;
+  SettingsPanel::Input up, down, confirm, cancel, none;
+  up.up = down.down = confirm.confirm = cancel.cancel = true;
+  for (int language = 0; language < 5; ++language) {
+    const Pak game(iso.read("GAME/" + language_prefix(language) + "FILES.PAK"));
+    SettingsPanel panel(game, language, &words);
+    FilePicker p(panel, language);
+    // Folder mode: only folders are listed, after "use this folder" and "up".
+    p.show(FilePicker::Mode::Folder, "C:/Users/me/Music", {{"Albums", true}, {"Ünïcode Földer", true}, {"stray.mp3", false}}, true);
+    CHECK(p.rows().size() == 4);
+    for (const std::string& r : p.rows()) CHECK(!r.empty());
+    CHECK(p.tick(confirm, 0.02) == A::UseFolder);
+    CHECK(p.tick(down, 0.02) == A::Moved && p.tick(confirm, 0.02) == A::Up);
+    CHECK(p.tick(down, 0.02) == A::Moved && p.tick(confirm, 0.02) == A::Enter && p.entry() && p.entry()->name == "Albums");
+    CHECK(!p.draw(1.0f, 7).lines.empty() && !p.draw(0.25f, 7).lines.empty());
+    // Files mode: tick two files; Done is refused until something is ticked.
+    p.show(FilePicker::Mode::Files, "C:/Users/me/Music/Albums", {{"Disc 2", true}, {"01 One.mp3", false}, {"02 Two.flac", false}, {"03 Three.mp3", false}}, true);
+    CHECK(p.tick(confirm, 0.02) == A::None);  // Done, nothing ticked
+    p.tick(down, 0.02), p.tick(down, 0.02), p.tick(down, 0.02);  // up, the folder, the first file
+    CHECK(p.tick(confirm, 0.02) == A::Toggled);
+    p.tick(down, 0.02), p.tick(down, 0.02);
+    CHECK(p.tick(confirm, 0.02) == A::Toggled);
+    CHECK((p.ticked() == std::vector<std::string>{"01 One.mp3", "03 Three.mp3"}));
+    CHECK(p.rows()[0].find("(2)") != std::string::npos);
+    p.tick(down, 0.02);  // from the last file it wraps round to Done
+    CHECK(p.tick(confirm, 0.02) == A::Done);
+    CHECK(p.tick(cancel, 0.02) == A::Cancel);
+    // Another folder clears the ticks.
+    p.show(FilePicker::Mode::Files, "C:/Users/me/Music/Albums/Disc 2", {{"x.mp3", false}}, true);
+    CHECK(p.ticked().empty());
+    CHECK(!p.draw(0.25f, 9).lines.empty());
   }
 }

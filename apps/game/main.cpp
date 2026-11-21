@@ -35,6 +35,7 @@
 #include <SDL3/SDL_main.h>
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -42,6 +43,7 @@
 #include <cstring>
 #include <deque>
 #include <exception>
+#include <filesystem>
 #include <fstream>
 #include <functional>
 #include <map>
@@ -74,6 +76,8 @@
 #include "vib/kiosk_movie.h"
 #include "vib/settings_panel.h"
 #include "vib/perf_overlay.h"
+#include "vib/own_cd.h"
+#include "vib/file_picker.h"
 
 namespace {
 
@@ -225,6 +229,72 @@ SceneView opening_forward(SceneView v) {
   return v;
 }
 
+// ---------------------------------------------------------------- the player's music files
+
+// UTF-8 for a path (std::filesystem gives char8_t).
+std::string utf8_of(const std::filesystem::path& p) {
+  const auto u = p.u8string();
+  return std::string(u.begin(), u.end());
+}
+
+bool is_music_file(const std::filesystem::path& p) {
+  std::string ext = utf8_of(p.extension());
+  for (char& c : ext) c = char(std::tolower(static_cast<unsigned char>(c)));
+  return ext == ".mp3" || ext == ".flac";
+}
+
+// Where the folder browser starts the first time: the system's music folder, else home.
+std::string default_music_folder() {
+  if (const char* music = SDL_GetUserFolder(SDL_FOLDER_MUSIC)) return music;
+  if (const char* home = SDL_GetUserFolder(SDL_FOLDER_HOME)) return home;
+  return {};
+}
+
+// The folder above `utf8`; "" (the computer's drives, on Windows) above a drive's root.
+std::string parent_folder(const std::string& utf8) {
+  const std::filesystem::path p = path_from_utf8(utf8);
+  const std::filesystem::path up = p.has_relative_path() ? p.parent_path() : p;
+  if (up == p || !p.has_relative_path()) return {};
+  return utf8_of(up);
+}
+
+// What a folder holds, for the picker: its folders, then its music files, each in
+// track order (hidden ones left out). "" lists the drives (Windows).
+std::vector<FilePicker::Entry> list_folder(const std::string& utf8) {
+  std::vector<FilePicker::Entry> folders, files;
+  std::error_code ec;
+  if (utf8.empty()) {
+#ifdef _WIN32
+    for (char d = 'A'; d <= 'Z'; ++d) {
+      const std::string root = std::string(1, d) + ":/";
+      if (std::filesystem::exists(root, ec)) folders.push_back({root, true});
+    }
+#else
+    folders.push_back({"/", true});
+#endif
+    return folders;
+  }
+  for (std::filesystem::directory_iterator it(path_from_utf8(utf8), std::filesystem::directory_options::skip_permission_denied, ec), end;
+       !ec && it != end; it.increment(ec)) {
+    const std::string name = utf8_of(it->path().filename());
+    if (name.empty() || name[0] == '.') continue;
+    std::error_code ec2;
+    if (it->is_directory(ec2)) folders.push_back({name, true});
+    else if (is_music_file(it->path())) files.push_back({name, false});
+  }
+  auto order = [](const FilePicker::Entry& a, const FilePicker::Entry& b) { return track_name_less(a.name, b.name); };
+  std::sort(folders.begin(), folders.end(), order);
+  std::sort(files.begin(), files.end(), order);
+  folders.insert(folders.end(), files.begin(), files.end());
+  return folders;
+}
+
+// A folder inside `parent`: "" (the drives) holds whole roots.
+std::string child_folder(const std::string& parent, const std::string& name) {
+  if (parent.empty()) return name;
+  return utf8_of(path_from_utf8(parent) / path_from_utf8(name));
+}
+
 // ---------------------------------------------------------------- one song
 
 // Command line. Anything given here overrides the saved options for this run only.
@@ -271,7 +341,8 @@ struct Session {
   // original's audio-CD rules (the medley script, placed by the disc's key).
   const vibr::Music* music = nullptr;
   std::uint32_t music_key = 0;
-  std::int32_t music_samples = 0;  // its whole seconds at 22,050 Hz, as the original counts a CD track
+  std::vector<std::int32_t> music_disc;  // every track's whole seconds at 22,050 Hz, as the original counts CD tracks
+  int music_track = 1;                   // which of them `music` is (from 1)
   SettingsPanel* panel = nullptr;      // our settings: the pause, and below the Options screen
   std::function<void()> write_save;    // keeps the options now
   // The performance overlay (ours, task 4.6): every frame measured, shown when on.
@@ -774,8 +845,8 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   // Starts a generator on this song: the game's own round, or the player's track on its "disc".
   auto start = [&](CourseGenerator& g) {
     if (s.music) {
-      g.prepare_disc({s.music_samples}, s.music_key);
-      g.start_track(1, 0);
+      g.prepare_disc(s.music_disc, s.music_key);
+      g.start_track(s.music_track, 0);
     } else {
       g.start_round(song, 0);
     }
@@ -1476,8 +1547,10 @@ int run(int argc, char** argv) {
       const auto frames = std::uint32_t(own_music->pcm.size() / 2);
       const std::uint32_t sectors = (frames + 587) / 588;  // 588 frames a sector at 75 a second
       s.music = &*own_music;
-      s.music_key = disc_key(150 + sectors, 1);
-      s.music_samples = std::int32_t(sectors / 75) * kSampleRate;
+      const OwnCd cd = make_own_cd({{opt.music_file, std::uint32_t(own_music->pcm.size() / 2)}});
+      s.music_key = cd.key;
+      s.music_disc = cd.track_samples();
+      s.music_track = 1;
       std::printf("Music: %s (%u Hz, %u channels, %u:%02u)\n", opt.music_file.c_str(), own_music->source_rate, own_music->source_channels,
                   sectors / 75 / 60, sectors / 75 % 60);
       int points = 0;
@@ -1559,6 +1632,23 @@ int run(int argc, char** argv) {
       std::uint64_t last_ns = SDL_GetTicksNS();
       double behind = 0;
       bool course_chosen = false, running = true, replay = false;
+      // Ours: the player's own music, picked in the game (owner's design). The first
+      // time, the folder browser; after that, the files of the remembered folder.
+      FilePicker picker(panel, language);
+      bool in_picker = false, own_play = false;
+      std::vector<std::string> own_files;
+      std::string own_folder;
+      auto show_folder = [&](FilePicker::Mode mode, const std::string& folder) {
+        picker.show(mode, folder, list_folder(folder), !folder.empty());
+      };
+      auto open_picker = [&]() {
+        std::error_code ec;
+        const std::string& saved = save.options.music_folder;
+        if (!saved.empty() && std::filesystem::is_directory(path_from_utf8(saved), ec)) show_folder(FilePicker::Mode::Files, saved);
+        else show_folder(FilePicker::Mode::Folder, default_music_folder());
+        in_picker = true;
+        prev_layers.clear();
+      };
       Course chosen = Course::Bronze;
       while (running) {
         SDL_Event e;
@@ -1684,6 +1774,43 @@ int run(int argc, char** argv) {
           pressed = {};
           in.voices_playing = voices.playing();
           in.music_playing = music.playing();
+          if (in_picker) {
+            // The menus stand still meanwhile (their music goes on).
+            SettingsPanel::Input pi;
+            pi.up = in.up, pi.down = in.down, pi.left = in.left, pi.right = in.right;
+            pi.confirm = in.confirm, pi.cancel = in.cancel;
+            held_directions(s, pi);
+            using PA = FilePicker::Action;
+            const PA act = picker.tick(pi, 1.0 / TitleScreens::kFrameRate);
+            if (act == PA::Moved) s.fx.number(1, 50, 5);
+            else if (act != PA::None) s.fx.number(1, 90, 5);
+            const FilePicker::Mode mode = picker.mode();
+            switch (act) {
+              case PA::Enter:
+                if (const FilePicker::Entry* opened = picker.entry()) show_folder(mode, child_folder(picker.path(), opened->name));
+                break;
+              case PA::Up: show_folder(mode, parent_folder(picker.path())); break;
+              case PA::UseFolder:
+                save.options.music_folder = picker.path();
+                write_save();
+                std::printf("Music folder: %s (saved)\n", picker.path().c_str());
+                show_folder(FilePicker::Mode::Files, picker.path());
+                break;
+              case PA::Done:
+                own_files = picker.ticked();
+                own_folder = picker.path();
+                in_picker = false;
+                own_play = true;
+                break;
+              case PA::Cancel: in_picker = false; break;
+              default: break;
+            }
+            idle_ticks = 0;
+            music.update();
+            voices.update();
+            if (own_play) break;
+            continue;
+          }
           if (in_settings) {
             // The menus stand still meanwhile (their music goes on).
             SettingsPanel::Input pi;
@@ -1781,7 +1908,7 @@ int run(int argc, char** argv) {
           const R r = title.tick(in);
           switch (r) {
             case R::PsjModes: title.go_to(S::PsjModeSelect); break;
-            case R::UnknownModes: std::printf("Courses from your own music come later.\n"); break;
+            case R::UnknownModes: open_picker(); break;  // (the original's own-CD menus come next)
             case R::Options: title.go_to(S::Option); break;
             // The original's "leave" goes back to its title screen (close the window to quit).
             case R::Leave:
@@ -1822,6 +1949,48 @@ int run(int argc, char** argv) {
         }
         if (!running) break;
         const std::uint64_t ticked_ns = SDL_GetTicksNS();  // (the menus' work this frame, for the overlay)
+        if (own_play) {
+          // The picked files as a CD (own_cd.h), each track played in turn through the
+          // original's audio-CD course rules. For now straight into play; the original's
+          // own-CD screens (mode select, CD change, track select) come next.
+          own_play = false;
+          music.stop();
+          voices.stop();
+          std::vector<vibr::Music> tracks;
+          std::vector<std::pair<std::string, std::uint32_t>> names;
+          for (const std::string& name : own_files) {
+            const std::string file = child_folder(own_folder, name);
+            try {
+              tracks.push_back(vibr::load_music(file));
+              names.push_back({name, std::uint32_t(tracks.back().pcm.size() / 2)});
+              std::printf("Track %zu: %s\n", tracks.size(), name.c_str());
+            } catch (const std::exception& error) {
+              std::printf("Left out %s: %s\n", name.c_str(), error.what());
+            }
+          }
+          if (!tracks.empty()) {
+            const OwnCd cd = make_own_cd(names);
+            s.music_key = cd.key;
+            s.music_disc = cd.track_samples();
+            int points = 0;
+            Result r = Result::Clear;
+            for (std::size_t i = 0; i < tracks.size() && r == Result::Clear; ++i) {
+              s.music = &tracks[i];
+              s.music_track = int(i) + 1;
+              r = play_song(s, 0, 0, points, seed);
+              seed = next_random(seed);
+              points = 0;
+            }
+            s.music = nullptr;
+            audio.play_music({});
+            if (r == Result::Quit) break;
+          }
+          title.go_to(S::Main);
+          prev_layers.clear();
+          last_ns = SDL_GetTicksNS();
+          behind = 0;
+          continue;
+        }
         if (demo_start) {
           demo_start = false;
           static const int kDemoLevels[8] = {1, 2, 3, 0, 4, 5, 6, 0};  // 0: the kiosk movie
@@ -1871,6 +2040,17 @@ int run(int argc, char** argv) {
           else title.go_to(S::PsjModeSelect);
           last_ns = SDL_GetTicksNS();
           behind = 0;
+          continue;
+        }
+        if (in_picker) {  // the picker alone, as a screen of its own
+          ++menu_display_frame;
+          const auto jitter_seed = next_random(static_cast<std::uint32_t>(double(now_ns) * 1e-9 * kOriginalRefresh) * 2654435761u);
+          const Hud::Layer pl = picker.draw(opt.vr ? 0.25f : 1.0f, jitter_seed);
+          to_instances(s, pl.lines, menu_display_frame, settings_lines[1]);
+          std::vector<vibr::Layer> out{{&settings_lines[1], vibr::look_at({pl.view.eye.x, pl.view.eye.y, pl.view.eye.z},
+                                                                           {pl.view.target.x, pl.view.target.y, pl.view.target.z}, {0, -1, 0}),
+                                        pl.view.fov_y}};
+          draw_frame(s, out, double(ticked_ns - now_ns) * 1e-6, double(SDL_GetTicksNS() - ticked_ns) * 1e-6);
           continue;
         }
         if (in_settings) {
