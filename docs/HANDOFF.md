@@ -20,6 +20,7 @@ Confidence labels used below: **[measured]** = computed this session from the di
 - 4.11 course wrapped around the player built, then the right stick for its size and the walking-speed fix; owner: "works great", locked in. **Task 4.11 done** (section 2ab).
 - Settings reorganised into groups (owner's layout) before 4.13 colour options (section 2ac).
 - Light backgrounds: lines without a custom colour are inverted (section 2ad).
+- Tracker tidy (owner going through stray items): 1.6 marked done (its recordings were all made in session 2: six songs, gold2 repeat, scores; section 2d and 2c); Q13 closed (fixed courses is now the Consistent courses setting). Passthrough decided: only in the Quest native build (XR_FB_passthrough); Virtual Desktop offers chroma-key passthrough only, not wanted.
 - P3 visual checks: the speed label checked from the disc (section 2w); the opening camera moved 1 m closer: owner checked in the headset, passed. Light-background fix passed (owner).
 - Headset line width default now 0.05 (`Options::vr_line_width`, was 0.15; owner). A save.txt that already has a `vr_line_width` line keeps its value. Reset colors acts on A only (left/right on it used to reset; owner: bad experience).
 - 4.13 custom colours built; owner: "works great". Then (owner) Custom colors moved out of Modifiers to the top list, under Modifiers; black and white in both palettes. **Task 4.13 done** (section 2ad).
