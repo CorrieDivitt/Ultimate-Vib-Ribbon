@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "test.h"
+#include "vib/calibration.h"
 #include "vib/course_gen.h"
 
 using namespace vib;
@@ -175,4 +176,32 @@ TEST(the_effects_follow_the_musics_loudness) {
   for (const auto v : loudness_levels(blocks)) CHECK(v <= 100);
   // The volume: 10% in silence, all of it at 100, in between in proportion.
   CHECK(loud_volume(127, 0) == 12 && loud_volume(127, 100) == 127 && loud_volume(100, 50) == 55);
+}
+
+TEST(sound_calibration_finds_the_offset_to_set) {
+  // A player 30 ms late on every click (+ a little wobble): 16 presses after the
+  // warm-up; the average is about +30 and the suggestion adds it, in 5 ms steps.
+  TapCalibration cal;
+  const double ms = TapCalibration::kRate / 1000.0;
+  CHECK(!cal.press(double(TapCalibration::click_frame(1)) + 30 * ms));  // (warm-up: not counted)
+  const double wobble[4] = {-6, 3, 0, 5};
+  for (int k = TapCalibration::kWarmUp; !cal.done(); ++k) {
+    const auto got = cal.press(double(TapCalibration::click_frame(k)) + (30 + wobble[k % 4]) * ms);
+    CHECK(got.has_value());
+  }
+  CHECK(cal.count() == TapCalibration::kWanted);
+  CHECK(std::abs(cal.average_ms() - 30.0) < 4.0 && cal.spread_ms() < 6.0);
+  CHECK(cal.suggested_ms(10.0) == 40.0);   // 10 + ~30, on a 5 ms step
+  CHECK(cal.suggested_ms(490.0) == 500.0);  // (no further than the setting goes)
+  // Early presses suggest less; a second press on the same click and a press far from
+  // any click do not count.
+  TapCalibration early;
+  const int k = TapCalibration::kWarmUp + 2;
+  CHECK(early.press(double(TapCalibration::click_frame(k)) - 40 * ms).has_value());
+  CHECK(!early.press(double(TapCalibration::click_frame(k)) - 10 * ms));
+  CHECK(!early.press(double(TapCalibration::click_frame(k + 1)) + 250 * ms));
+  CHECK(early.suggested_ms(0.0) == -40.0);
+  // The track: 120 a minute after two seconds of silence, long enough for every click.
+  CHECK(TapCalibration::click_frame(1) - TapCalibration::click_frame(0) == TapCalibration::kRate / 2);
+  CHECK(TapCalibration::over(double(TapCalibration::length_frames()) + 1) && !TapCalibration::over(0));
 }

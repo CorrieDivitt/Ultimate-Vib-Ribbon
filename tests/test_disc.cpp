@@ -909,6 +909,15 @@ TEST(disc_sces02873_settings_panel) {
       p.set_items({I::Modifiers});
       CHECK(p.depth() == 0);
     }
+    // Calibration: a group; its Sound calibration row starts the click track (an action).
+    {
+      Options ca;
+      p.set_items({I::SoundCalibration});
+      SettingsPanel::Input ok3;
+      ok3.confirm = true;
+      CHECK(p.label(I::Calibration) == "Calibration" && p.value(I::Calibration, ca, true) == ">");
+      CHECK(p.label(I::SoundCalibration) == "Sound calibration" && p.tick(ok3, 0.0, ca, true) == A::Calibrate);
+    }
     // Custom colors: the original's white (black behind) in brackets; left and right go
     // round the palette; Reset puts every colour back.
     {
@@ -1104,7 +1113,7 @@ TEST(disc_sces02873_settings_labels_with_defaults_fit_beside_their_values) {
                               I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses, I::EffectsVolume, I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::WrapCourse, I::WrapSize, I::Visual, I::Modifiers, I::CustomColours, I::Back,
                               I::ColourRoad, I::ColourBlock, I::ColourPit, I::ColourLoop, I::ColourWave, I::ColourBlockPit, I::ColourBlockLoop,
                               I::ColourBlockWave, I::ColourPitLoop, I::ColourPitWave, I::ColourLoopWave, I::ColourAngel, I::ColourRabbit,
-                              I::ColourFrog, I::ColourWorm, I::ColourBackground, I::ResetColours, I::Continue};
+                              I::ColourFrog, I::ColourWorm, I::ColourBackground, I::ResetColours, I::Calibration, I::SoundCalibration, I::Continue};
   Options longest;
   longest.scroll_speed = 9.75;
   longest.vr_ahead_seconds = longest.vr_behind_seconds = kWholeSongSeconds;

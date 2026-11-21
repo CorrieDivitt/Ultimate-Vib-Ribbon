@@ -63,8 +63,10 @@ class SettingsPanel {
     ColourBlockPit, ColourBlockLoop, ColourBlockWave, ColourPitLoop, ColourPitWave, ColourLoopWave,
     ColourAngel, ColourRabbit, ColourFrog, ColourWorm, ColourBackground,
     ResetColours,  // an action: every colour back to the original's
+    Calibration,      // a group: the calibration tools
+    SoundCalibration, // an action: the click track to set Sound timing by
   };
-  enum class Action { None, Moved, Changed, Close, Recentre, QuitSong, LeaveTop };
+  enum class Action { None, Moved, Changed, Close, Recentre, QuitSong, LeaveTop, Calibrate };
 
   struct Input {
     bool up = false, down = false, left = false, right = false, confirm = false, cancel = false;
@@ -82,6 +84,7 @@ class SettingsPanel {
   void set_group(Item group, std::vector<Item> items);
   // How deep in groups the cursor is (0: the top list), and the group open now.
   int depth() const { return int(stack_.size()); }
+  int language() const { return language_; }
   Item open_group() const { return stack_.empty() ? Item::Continue : stack_.back().group; }
   // At the top (from the Options screen, where up from the first leaves the panel)
   // or not (in play, where the cursor wraps).

@@ -76,6 +76,7 @@
 #include "vib/title.h"
 #include "vib/title_intro.h"
 #include "vib/kiosk_movie.h"
+#include "vib/calibration.h"
 #include "vib/colours.h"
 #include "vib/course_wrap.h"
 #include "vib/settings_panel.h"
@@ -534,12 +535,13 @@ void setup_panel(SettingsPanel& p, bool vr, bool pause) {
     p.set_group(I::Modifiers, {I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::WrapCourse, I::WrapSize, I::ScoreNumbers, I::FixedCourses});
   else
     p.set_group(I::Modifiers, {I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::ScoreNumbers, I::FixedCourses});
+  p.set_group(I::Calibration, {I::SoundCalibration});
   p.set_group(I::CustomColours, {I::ColourRoad, I::ColourBlock, I::ColourPit, I::ColourLoop, I::ColourWave, I::ColourBlockPit,
                                   I::ColourBlockLoop, I::ColourBlockWave, I::ColourPitLoop, I::ColourPitWave, I::ColourLoopWave,
                                   I::ColourAngel, I::ColourRabbit, I::ColourFrog, I::ColourWorm, I::ColourBackground, I::ResetColours});
   std::vector<I> top;
   if (pause) top.push_back(I::Continue);
-  top.insert(top.end(), {I::Visual, I::Modifiers, I::CustomColours});
+  top.insert(top.end(), {I::Visual, I::Modifiers, I::CustomColours, I::Calibration});
   if (vr) top.push_back(I::Recentre);
   top.insert(top.end(), {I::SoundEffects, I::EffectsVolume, I::Vibration, I::SoundTiming, I::ResumeStyle});
   if (pause) top.push_back(I::QuitSong);
@@ -897,6 +899,151 @@ void number_below_vibri(const std::vector<SceneLine>& text, float vibri_z, Vec3f
     if (w.vertex_b) w.vertex_b += 0x60000000u;
     out.push_back(w);
   }
+}
+
+// Ours: sound calibration (task 3.6, in the settings' Calibration group). A click track
+// at 120 a minute plays as the music; the player presses any action button on each
+// click; each press is placed by the clock play judges with (TapCalibration), and after
+// 16 the screen offers the Sound timing that would centre them. B leaves at any time,
+// changing nothing. Returns false if the window was closed (the quit is passed on).
+bool run_sound_calibration(Session& s, SettingsPanel& panel) {
+  const int l = std::clamp(panel.language(), 0, 4);
+  static const char* const kTitle[5] = {"Ton kalibrieren", "Sound calibration", "Calibrar sonido", "Calibrer le son", "Calibra audio"};
+  static const char* const kHow[5] = {"Bei jedem Klick eine Taste drücken", "Press a button on every click", "Pulsa un botón en cada clic",
+                                      "Appuie sur un bouton à chaque clic", "Premi un tasto a ogni clic"};
+  static const char* const kPresses[5] = {"Treffer", "Presses", "Pulsaciones", "Appuis", "Pressioni"};
+  static const char* const kLast[5] = {"Zuletzt", "Last", "Última", "Dernier", "Ultima"};
+  static const char* const kAverage[5] = {"Mittel", "Average", "Media", "Moyenne", "Media"};
+  static const char* const kSpread[5] = {"Streuung", "Spread", "Dispersión", "Écart", "Scarto"};
+  static const char* const kNow[5] = {"Jetzt", "Now", "Ahora", "Actuel", "Ora"};
+  static const char* const kSuggested[5] = {"Vorschlag", "Suggested", "Sugerido", "Suggéré", "Consigliato"};
+  static const char* const kUse[5] = {"A: übernehmen   B: behalten", "A: use it   B: keep", "A: usar   B: mantener", "A: appliquer   B: garder",
+                                      "A: usa   B: mantieni"};
+  static const char* const kTooFew[5] = {"Zu wenige Treffer. A: nochmal   B: zurück", "Too few presses. A: again   B: back",
+                                         "Pocas pulsaciones. A: otra vez   B: volver", "Trop peu d'appuis. A: encore   B: retour",
+                                         "Troppo poche. A: ancora   B: indietro"};
+  // The click track: a short falling tone on every beat, higher on every fourth.
+  auto make_track = []() {
+    std::vector<std::int16_t> pcm(std::size_t(TapCalibration::length_frames()) * 2, 0);
+    for (int k = 0; k < TapCalibration::kClicks; ++k) {
+      const double hz = k % 4 == 0 ? 1760.0 : 1320.0;
+      const std::int64_t at = TapCalibration::click_frame(k);
+      for (int i = 0; i < 1323; ++i) {  // 30 ms
+        const double t = double(i) / TapCalibration::kRate;
+        const auto v = std::int16_t(14000.0 * std::exp(-t * 140.0) * std::sin(2.0 * 3.14159265358979 * hz * t));
+        pcm[std::size_t(at + i) * 2] = pcm[std::size_t(at + i) * 2 + 1] = v;
+      }
+    }
+    return pcm;
+  };
+  // Only the clicks: the effects channel (menu music, voices) is silent meanwhile.
+  s.audio.set_volumes(s.opt.music.value_or(s.save.options.music_volume), 0.0f);
+  auto restore = [&]() {
+    s.audio.play_music({});
+    apply_settings(s);
+  };
+  TapCalibration cal;
+  s.audio.play_music(make_track());
+  bool finished = false, have_last = false;
+  double last_ms = 0;
+  std::uint32_t frame = 0;
+  std::vector<vibr::LineInstance> lines;
+  for (;;) {
+    const std::uint64_t now_ns = SDL_GetTicksNS();
+    bool confirm = false, cancel = false;
+    std::vector<std::uint64_t> presses;
+    SDL_Event ev;
+    while (SDL_PollEvent(&ev)) {
+      switch (ev.type) {
+        case SDL_EVENT_QUIT:
+          restore();
+          SDL_PushEvent(&ev);  // (for the caller to see)
+          return false;
+        case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED: case SDL_EVENT_WINDOW_RESIZED: s.renderer.request_resize(); break;
+        case SDL_EVENT_GAMEPAD_ADDED:
+          if (SDL_Gamepad* g = SDL_OpenGamepad(ev.gdevice.which)) s.pads[ev.gdevice.which] = g;
+          break;
+        case SDL_EVENT_GAMEPAD_REMOVED:
+          if (auto it = s.pads.find(ev.gdevice.which); it != s.pads.end()) SDL_CloseGamepad(it->second), s.pads.erase(it);
+          break;
+        case SDL_EVENT_GAMEPAD_BUTTON_DOWN: {
+          const auto b = ev.gbutton.button;
+          if (b == SDL_GAMEPAD_BUTTON_EAST || b == SDL_GAMEPAD_BUTTON_BACK || b == SDL_GAMEPAD_BUTTON_START) cancel = true;
+          else if (b == SDL_GAMEPAD_BUTTON_SOUTH && finished) confirm = true;
+          else presses.push_back(ev.gbutton.timestamp);  // (A counts as a press too, while clicking)
+          break;
+        }
+        case SDL_EVENT_GAMEPAD_AXIS_MOTION:
+          if (trigger_edge(s, ev.gaxis) != 0) presses.push_back(ev.gaxis.timestamp);
+          break;
+        case SDL_EVENT_KEY_DOWN:
+          if (ev.key.repeat) break;
+          if (ev.key.key == SDLK_ESCAPE || ev.key.key == SDLK_BACKSPACE) cancel = true;
+          else if ((ev.key.key == SDLK_RETURN || ev.key.key == SDLK_SPACE) && finished) confirm = true;
+          else presses.push_back(ev.key.timestamp);
+          break;
+        default: break;
+      }
+    }
+    if (!finished)
+      for (const std::uint64_t ns : presses)
+        if (const auto ms = cal.press(s.audio.heard_frame_at(now_ns, ns))) last_ms = *ms, have_last = true;
+    if (!finished && (cal.done() || TapCalibration::over(s.audio.heard_frame(now_ns)))) {
+      finished = true;
+      s.audio.play_music({});
+    }
+    const bool enough = cal.count() >= 6;
+    if (cancel) break;
+    if (confirm && finished && enough) {
+      const double v = cal.suggested_ms(s.save.options.audio_offset_ms);
+      s.save.options.audio_offset_ms = v;
+      std::printf("Sound timing %+.0f ms (calibrated: average %+.1f ms, spread %.1f ms over %d presses)\n", v, cal.average_ms(), cal.spread_ms(), cal.count());
+      if (s.write_save) s.write_save();
+      s.fx.number(1, 90, 5);
+      break;
+    }
+    if (confirm && finished && !enough) {  // again
+      cal = TapCalibration{};
+      finished = have_last = false;
+      s.audio.play_music(make_track());
+    }
+
+    // Draw: the rows of text through the text camera (in a headset 1 m away).
+    auto ms_text = [](double v) { return SettingsPanel::offset_text(v); };
+    std::vector<std::string> rows = {kTitle[l], kHow[l], std::string(kPresses[l]) + ": " + std::to_string(cal.count()) + " / " + std::to_string(TapCalibration::kWanted)};
+    if (have_last) rows.push_back(std::string(kLast[l]) + ": " + ms_text(last_ms));
+    if (cal.count() >= 4) {
+      char spread[16];
+      std::snprintf(spread, sizeof spread, "%.0f ms", cal.spread_ms());
+      rows.push_back(std::string(kAverage[l]) + ": " + ms_text(cal.average_ms()) + "   " + kSpread[l] + ": " + spread);
+    }
+    if (finished && enough) {
+      char now_t[16], sug[16];
+      std::snprintf(now_t, sizeof now_t, "%.0f ms", s.save.options.audio_offset_ms);
+      std::snprintf(sug, sizeof sug, "%.0f ms", cal.suggested_ms(s.save.options.audio_offset_ms));
+      rows.push_back(std::string(kNow[l]) + ": " + now_t + "   " + kSuggested[l] + ": " + sug);
+      rows.push_back(kUse[l]);
+    } else if (finished) {
+      rows.push_back(kTooFew[l]);
+    }
+    const float size = s.opt.vr ? 0.25f : 1.0f;
+    const auto seed = next_random(static_cast<std::uint32_t>(double(now_ns) * 1e-9 * kOriginalRefresh) * 2654435761u);
+    std::vector<SceneLine> text;
+    for (std::size_t k = 0; k < rows.size(); ++k) {
+      const float y = -560.0f + 190.0f * float(k) + (k > 0 ? 80.0f : 0.0f);
+      for (SceneLine ln : panel.text_lines(to_font_text(rows[k]), k == 0 ? 1.5f : 0.95f, seed + std::uint32_t(k), 3)) {
+        for (Vec3f* q : {&ln.a, &ln.b}) *q = {q->x * size, (q->y + y) * size, 4000.0f * size};
+        ln.jitter_a = {ln.jitter_a.x * size, ln.jitter_a.y * size, 0}, ln.jitter_b = {ln.jitter_b.x * size, ln.jitter_b.y * size, 0};
+        ln.shake_a *= size, ln.shake_b *= size;
+        text.push_back(ln);
+      }
+    }
+    to_instances(s, text, ++frame, lines);
+    std::vector<vibr::Layer> out{{&lines, vibr::look_at({0, 0, 0}, {0, 0, 4730}, {0, -1, 0}), float(682 * 6.28318530717958647692 / 4096.0)}};
+    draw_frame(s, out, 0.0, double(SDL_GetTicksNS() - now_ns) * 1e-6);
+  }
+  restore();
+  return true;
 }
 
 Result play_song(Session& s, int song, int track_index, int& points, std::uint32_t seed) {
@@ -1258,6 +1405,10 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
       switch (act) {
         case SettingsPanel::Action::Changed: apply_settings(s); break;
         case SettingsPanel::Action::Recentre: s.renderer.recentre(); break;
+        case SettingsPanel::Action::Calibrate:
+          if (!run_sound_calibration(s, *s.panel)) return Result::Quit;
+          last_ns = SDL_GetTicksNS();
+          break;
         case SettingsPanel::Action::QuitSong:
           if (s.write_save) s.write_save();
           return Result::Abort;
@@ -2204,6 +2355,14 @@ int run(int argc, char** argv) {
             panel_sound(s, act);
             if (act == SettingsPanel::Action::Changed) apply_settings(s);
             if (act == SettingsPanel::Action::Recentre) renderer.recentre();
+            if (act == SettingsPanel::Action::Calibrate) {
+              if (!run_sound_calibration(s, panel)) {
+                running = false;
+                break;
+              }
+              last_ns = SDL_GetTicksNS();
+              behind = 0;
+            }
             if (act == SettingsPanel::Action::Close) toggle_settings = true;
             idle_ticks = 0;
             music.update();
