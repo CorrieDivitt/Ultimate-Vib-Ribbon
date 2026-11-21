@@ -920,6 +920,9 @@ TEST(disc_sces02873_settings_panel) {
       p.set_items({I::PictureCalibration, I::PictureTiming});
       CHECK(p.label(I::PictureCalibration) == "Picture calibration" && p.tick(ok3, 0.0, ca, true) == A::CalibratePicture);
       CHECK(p.label(I::PictureTiming) == "Picture timing (0 ms)");
+      ca.audio_offset_ms = 70, ca.picture_offset_ms = -15;  // (the Calibration rows show what they set)
+      CHECK(p.value(I::SoundCalibration, ca, true) == "70 ms" && p.value(I::PictureCalibration, ca, true) == "-15 ms");
+      ca.audio_offset_ms = 0, ca.picture_offset_ms = 0;
       SettingsPanel::Input dn4, rt4;
       dn4.down = true, rt4.right = true;
       p.tick(dn4, 0.0, ca, true);

@@ -234,6 +234,8 @@ std::string SettingsPanel::value(Item item, const Options& o, bool vr) const {
     case Item::Vibration: return on_off(o.vibration);
     case Item::SoundTiming: std::snprintf(buf, sizeof buf, "%.0f ms", o.audio_offset_ms); break;
     case Item::PictureTiming: std::snprintf(buf, sizeof buf, "%.0f ms", o.picture_offset_ms); break;
+    case Item::SoundCalibration: std::snprintf(buf, sizeof buf, "%.0f ms", o.audio_offset_ms); break;  // (the setting it sets)
+    case Item::PictureCalibration: std::snprintf(buf, sizeof buf, "%.0f ms", o.picture_offset_ms); break;
     case Item::ResumeStyle: return to_font_text(o.resume_countdown ? kCountIn[l] : kRewind[l]);
     case Item::Performance: return to_font_text(o.perf_overlay == 0 ? kOff[l] : o.perf_overlay == 1 ? kOn[l] : kDetailed[l]);
     case Item::ScoreNumbers: return on_off(o.score_numbers);

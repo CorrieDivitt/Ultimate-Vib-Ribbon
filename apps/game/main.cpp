@@ -916,8 +916,9 @@ bool run_calibration(Session& s, SettingsPanel& panel, bool picture) {
   static const char* const kPictureTitle[5] = {"Bild kalibrieren", "Picture calibration", "Calibrar imagen", "Calibrer l'image", "Calibra immagine"};
   static const char* const kSoundHow[5] = {"Bei jedem Klick eine Taste drücken", "Press a button on every click", "Pulsa un botón en cada clic",
                                            "Appuie sur un bouton à chaque clic", "Premi un tasto a ogni clic"};
-  static const char* const kPictureHow[5] = {"Bei jedem Blinken eine Taste drücken", "Press a button on every flash", "Pulsa un botón en cada destello",
-                                             "Appuie sur un bouton à chaque flash", "Premi un tasto a ogni lampo"};
+  static const char* const kPictureHow[5] = {"Taste drücken, wenn eine Raute das Ziel erreicht", "Press a button as each diamond reaches the ring",
+                                             "Pulsa cuando cada rombo llegue al círculo", "Appuie quand chaque losange touche l'anneau",
+                                             "Premi quando ogni rombo raggiunge il cerchio"};
   const char* const* kTitle = picture ? kPictureTitle : kSoundTitle;
   const char* const* kHow = picture ? kPictureHow : kSoundHow;
   double& setting = picture ? s.save.options.picture_offset_ms : s.save.options.audio_offset_ms;
@@ -1053,28 +1054,34 @@ bool run_calibration(Session& s, SettingsPanel& panel, bool picture) {
       }
     }
     if (picture && !finished) {
-      // The flash: a ring round the middle for 70 ms from each beat, as the picture is
-      // drawn (Picture timing ahead of the clock); a small cross always, to look at.
+      // A track with a target in the middle; a marker for every beat slides in from the
+      // right and reaches the target as the picture is drawn for that beat (Picture
+      // timing ahead of the clock), so the player can see it coming. The target swells
+      // for a moment as each marker reaches it.
       const double drawn = s.audio.heard_frame(now_ns) + setting * TapCalibration::kRate / 1000.0;
-      const double into = std::fmod(drawn - double(TapCalibration::kLeadFrames), double(TapCalibration::kPeriod));
-      const bool flash = drawn >= double(TapCalibration::kLeadFrames) && into >= 0 && into < 0.07 * TapCalibration::kRate &&
-                         !TapCalibration::over(drawn);
-      auto add = [&](Vec3f a, Vec3f b) {
+      auto add = [&](float ax, float ay, float bx, float by, std::uint8_t g) {
         SceneLine ln;
-        ln.a = {a.x * size, a.y * size, 4000.0f * size}, ln.b = {b.x * size, b.y * size, 4000.0f * size};
-        ln.colour = {255, 255, 255};
+        ln.a = {ax * size, ay * size, 4000.0f * size}, ln.b = {bx * size, by * size, 4000.0f * size};
+        ln.colour = {g, g, g};
         text.push_back(ln);
       };
-      const float cy = 700.0f;  // below the text
-      add({-60, cy, 0}, {60, cy, 0});
-      add({0, cy - 60, 0}, {0, cy + 60, 0});
-      if (flash) {
-        constexpr int kSides = 48;
+      constexpr float kY = 760.0f, kSpacing = 650.0f, kReach = 2000.0f;  // below the text; a beat apart
+      add(-kReach, kY, kReach, kY, 110);  // the track
+      const double beat = (drawn - double(TapCalibration::kLeadFrames)) / double(TapCalibration::kPeriod);  // beats since the first
+      const double since = beat - std::floor(beat);  // of the last beat
+      const bool hit = beat >= 0 && since < 0.12 && !TapCalibration::over(drawn);
+      constexpr int kSides = 40;
+      for (const float r : hit ? std::initializer_list<float>{110.0f, 135.0f, 160.0f} : std::initializer_list<float>{110.0f})
         for (int k = 0; k < kSides; ++k) {
           const double a0 = 6.28318530717958647692 * k / kSides, a1 = 6.28318530717958647692 * (k + 1) / kSides;
-          for (const float r : {300.0f, 330.0f, 360.0f})
-            add({r * float(std::cos(a0)), cy + r * float(std::sin(a0)), 0}, {r * float(std::cos(a1)), cy + r * float(std::sin(a1)), 0});
+          add(r * float(std::cos(a0)), kY + r * float(std::sin(a0)), r * float(std::cos(a1)), kY + r * float(std::sin(a1)), 255);
         }
+      for (int k = 0; k < TapCalibration::kClicks; ++k) {  // the markers: diamonds on the track
+        const float x = float(double(k) - beat) * kSpacing;
+        if (x < -kSpacing * 0.6f || x > kReach) continue;
+        const float d = 70.0f;
+        const std::uint8_t g = x < 0 ? std::uint8_t(120) : std::uint8_t(255);  // (dimmed once past)
+        add(x - d, kY, x, kY - d, g), add(x, kY - d, x + d, kY, g), add(x + d, kY, x, kY + d, g), add(x, kY + d, x - d, kY, g);
       }
     }
     to_instances(s, text, ++frame, lines);
