@@ -24,16 +24,17 @@ enum ColourSlot : int {
 };
 static_assert(kColourSlots == kColourSlotCount, "Options::colours has a choice per slot");
 
-// The lines' palette: white (the original), red, orange, yellow, green, cyan, blue, pink.
-constexpr int kLineColours = 8;
+// The lines' palette: white (the original), red, orange, yellow, green, cyan, blue,
+// pink, black (owner: black and white in every palette; added last so saves keep).
+constexpr int kLineColours = 9;
 constexpr std::array<Rgb, kLineColours> kLinePalette = {{
     {255, 255, 255}, {255, 70, 70}, {255, 150, 40}, {255, 230, 60},
-    {80, 235, 90}, {60, 225, 235}, {80, 130, 255}, {255, 110, 210},
+    {80, 235, 90}, {60, 225, 235}, {80, 130, 255}, {255, 110, 210}, {0, 0, 0},
 }};
-// The background's: black (the original), navy, purple, dark green, grey.
-constexpr int kBackgroundColours = 5;
+// The background's: black (the original), navy, purple, dark green, grey, white.
+constexpr int kBackgroundColours = 6;
 constexpr std::array<Rgb, kBackgroundColours> kBackgroundPalette = {{
-    {0, 0, 0}, {10, 18, 60}, {40, 12, 58}, {8, 42, 22}, {48, 48, 52},
+    {0, 0, 0}, {10, 18, 60}, {40, 12, 58}, {8, 42, 22}, {48, 48, 52}, {255, 255, 255},
 }};
 
 // How many colours a slot can take.

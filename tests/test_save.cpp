@@ -63,7 +63,7 @@ TEST(save_text_round_trips_and_tolerates_old_files) {
   CHECK(back.options.vr_wrap && back.options.vr_wrap_radius == 4.5 && !SaveData().options.vr_wrap && SaveData().options.vr_wrap_radius == 3.0);
   CHECK(SaveData::from_text("vr_wrap_radius 50\n").options.vr_wrap_radius == 10.0);
   CHECK(back.options.colours == d.options.colours && SaveData().options.colours == (std::array<std::uint8_t, kColourSlotCount>{}));
-  CHECK(SaveData::from_text("colours 2 9\n").options.colours[0] == 2 && SaveData::from_text("colours 2 9\n").options.colours[1] == 7);
+  CHECK(SaveData::from_text("colours 2 9\n").options.colours[0] == 2 && SaveData::from_text("colours 2 9\n").options.colours[1] == 8);
   CHECK(SaveData::from_text("scroll_speed 12\n").options.scroll_speed == 10.0 && SaveData::from_text("scroll_speed 9\n").options.scroll_speed == 9.0 && SaveData::from_text("scroll_speed 0.1\n").options.scroll_speed == 0.5);
   CHECK(SaveData::from_text("scroll_speed 1.3\n").options.scroll_speed == 1.25);  // on a step
   CHECK(SaveData().options.music_folder.empty());

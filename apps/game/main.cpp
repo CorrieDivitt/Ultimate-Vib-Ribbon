@@ -521,8 +521,8 @@ void apply_settings(Session& s) {
 
 // The settings in play's pause, and below the Options screen (which has the
 // original's sound effects and vibration items itself).
-// The settings' layout (owner's, session 4): a top list with the Visual and Modifiers
-// groups, Custom colors inside Modifiers. `pause`: play's pause (Continue first, Quit
+// The settings' layout (owner's, session 4): a top list with the Visual, Modifiers and
+// Custom colors groups. `pause`: play's pause (Continue first, Quit
 // song last); otherwise the menus' settings. The headset has more view settings.
 void setup_panel(SettingsPanel& p, bool vr, bool pause) {
   using I = SettingsPanel::Item;
@@ -531,16 +531,15 @@ void setup_panel(SettingsPanel& p, bool vr, bool pause) {
   else
     p.set_group(I::Visual, {I::WobbleSize, I::Smooth, I::LineWidth, I::Performance});
   if (vr)
-    p.set_group(I::Modifiers, {I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::WrapCourse, I::WrapSize, I::ScoreNumbers, I::FixedCourses,
-                               I::CustomColours});
+    p.set_group(I::Modifiers, {I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::WrapCourse, I::WrapSize, I::ScoreNumbers, I::FixedCourses});
   else
-    p.set_group(I::Modifiers, {I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::ScoreNumbers, I::FixedCourses, I::CustomColours});
+    p.set_group(I::Modifiers, {I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::ScoreNumbers, I::FixedCourses});
   p.set_group(I::CustomColours, {I::ColourRoad, I::ColourBlock, I::ColourPit, I::ColourLoop, I::ColourWave, I::ColourBlockPit,
                                   I::ColourBlockLoop, I::ColourBlockWave, I::ColourPitLoop, I::ColourPitWave, I::ColourLoopWave,
                                   I::ColourAngel, I::ColourRabbit, I::ColourFrog, I::ColourWorm, I::ColourBackground, I::ResetColours});
   std::vector<I> top;
   if (pause) top.push_back(I::Continue);
-  top.insert(top.end(), {I::Visual, I::Modifiers});
+  top.insert(top.end(), {I::Visual, I::Modifiers, I::CustomColours});
   if (vr) top.push_back(I::Recentre);
   top.insert(top.end(), {I::SoundEffects, I::EffectsVolume, I::Vibration, I::SoundTiming, I::ResumeStyle});
   if (pause) top.push_back(I::QuitSong);

@@ -135,7 +135,7 @@ SaveData SaveData::from_text(const std::string& text) {
     if (key == "colours") {  // one palette choice per slot; missing ones stay 0
       int c = 0;
       for (std::size_t k = 0; k < std::size_t(kColourSlotCount) && fields >> c; ++k)
-        d.options.colours[k] = std::uint8_t(std::clamp(c, 0, 7));
+        d.options.colours[k] = std::uint8_t(std::clamp(c, 0, 8));
       continue;
     }
     if (key == "music_folder") {  // a path: the rest of the line, spaces and all

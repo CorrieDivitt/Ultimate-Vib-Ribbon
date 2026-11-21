@@ -893,14 +893,14 @@ TEST(disc_sces02873_settings_panel) {
       p.set_items({I::ColourLoop, I::ColourBackground, I::ResetColours});
       SettingsPanel::Input lt, rt, dn2, ok2;
       lt.left = true, rt.right = true, dn2.down = true, ok2.confirm = true;
-      CHECK(p.tick(lt, 0.0, co, true) == A::Changed && p.value(I::ColourLoop, co, true) == "Pink");  // (round from white)
+      CHECK(p.tick(lt, 0.0, co, true) == A::Changed && p.value(I::ColourLoop, co, true) == "Black");  // (round from white)
       CHECK(p.tick(rt, 0.0, co, true) == A::Changed && p.value(I::ColourLoop, co, true) == "White");
       CHECK(p.tick(ok2, 0.0, co, true) == A::Changed && p.value(I::ColourLoop, co, true) == "Red");
       p.tick(dn2, 0.0, co, true);
-      for (int k = 0; k < 4; ++k) p.tick(rt, 0.0, co, true);
-      CHECK(p.value(I::ColourBackground, co, true) == "Grey");
+      for (int k = 0; k < 5; ++k) p.tick(rt, 0.0, co, true);
+      CHECK(p.value(I::ColourBackground, co, true) == "White");
       p.tick(rt, 0.0, co, true);
-      CHECK(p.value(I::ColourBackground, co, true) == "Black");  // (five, then round)
+      CHECK(p.value(I::ColourBackground, co, true) == "Black");  // (six, then round)
       p.tick(rt, 0.0, co, true);
       p.tick(dn2, 0.0, co, true);
       CHECK(p.tick(ok2, 0.0, co, true) == A::Changed && co.colours == Options{}.colours);

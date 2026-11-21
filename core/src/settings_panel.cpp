@@ -49,18 +49,18 @@ const char* const kMore[kLanguages] = {"Weitere Einstellungen (Start)", "More op
                                        "Altre impostazioni (Start)"};
 // The palettes' names, in vib/colours.h's order.
 const char* const kLineColourNames[kLanguages][kLineColours] = {
-    {"Weiß", "Rot", "Orange", "Gelb", "Grün", "Cyan", "Blau", "Pink"},
-    {"White", "Red", "Orange", "Yellow", "Green", "Cyan", "Blue", "Pink"},
-    {"Blanco", "Rojo", "Naranja", "Amarillo", "Verde", "Cian", "Azul", "Rosa"},
-    {"Blanc", "Rouge", "Orange", "Jaune", "Vert", "Cyan", "Bleu", "Rose"},
-    {"Bianco", "Rosso", "Arancione", "Giallo", "Verde", "Ciano", "Blu", "Rosa"},
+    {"Weiß", "Rot", "Orange", "Gelb", "Grün", "Cyan", "Blau", "Pink", "Schwarz"},
+    {"White", "Red", "Orange", "Yellow", "Green", "Cyan", "Blue", "Pink", "Black"},
+    {"Blanco", "Rojo", "Naranja", "Amarillo", "Verde", "Cian", "Azul", "Rosa", "Negro"},
+    {"Blanc", "Rouge", "Orange", "Jaune", "Vert", "Cyan", "Bleu", "Rose", "Noir"},
+    {"Bianco", "Rosso", "Arancione", "Giallo", "Verde", "Ciano", "Blu", "Rosa", "Nero"},
 };
 const char* const kBackgroundNames[kLanguages][kBackgroundColours] = {
-    {"Schwarz", "Marine", "Lila", "Dunkelgrün", "Grau"},
-    {"Black", "Navy", "Purple", "Dark green", "Grey"},
-    {"Negro", "Marino", "Morado", "Verde oscuro", "Gris"},
-    {"Noir", "Marine", "Violet", "Vert foncé", "Gris"},
-    {"Nero", "Blu notte", "Viola", "Verde scuro", "Grigio"},
+    {"Schwarz", "Marine", "Lila", "Dunkelgrün", "Grau", "Weiß"},
+    {"Black", "Navy", "Purple", "Dark green", "Grey", "White"},
+    {"Negro", "Marino", "Morado", "Verde oscuro", "Gris", "Blanco"},
+    {"Noir", "Marine", "Violet", "Vert foncé", "Gris", "Blanc"},
+    {"Nero", "Blu notte", "Viola", "Verde scuro", "Grigio", "Bianco"},
 };
 const char* const kRewind[kLanguages] = {"Zurückspulen", "Rewind", "Rebobinar", "Rembobiner", "Riavvolgi"};
 const char* const kCountIn[kLanguages] = {"Countdown", "Countdown", "Cuenta atrás", "Compte à rebours", "Conto alla rovescia"};
