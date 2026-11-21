@@ -366,11 +366,15 @@ Hud::Layer SettingsPanel::draw_hint(std::uint32_t seed) {
   return layer;
 }
 
+std::string SettingsPanel::scroll_line(const Options& o) const {
+  return to_font_text(kLabels[table_language(language_)][int(Item::ScrollSpeed)]) + ": " + scroll_text(o.scroll_speed);
+}
+
 Hud::Layer SettingsPanel::draw_scroll_speed(const Options& o, std::uint32_t seed) {
   Hud::Layer layer = start_layer(seed);
   const float half_height = 4000.0f * std::tan(0.5f * layer.view.fov_y);
   const Rgb dim{150, 150, 150};
-  const std::string text = to_font_text(kLabels[table_language(language_)][int(Item::ScrollSpeed)]) + ": " + scroll_text(o.scroll_speed);
+  const std::string text = scroll_line(o);
   write(text, -0.5f * text_width(text) + 36.0f, 0.86f * half_height, 1.0f, &dim, 4, layer.lines);
   return layer;
 }

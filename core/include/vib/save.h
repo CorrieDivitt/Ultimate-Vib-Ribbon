@@ -16,7 +16,7 @@ namespace vib {
 constexpr double kWholeSongSeconds = 10000.0;
 
 // The scroll speed's range and step (Options::scroll_speed).
-constexpr double kScrollSpeedMin = 0.5, kScrollSpeedMax = 4.0, kScrollSpeedStep = 0.25;
+constexpr double kScrollSpeedMin = 0.5, kScrollSpeedMax = 10.0, kScrollSpeedStep = 0.25;
 // Into the range, on the nearest step.
 double clamp_scroll_speed(double v);
 
@@ -46,7 +46,7 @@ struct Options {
   int perf_overlay = 0;           // ours: the performance overlay, 0 off, 1 one line, 2 detailed
   bool score_numbers = false;     // ours: the score in numbers as well as the marks, during play
   // Ours, as DDR's and StepMania's speed modifier: how fast the road is drawn coming
-  // towards Vibri (0.5 to 4 in steps of 0.25). Display only: every part still reaches
+  // towards Vibri (0.5 to 10 in steps of 0.25). Display only: every part still reaches
   // her at the same moment and is judged the same; the music is untouched.
   double scroll_speed = 1.0;
   std::string music_folder;       // ours: the player's music folder (UTF-8), picked the first time; empty until then

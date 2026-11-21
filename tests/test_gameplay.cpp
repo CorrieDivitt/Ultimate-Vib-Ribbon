@@ -292,16 +292,17 @@ TEST(far_road_keeps_passed_parts_for_drawing_only) {
 TEST(the_scroll_speed_moves_only_where_parts_are_drawn) {
   // The same course and presses at 1x, 2x and 0.5x: the same hits, points and events;
   // each part drawn at its distance from Vibri times the scroll; 1x is the original's.
-  Run one, two, half;
+  Run one, two, half, ten;
+  ten.g.set_scroll(10.0);
   two.g.set_scroll(2.0);
   half.g.set_scroll(0.5);
-  for (Run* r : {&one, &two, &half}) {
+  for (Run* r : {&one, &two, &half, &ten}) {
     r->g.add_event(part(44100, 0));
     r->g.add_event(part(66150, 3));
     r->g.add_event(part(88200, 1));
   }
   // Part way: compare where each would be drawn, then play on.
-  for (Run* r : {&one, &two, &half}) r->run_to(22050);
+  for (Run* r : {&one, &two, &half, &ten}) r->run_to(22050);
   const auto a = one.g.road(true), b = two.g.road(true), c = half.g.road(true);
   CHECK(a.size() == 3 && b.size() == 3 && c.size() == 3);
   const Fixed vibri = Fixed::from(1.25);
@@ -313,13 +314,14 @@ TEST(the_scroll_speed_moves_only_where_parts_are_drawn) {
   // The original's horizon is on the drawn distance: a slow scroll shows more of what
   // play already knows, a fast one less.
   CHECK(half.g.road().size() >= one.g.road().size() && two.g.road().size() <= one.g.road().size());
-  for (Run* r : {&one, &two, &half}) {
+  CHECK(ten.g.road(true).size() == 3 && std::abs((ten.g.road(true)[2].position - vibri).to_double() - 10 * (a[2].position - vibri).to_double()) < 1e-2);
+  for (Run* r : {&one, &two, &half, &ten}) {
     r->press_at(44100, kPressBlock);
     r->press_at(66150, kPressWave);
     r->press_at(88200, kPressPit);
     r->run_to(44100 * 4);
   }
-  CHECK(one.hits == 3 && two.hits == 3 && half.hits == 3);
+  CHECK(one.hits == 3 && two.hits == 3 && half.hits == 3 && ten.hits == 3 && ten.g.points() == one.g.points());
   CHECK(one.g.points() == two.g.points() && one.g.points() == half.g.points());
   CHECK(one.g.level() == two.g.level() && one.g.combo() == half.g.combo());
   // A preview is scaled the same way.

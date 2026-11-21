@@ -792,12 +792,13 @@ TEST(disc_sces02873_settings_panel) {
   CHECK(p.label(I::ScrollSpeed) == "Scroll speed (1x)" && p.value(I::ScrollSpeed, o, true) == "1x");
   {  // 0.5x to 4x in quarters, stopping at the ends
     Options so;
-    so.scroll_speed = 3.75;
+    so.scroll_speed = 9.75;
     p.set_items({I::ScrollSpeed});
     SettingsPanel::Input faster;
     faster.right = true;
-    CHECK(p.tick(faster, 0.0, so, true) == A::Changed && so.scroll_speed == 4.0 && p.value(I::ScrollSpeed, so, true) == "4x");
-    CHECK(p.tick(faster, 0.0, so, true) == A::None && so.scroll_speed == 4.0);
+    CHECK(p.tick(faster, 0.0, so, true) == A::Changed && so.scroll_speed == 10.0 && p.value(I::ScrollSpeed, so, true) == "10x");
+    CHECK(p.tick(faster, 0.0, so, true) == A::None && so.scroll_speed == 10.0);
+    CHECK(p.scroll_line(so) == "Scroll speed: 10x");
     so.scroll_speed = 0.75;
     SettingsPanel::Input slower;
     slower.left = true;
@@ -940,7 +941,7 @@ TEST(disc_sces02873_settings_labels_with_defaults_fit_beside_their_values) {
                               I::SeeBehind, I::Recentre, I::SoundEffects, I::Vibration, I::SoundTiming, I::QuitSong,
                               I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses, I::EffectsVolume, I::ScrollSpeed, I::Continue};
   Options longest;
-  longest.scroll_speed = 2.75;
+  longest.scroll_speed = 9.75;
   longest.vr_ahead_seconds = longest.vr_behind_seconds = kWholeSongSeconds;
   longest.resume_countdown = true;
   longest.perf_overlay = 2;

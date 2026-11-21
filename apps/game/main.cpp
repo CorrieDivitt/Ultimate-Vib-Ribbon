@@ -829,8 +829,7 @@ void meter_below_vibri(const Hud::Layer& meter, float vibri_z, Vec3f eye, std::v
 // facing `eye`, at a fixed height (its middle 1,090 below the road, just under the
 // meter's strip), in the game's own line font with its text jitter. `text`: from
 // SettingsPanel::text_lines, centred on the origin as if seen from -z.
-void number_below_vibri(const std::vector<SceneLine>& text, float vibri_z, Vec3f eye, std::vector<SceneLine>& out) {
-  constexpr float kY = 1090.0f;
+void number_below_vibri(const std::vector<SceneLine>& text, float vibri_z, Vec3f eye, std::vector<SceneLine>& out, float kY = 1090.0f) {
   float fx, fz;
   facing(vibri_z, eye, fx, fz);
   auto place = [&](Vec3f p) { return Vec3f{fz * p.x + fx * p.z, kY + p.y, vibri_z - fx * p.x + fz * p.z}; };
@@ -911,6 +910,14 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   auto scroll_wanted = [&]() { return s.demo ? 1.0 : s.save.options.scroll_speed; };
   double scroll_shown = scroll_wanted();
   game.set_scroll(scroll_shown);
+  // Changed mid-song (L2/R2 in a headset, PageUp/PageDown): saved, and "Scroll speed:
+  // 2x" shows for a moment (below Vibri in a headset, at the bottom on the monitor).
+  double scroll_note = 0;
+  auto scroll_changed = [&](int d) {
+    if (!change_scroll_speed(s, d)) return;
+    scroll_note = 1.5;
+    if (s.write_save) s.write_save();
+  };
   // Further ahead than play builds: a second generator on the same music and timing,
   // running ahead, drawn only. Its course is the same course (it is checked below),
   // so its parts become play's own as play reaches them.
@@ -1035,7 +1042,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   constexpr double kCountStep = 0.5;  // seconds per number of the count-in
   SettingsPanel::Input pin;
   Hud::Layer panel_layer;
-  std::vector<vibr::LineInstance> panel_lines;
+  std::vector<vibr::LineInstance> panel_lines, scroll_note_lines;
 
   s.stats.reset_audio();
   for (;;) {
@@ -1079,6 +1086,8 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
             std::printf("audio offset %+.0f ms (latency now %.0f ms)\n", s.audio.offset_ms(), s.audio.latency_ms());
           } else if (e.key.key == SDLK_MINUS || e.key.key == SDLK_EQUALS) {
             change_line_width(s, e.key.key == SDLK_EQUALS);
+          } else if (e.key.key == SDLK_PAGEUP || e.key.key == SDLK_PAGEDOWN) {  // the scroll speed, mid-song
+            scroll_changed(e.key.key == SDLK_PAGEUP ? 1 : -1);
           } else if (const std::uint8_t b = key_bits(e.key.key)) {
             presses.push_back({b, e.key.timestamp});
           }
@@ -1125,8 +1134,13 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
           if (const std::uint8_t b = pad_bits(e.gbutton.button)) presses.push_back({b, e.gbutton.timestamp});
           break;
         case SDL_EVENT_GAMEPAD_AXIS_MOTION:
-          // (In a headset the triggers change the line width for testing; LB and RB block and loop.)
-          if (const std::uint8_t b = trigger_pulled(s, e.gaxis); b && !paused) presses.push_back({b, e.gaxis.timestamp});
+          // In a headset L2 and R2 change the scroll speed mid-song (owner); LB and RB block
+          // and loop. On the monitor the triggers block and loop, as the original's L2 and R2.
+          if (s.opt.vr) {
+            if (const int d = trigger_edge(s, e.gaxis); d && !s.demo) scroll_changed(d);
+          } else if (const std::uint8_t b = trigger_pulled(s, e.gaxis); b && !paused) {
+            presses.push_back({b, e.gaxis.timestamp});
+          }
           break;
         default: break;
       }
@@ -1137,6 +1151,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     zoom_with_stick(s, dt, s.save.options.vr_zoom);
     last_ns = now_ns;
     scroll_shown = ease_scroll(scroll_shown, scroll_wanted(), dt);
+    scroll_note = std::max(0.0, scroll_note - dt);
     game.set_scroll(scroll_shown);
 
     if (pause && !paused && going == Going::No && s.panel) {
@@ -1382,6 +1397,19 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
         score_number_lines.emplace_back();
         convert(number.lines, score_number_lines.back());
         layers.push_back({&score_number_lines.back(), matrix(number.view), number.view.fov_y});
+      }
+    }
+    if (scroll_note > 0 && s.panel && !paused) {  // the scroll speed, just changed
+      scroll_note_lines.clear();
+      if (s.opt.vr) {
+        std::vector<SceneLine> placed;
+        number_below_vibri(s.panel->text_lines(s.panel->scroll_line(s.save.options), 1.0f, h.jitter_seed, 4), s.scene.vibri_z(), view.eye, placed, 1330.0f);
+        convert(placed, scroll_note_lines);
+        layers.push_back({&scroll_note_lines, matrix(view), view.fov_y});
+      } else {
+        const Hud::Layer note = s.panel->draw_scroll_speed(s.save.options, h.jitter_seed);
+        convert(note.lines, scroll_note_lines);
+        layers.push_back({&scroll_note_lines, matrix(note.view), note.view.fov_y});
       }
     }
     if (paused || going == Going::Counting) {  // the settings, or the count-in's number, over everything
