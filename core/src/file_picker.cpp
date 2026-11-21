@@ -128,8 +128,8 @@ std::vector<std::string> FilePicker::rows() const {
       case Row::Up: out.push_back(word(kUp, language_)); break;
       case Row::Entry: {
         const Entry& e = entries_[std::size_t(l.entry)];
-        // A folder ends in "-" (the font has no slash); a ticked file starts with "x".
-        if (e.folder) out.push_back(shown_name(e.name) + " -");
+        // A folder ends in "/"; a ticked file starts with "x".
+        if (e.folder) out.push_back(shown_name(e.name) + "/");
         else out.push_back(std::string(ticked_.count(e.name) ? "x " : "  ") + shown_name(e.name));
         break;
       }

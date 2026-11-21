@@ -58,6 +58,40 @@ constexpr Accent kAccents[] = {
     {U'ª', 'k'}, {U'¡', 'm'}, {U'¿', 'n'},
 };
 
+// Characters the disc's font has as they are: letters, digits, space and a little
+// punctuation. Those we draw ourselves (own_glyph) pass too; anything else becomes '?'.
+bool in_font(char c) {
+  return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == ' ' || c == '!' || c == '&' ||
+         c == '\'' || c == '(' || c == ')' || c == ',' || c == '-' || c == '.' || c == '?';
+}
+bool drawn_by_us(char c) { return c == '/' || c == '\\' || c == ':' || c == '_' || c == '+' || c == '[' || c == ']'; }
+
+// Ours: strokes for a few characters the font lacks (paths need / \ and :), the size
+// of the font's own (a digit is 142 high and about 60 wide at scale 1), centred on
+// (x, y), y down. Still (no jitter of their own).
+void own_glyph(char c, float x, float y, float z, float scale, const Rgb& colour, std::vector<SceneLine>& out) {
+  const float h = 66.0f * scale, w = 28.0f * scale;
+  auto line = [&](float ax, float ay, float bx, float by) {
+    SceneLine l;
+    l.a = {x + ax, y + ay, z}, l.b = {x + bx, y + by, z}, l.colour = colour;
+    out.push_back(l);
+  };
+  const float d = 6.0f * scale;  // half a dot
+  switch (c) {
+    case '/': line(-w, h, w, -h); break;
+    case '\\': line(-w, -h, w, h); break;
+    case ':':
+      line(-d, -0.45f * h - d, d, -0.45f * h + d), line(-d, -0.45f * h + d, d, -0.45f * h - d);
+      line(-d, 0.45f * h - d, d, 0.45f * h + d), line(-d, 0.45f * h + d, d, 0.45f * h - d);
+      break;
+    case '_': line(-w, h, w, h); break;
+    case '+': line(-w, 0, w, 0), line(0, -w, 0, w); break;
+    case '[': line(w * 0.4f, -h, -w * 0.4f, -h), line(-w * 0.4f, -h, -w * 0.4f, h), line(-w * 0.4f, h, w * 0.4f, h); break;
+    case ']': line(-w * 0.4f, -h, w * 0.4f, -h), line(w * 0.4f, -h, w * 0.4f, h), line(w * 0.4f, h, -w * 0.4f, h); break;
+    default: break;
+  }
+}
+
 }  // namespace
 
 std::string to_font_text(const std::string& utf8) {
@@ -72,7 +106,8 @@ std::string to_font_text(const std::string& utf8) {
     ++i;
     for (int k = 0; k < extra && i < utf8.size(); ++k, ++i) c = (c << 6) | (static_cast<unsigned char>(utf8[i]) & 0x3F);
     if (c < 0x80) {
-      out += char(c);
+      const char a = char(c);
+      out += in_font(a) || drawn_by_us(a) ? a : '?';  // ('~' too: it means an accent to the font)
       continue;
     }
     const auto* a = std::find_if(std::begin(kAccents), std::end(kAccents), [c](const Accent& x) { return x.c == c; });
@@ -256,7 +291,10 @@ void SettingsPanel::write(const std::string& s, float x, float y, float scale, c
       second = true;
       continue;
     }
-    if (c != ' ') {
+    if (c != ' ' && !this_second && drawn_by_us(char(c))) {
+      own_glyph(char(c), (x + 72.0f * scale * float(column)) * size_, y * size_, 4000.0f * size_, scale * size_,
+                colour ? *colour : Rgb{255, 255, 255}, out);
+    } else if (c != ' ') {
       const int object = text_->object_for(c, this_second);
       if (object >= 0 && object < int(font_.objects.size())) {
         xf.t = {(x + 72.0f * scale * float(column)) * size_, y * size_, 4000.0f * size_};
@@ -317,7 +355,9 @@ std::vector<SceneLine> SettingsPanel::text_lines(const std::string& text, float 
       second = true;
       continue;
     }
-    if (c != ' ') {
+    if (c != ' ' && !this_second && drawn_by_us(char(c))) {
+      own_glyph(char(c), left + 72.0f * scale * float(column), 0.0f, 0.0f, scale, Rgb{255, 255, 255}, out);
+    } else if (c != ' ') {
       const int object = text_->object_for(c, this_second);
       if (object >= 0 && object < int(font_.objects.size())) {
         xf.t = {left + 72.0f * scale * float(column), 0.0f, 0.0f};
