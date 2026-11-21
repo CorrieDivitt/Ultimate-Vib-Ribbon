@@ -1649,6 +1649,16 @@ int run(int argc, char** argv) {
       std::vector<vibr::Music> own_tracks;
       OwnCd own_cd;
       std::vector<int> own_order;  // the tracks to play next (from 1)
+      // What the picker is for (owner's flow): picking tracks to play, or a folder whose
+      // tracks all play in order.
+      bool picking_folder = false;
+      auto play_own = [&]() {  // the CD just loaded, every track in its (name) order, straight away
+        own_order.clear();
+        for (int k = 1; k <= int(own_tracks.size()); ++k) own_order.push_back(k);
+        if (own_order.empty()) return;
+        own_play = true;
+        title.go_to(S::Done);
+      };
       auto load_own_cd = [&]() {
         own_tracks.clear();
         std::vector<std::pair<std::string, std::uint32_t>> names;
@@ -1667,11 +1677,15 @@ int run(int argc, char** argv) {
       auto show_folder = [&](FilePicker::Mode mode, const std::string& folder) {
         picker.show(mode, folder, list_folder(folder), !folder.empty());
       };
-      auto open_picker = [&]() {
+      // Opens the picker: for tracks, in the remembered folder's files (the first time,
+      // the folder browser first); for a whole folder, the folder browser there.
+      auto open_picker = [&](bool for_folder) {
+        picking_folder = for_folder;
         std::error_code ec;
         const std::string& saved = save.options.music_folder;
-        if (!saved.empty() && std::filesystem::is_directory(path_from_utf8(saved), ec)) show_folder(FilePicker::Mode::Files, saved);
-        else show_folder(FilePicker::Mode::Folder, default_music_folder());
+        const bool known = !saved.empty() && std::filesystem::is_directory(path_from_utf8(saved), ec);
+        if (known && !for_folder) show_folder(FilePicker::Mode::Files, saved);
+        else show_folder(FilePicker::Mode::Folder, known ? saved : default_music_folder());
         in_picker = true;
         prev_layers.clear();
       };
@@ -1820,13 +1834,31 @@ int run(int argc, char** argv) {
                 save.options.music_folder = picker.path();
                 write_save();
                 std::printf("Music folder: %s (saved)\n", picker.path().c_str());
-                show_folder(FilePicker::Mode::Files, picker.path());
+                if (picking_folder) {
+                  // All tracks: every music file in the folder, in name order, straight away.
+                  own_files.clear();
+                  for (const FilePicker::Entry& entry : list_folder(picker.path()))
+                    if (!entry.folder) own_files.push_back(entry.name);
+                  if (own_files.empty()) {
+                    std::printf("No music files in that folder.\n");
+                    break;
+                  }
+                  own_folder = picker.path();
+                  in_picker = false;
+                  load_own_cd();
+                  play_own();
+                } else {
+                  show_folder(FilePicker::Mode::Files, picker.path());  // the first time: now its files
+                }
                 break;
-              case PA::Done:  // the new CD is in: back to the CD screen
+              case PA::Done:  // Pick track(s): the ticked files, in name order, straight away
                 own_files = picker.ticked();
                 own_folder = picker.path();
+                save.options.music_folder = picker.path();  // (remembered for next time)
+                write_save();
                 in_picker = false;
                 load_own_cd();
+                play_own();
                 break;
               case PA::Cancel: in_picker = false; break;
               default: break;
@@ -1938,13 +1970,16 @@ int run(int argc, char** argv) {
             // change screen, the track select and the alerts come next).
             // The own-CD courses go through the original's CD screen; "change the CD"
             // opens our picker (the player's files stand for the CD).
-            case R::OneTrack: own_course = Course::OneTrack, title.go_to(S::CdChange); break;
-            case R::AllTracks: own_course = Course::AllTracks, title.go_to(S::CdChange); break;
-            case R::InOrder: own_course = Course::InOrder, title.go_to(S::CdChange); break;
-            case R::ChangeCd: open_picker(); break;
+            // Owner's flow: "Pick track(s)" opens the picker for one or more files; all
+            // tracks (and in order, which the game plays itself) for a whole folder. Done
+            // plays straight away; afterwards back to this menu.
+            case R::OneTrack: own_course = Course::OneTrack, open_picker(false); break;
+            case R::AllTracks: own_course = Course::AllTracks, open_picker(true); break;
+            case R::InOrder: own_course = Course::InOrder, open_picker(true); break;
+            case R::ChangeCd: open_picker(false); break;
             case R::CdReady:
               if (own_tracks.empty()) {
-                open_picker();  // no CD in yet: pick one first
+                open_picker(false);  // no CD in yet: pick one first
               } else if (own_course == Course::OneTrack) {
                 title.go_to(S::TrackSelect);
               } else {
@@ -2031,8 +2066,8 @@ int run(int argc, char** argv) {
           s.music = nullptr;
           audio.play_music({});
           if (r == Result::Quit) break;
-          // Back where the course was chosen from.
-          title.go_to(own_course == Course::OneTrack ? S::TrackSelect : S::CdChange);
+          // Back to the own-CD mode select.
+          title.go_to(S::UnknownModeSelect);
           prev_layers.clear();
           last_ns = SDL_GetTicksNS();
           behind = 0;

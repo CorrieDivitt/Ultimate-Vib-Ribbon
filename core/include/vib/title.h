@@ -73,10 +73,10 @@ class TitleScreens {
 
   // The game's words, read from the player's own MAIN_G.EXE. Without them the
   // screens are drawn without their text.
-  void set_text(const GameText* text, int language = GameText::kEnglish) {
-    text_ = text;
-    text_language_ = language;
-  }
+  // Ours: the own-CD mode select's first item then reads "Pick track(s)" (owner's
+  // flow: pick one or more files and play them), built from the font's letters in
+  // place of the model's own word, so it moves with the original's clips.
+  void set_text(const GameText* text, int language = GameText::kEnglish);
 
   // Fades to `screen`; Screen::None switches at once with no fade.
   void go_to(Screen screen);

@@ -361,6 +361,76 @@ void TitleScreens::draw_text(const std::string& text, int jitter) {
   layers_.push_back(std::move(layer));
 }
 
+void TitleScreens::set_text(const GameText* text, int language) {
+  text_ = text;
+  text_language_ = language;
+  if (!text_) return;
+  // The own-CD mode select's item labels are objects 1 to 6 of its model, each a flat
+  // ten-sided frame (corners at x +-288, +-233, +-89, y 0, +-121, +-196) with its word
+  // inside. Object 1 (the original's "one track") keeps its frame; its word is
+  // replaced by ours, built from the font's letters as two lines.
+  static const char* const kPick[5][2] = {{"Titel", "w~Ghlen"}, {"Pick", "track(s)"}, {"Elegir", "pistas"},
+                                          {"Choisir", "pistes"}, {"Scegli", "brani"}};
+  const int l = language >= 0 && language < 5 ? language : 1;
+  TmdObject label;
+  std::size_t longest = 0;
+  for (const char* row : kPick[l]) {
+    std::size_t n = 0;
+    for (const char* c = row; *c; ++c) n += *c != '~';
+    longest = std::max(longest, n);
+  }
+  const float s = std::min(0.5f, 400.0f / (float(longest) * 90.0f));  // inside the frame, the size of the other words
+  const float pitch = 230.0f * s;
+  for (int r = 0; r < 2; ++r) {
+    const char* row = kPick[l][r];
+    std::size_t n = 0;
+    for (const char* c = row; *c; ++c) n += *c != '~';
+    float x = -0.5f * float(n - 1) * 90.0f * s;
+    const float y = (float(r) - 0.5f) * pitch;
+    bool second = false;
+    for (const char* c = row; *c; ++c) {
+      if (*c == '~') {
+        second = true;
+        continue;
+      }
+      const int object = text_->object_for(static_cast<unsigned char>(*c), second);
+      second = false;
+      if (object >= 0 && object < int(font_.objects.size())) {
+        const TmdObject& glyph = font_.objects[std::size_t(object)];
+        const auto base = std::uint16_t(label.vertices.size());
+        for (const Vec3s& v : glyph.vertices)
+          label.vertices.push_back({std::int16_t(std::lround(v.x * s + x)), std::int16_t(std::lround(v.y * s + y)), std::int16_t(0)});
+        for (TmdLine line : glyph.lines) {
+          line.a = std::uint16_t(line.a + base), line.b = std::uint16_t(line.b + base);
+          label.lines.push_back(line);
+        }
+      }
+      x += 90.0f * s;
+    }
+  }
+  Model& m = models_[std::size_t(m_unknown_)];
+  if (m.tmd.objects.size() <= 1 || label.lines.empty()) return;
+  // The frame: the original object's lines whose two ends are both frame corners.
+  const TmdObject& original = m.tmd.objects[1];
+  auto corner = [](const Vec3s& v) {
+    const int ax = std::abs(v.x), ay = std::abs(v.y);
+    return (ax == 288 && ay == 0) || (ax == 233 && ay == 121) || (ax == 89 && ay == 196);
+  };
+  for (const TmdLine& line : original.lines) {
+    if (line.a >= original.vertices.size() || line.b >= original.vertices.size()) continue;
+    const Vec3s& a = original.vertices[line.a];
+    const Vec3s& b = original.vertices[line.b];
+    if (!corner(a) || !corner(b)) continue;
+    const auto base = std::uint16_t(label.vertices.size());
+    label.vertices.push_back(a);
+    label.vertices.push_back(b);
+    TmdLine copy = line;
+    copy.a = base, copy.b = std::uint16_t(base + 1);
+    label.lines.push_back(copy);
+  }
+  m.tmd.objects[1] = label;
+}
+
 void TitleScreens::draw_text_at(const std::string& text, float x, float y, float scale, int range) {
   if (!text_ || text.empty()) return;
   constexpr float kDepth = 2690, kWidth = 90;  // as draw_text: the original's text space
