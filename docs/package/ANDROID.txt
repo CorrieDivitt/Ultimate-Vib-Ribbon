@@ -11,9 +11,9 @@ files) that the game copies in once. A 64-bit phone or tablet with Vulkan (most 
 2019 on) is needed.
 
 INSTALLING
-1. Copy the APK (app-flat-debug.apk) to the phone, open it in the phone's Files app
+1. Copy the APK (Vib-Ribbon-Android-1.0.0-experimental.apk) to the phone, open it in the phone's Files app
    and allow installing from that app when asked. (Or with adb on a PC:
-   adb install -r app-flat-debug.apk)
+   adb install -r Vib-Ribbon-Android-1.0.0-experimental.apk)
 2. Put your disc image's .cue and .bin files in a folder of their own on the phone, for
    example Download/Vib-Ribbon (copy them from a PC over USB). Android does not let
    apps use the Download folder itself, so the files need their own folder.

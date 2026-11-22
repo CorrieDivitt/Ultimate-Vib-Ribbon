@@ -57,6 +57,5 @@ Checked for 1.0 (task 6.10, every commit in the history): no game files (no disc
 ## The release
 
 1. GitHub Actions green (needs the billing fixed while private; public repositories build free).
-2. Windows zip: `tools\package\build-windows.ps1` (or CI's `vib-ribbon-vr-windows`).
-3. Rename the APKs for players: `Vib-Ribbon-VR-Quest-1.0.0.apk` (with QUEST.txt) and `Vib-Ribbon-Android-1.0.0-experimental.apk` (with ANDROID.txt).
-4. Tag `v1.0.0`, and make the GitHub release from docs/RELEASE_NOTES.md with the three downloads and their SHA-256 checksums (`Get-FileHash`).
+2. All three downloads at once, from a Developer PowerShell (x64): `.\tools\package\build-release.ps1`. It makes `dist\release-<version>\` with `Vib-Ribbon-VR-Windows-<version>.zip`, `Vib-Ribbon-VR-Quest-<version>.zip` (the APK as `Vib-Ribbon-VR-Quest-<version>.apk`, QUEST.txt, notices, licence), `Vib-Ribbon-Android-<version>-experimental.zip` (ANDROID.txt) and `SHA256SUMS.txt`, and stops if the signing key is missing.
+3. Tag `v<version>`, and make the GitHub release from docs/RELEASE_NOTES.md with the three zips and the checksums.
