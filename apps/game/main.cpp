@@ -124,24 +124,26 @@ void log_to_logcat() {
   }).detach();
 }
 
-// The disc image pushed to the headset: the first .cue (by name) in files/disc,
-// else in files itself.
+// The disc image pushed to the headset: the first .cue (by path) anywhere in the
+// app's folder, a few folders deep (files/disc/ is where the tracker's command puts it).
 std::string find_disc_on_headset() {
   const std::filesystem::path root = std::filesystem::path(headset_folder());
-  for (const std::filesystem::path& dir : {root / "disc", root}) {
-    std::vector<std::filesystem::path> cues;
-    std::error_code ec;
-    for (std::filesystem::directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec)) {
-      std::string ext = it->path().extension().string();
-      for (char& c : ext) c = char(std::tolower(static_cast<unsigned char>(c)));
-      if (ext == ".cue") cues.push_back(it->path());
+  std::vector<std::filesystem::path> cues;
+  std::error_code ec;
+  for (std::filesystem::recursive_directory_iterator it(root, std::filesystem::directory_options::skip_permission_denied, ec), end;
+       !ec && it != end; it.increment(ec)) {
+    if (it.depth() > 3) {
+      it.disable_recursion_pending();
+      continue;
     }
-    if (!cues.empty()) {
-      std::sort(cues.begin(), cues.end());
-      return cues.front().string();
-    }
+    std::string ext = it->path().extension().string();
+    for (char& c : ext) c = char(std::tolower(static_cast<unsigned char>(c)));
+    if (ext == ".cue") cues.push_back(it->path());
   }
-  throw std::runtime_error("no disc image on the headset: push your .cue and .bin files into " + (root / "disc").string());
+  if (cues.empty()) throw std::runtime_error("no disc image on the headset: push your .cue and .bin files into " + (root / "disc").string());
+  std::sort(cues.begin(), cues.end());
+  std::printf("Disc: %s\n", cues.front().string().c_str());
+  return cues.front().string();
 }
 #endif
 

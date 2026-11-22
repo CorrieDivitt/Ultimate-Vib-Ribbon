@@ -45,6 +45,12 @@ jobs:
       - name: Build the APK
         working-directory: android
         run: ./gradlew assembleDebug --no-daemon --stacktrace -PvibNdkVersion=$(basename "$ANDROID_NDK_LATEST_HOME")
+      - name: Check the APK holds the game and SDL
+        run: |
+          unzip -l android/app/build/outputs/apk/debug/app-debug.apk | grep -E 'lib/|AndroidManifest|classes' | tee apk.txt
+          grep -q 'lib/arm64-v8a/libmain.so' apk.txt
+          grep -q 'lib/arm64-v8a/libSDL3.so' apk.txt
+          grep -q 'lib/arm64-v8a/libc++_shared.so' apk.txt
       - uses: actions/upload-artifact@v4
         with:
           name: vib-ribbon-vr-quest-apk

@@ -146,7 +146,7 @@ button.copy{font-family:var(--display);font-size:12px;background:var(--ink);colo
    status values: done | active | todo | blocked | ask (needs the owner's answer) */
 const T = {
   goal: "A version of Vib-Ribbon playable in VR on PCVR and Meta Quest 3, with responsive, consistent timing and visuals that do justice to the original. Steam Frame and levels from your own music are stretch goals.",
-  updated: "2026-11-21, end of session 4 (quality of life done: scroll speed, timing feedback, full combo, course around you, colours, glow, calibration, settings groups; next session: the Quest 3 standalone build)",
+  updated: "2026-11-21, session 5 (the Quest 3 standalone build: 5.1 and 5.2 built, waiting for your first headset test)",
   approach: "Native VR port. Game logic from the decompilation, assets read from your own disc, emulator used as the reference to test against.",
   asks: [
             
@@ -223,8 +223,8 @@ const T = {
     {n:5, name:"Standalone Quest 3", goal:"The same game running on the Quest 3 itself.",
      exit:"Standalone build holds 90 Hz or better with timing equal to PCVR.",
      tasks:[
-      {id:"5.1", s:"todo", t:"Android ARM64 build with NDK, OpenXR loader and Vulkan"},
-      {id:"5.2", s:"todo", t:"Getting the disc image onto the headset and importing it"},
+      {id:"5.1", s:"active", t:"Android ARM64 build with NDK, OpenXR loader and Vulkan", note:"Built (session 5), waiting for your headset test. The android folder is an Android Studio project: it builds the same C++ as the PC (libmain.so) with the NDK, SDL 3.2.26 (its Java side is downloaded at build time), the Khronos OpenXR loader built from source (1.1.65, as on the PC) and Vulkan from the NDK. It picks the newest NDK, CMake (3.24 or newer) and build tools installed in your SDK. Native code is optimised even in the debug APK. The manifest launches it in the headset (Library > Unknown sources). In the headset build the game is always in VR; console output goes to logcat (tag vibplay). CI builds the APK too and keeps it as a download. Commands: Session 5 (first Quest build)."},
+      {id:"5.2", s:"active", t:"Getting the disc image onto the headset and importing it", note:"First version (session 5): adb push your CUE and BINs into the app's own folder on the headset (Android/data/io.github.corriedivitt.vibribbonvr/files/disc; no storage permission needed). The game uses the first .cue it finds there. save.txt is in the same folder (adb pull to back it up), and own music goes in files/music. Later, if wanted: picking a disc image from Downloads inside the headset."},
       {id:"5.3", s:"todo", t:"Low-latency Android audio and on-device calibration"},
       {id:"5.4", s:"todo", t:"Performance at 90 and 120 Hz. Passthrough mode.", note:"Your reminder (session 3): the PCVR numbers come from a very powerful PC (RTX 4090), so expect optimisation work for the Quest standalone build. Use the performance overlay (L3) on the headset to measure: CPU game, lines and draw times, late frames."}
      ]},
@@ -268,6 +268,12 @@ const T = {
     {id:"R7", t:"PAL disc. Video ran at 50 Hz on the original.", why:"Low risk because gameplay follows the audio clock."}
   ],
   commands: [
+    {state:"Session 5 (first Quest build)", what:"Build the APK, install it, push your disc to the headset once, start it and watch its log. The two env lines point the build at Android Studio's own Java (your PATH has Java 8, too old) and your SDK. Plug the headset in first (adb devices must list it). The disc push is only needed once; reinstalling the APK keeps it (adb install -r).",
+     code:'cd F:\\VibRibbonVR\\Vib-Ribbon-VR\ngit pull\n$env:JAVA_HOME = "C:\\Program Files\\Android\\Android Studio\\jbr"\n$env:ANDROID_HOME = "$env:LOCALAPPDATA\\Android\\Sdk"\ncd android\n.\\gradlew.bat assembleDebug\nadb install -r app\\build\\outputs\\apk\\debug\\app-debug.apk\nadb shell mkdir -p /sdcard/Android/data/io.github.corriedivitt.vibribbonvr/files/disc\nGet-ChildItem F:\\VibRibbonVR\\research\\Gamefiles -File | ForEach-Object { adb push $_.FullName /sdcard/Android/data/io.github.corriedivitt.vibribbonvr/files/disc/ }\nadb logcat -c\nadb shell am start -n io.github.corriedivitt.vibribbonvr/org.libsdl.app.SDLActivity\nadb logcat -s vibplay:* SDL:* OpenXR:* AndroidRuntime:* DEBUG:*'},
+    {state:"Quest: everyday", what:"After a change: build, reinstall (keeps your disc and save), start, watch the log. Stop the game from the PC with the last line.",
+     code:'cd F:\\VibRibbonVR\\Vib-Ribbon-VR\\android\ngit pull\n$env:JAVA_HOME = "C:\\Program Files\\Android\\Android Studio\\jbr"\n$env:ANDROID_HOME = "$env:LOCALAPPDATA\\Android\\Sdk"\n.\\gradlew.bat assembleDebug\nadb install -r app\\build\\outputs\\apk\\debug\\app-debug.apk\nadb logcat -c\nadb shell am start -n io.github.corriedivitt.vibribbonvr/org.libsdl.app.SDLActivity\nadb logcat -s vibplay:* SDL:* OpenXR:* AndroidRuntime:* DEBUG:*\nadb shell am force-stop io.github.corriedivitt.vibribbonvr'},
+    {state:"Quest: save file", what:"Copy the headset's save.txt to the PC (backup, or to send me), or put one back.",
+     code:'adb pull /sdcard/Android/data/io.github.corriedivitt.vibribbonvr/files/save.txt F:\\VibRibbonVR\\quest-save.txt\nadb push F:\\VibRibbonVR\\quest-save.txt /sdcard/Android/data/io.github.corriedivitt.vibribbonvr/files/save.txt'},
     {state:"Session 5", what:"Start of the next session (the Quest 3 standalone build): get the latest, build and test on the PC first. Run the first line in PowerShell, or the compiler cannot find its own headers.",
      code:'& "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\Common7\\Tools\\Launch-VsDevShell.ps1" -Arch amd64 -HostArch amd64\ncd F:\\VibRibbonVR\\Vib-Ribbon-VR\ngit pull\ncmake --build --preset dev\nctest --preset dev\nadb devices'},
     {state:"Session 4 (twenty-first build)", what:"Custom colors > Menu: the colour of the menu items (the original's menus, our settings, the picker, calibration).",
