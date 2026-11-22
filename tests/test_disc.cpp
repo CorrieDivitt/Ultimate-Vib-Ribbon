@@ -171,6 +171,18 @@ TEST(disc_sces02873_difficulty_changes_only_how_many_obstacles) {
     CHECK(same);
     std::printf("    song %d obstacles: easy %zu, normal %zu, hard %zu, extreme %zu\n", song, easy.size(), normal.size(), hard.size(), extreme.size());
     CHECK(extreme.size() > hard.size());
+    // Extreme: single obstacles only in the song's first half; the same obstacle often
+    // several beats running.
+    const std::int32_t half = std::int32_t(blocks.size() * kBlockSize / 2);
+    int early_pairs = 0, late_pairs = 0, repeats = 0, normal_repeats = 0;
+    for (std::size_t i = 0; i < extreme.size(); ++i) {
+      if (extreme[i].value >= 4) ++(extreme[i].time < half - kSampleRate * 2 ? early_pairs : late_pairs);
+      if (i > 0 && extreme[i].value == extreme[i - 1].value) ++repeats;
+    }
+    for (std::size_t i = 1; i < normal.size(); ++i) normal_repeats += normal[i].value == normal[i - 1].value;
+    std::printf("      extreme: pairs in the first half %d, second half %d; same as the one before %d of %zu (normal: %d of %zu)\n", early_pairs,
+                late_pairs, repeats, extreme.size(), normal_repeats, normal.size());
+    CHECK(early_pairs == 0 && repeats * 3 > int(extreme.size()));
     // Extreme: back to back at the closest, never overlapping (a part covers its length).
     for (std::size_t i = 1; i < extreme.size(); ++i) {
       const std::int64_t covers = (std::int64_t(extreme[i - 1].scale) * extreme[i - 1].length) >> 16;

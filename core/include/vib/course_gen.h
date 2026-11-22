@@ -126,7 +126,8 @@ class CourseGenerator {
   // 2, harder: windows 7/10 as long and parts 1.5 lengths apart. 3, extreme (owner: an
   // obstacle on nearly every beat): parts 3/4 as long (so a third faster), windows half a
   // part long, and parts one length apart, back to back, the closest they can be without
-  // overlapping (a part's length is the road it covers). Easy to hard keep the obstacles'
+  // overlapping (a part's length is the road it covers); single obstacles only in the
+  // song's first half, and the same obstacle in runs of 1 to 4. Easy to hard keep the obstacles'
   // speeds; speed courses keep the original's rule. Set before the first block.
   enum Difficulty { kEasy = 0, kNormal = 1, kHard = 2, kExtreme = 3 };
   void set_difficulty(int difficulty) { difficulty_ = difficulty < kEasy ? kEasy : difficulty > kExtreme ? kExtreme : difficulty; }
@@ -175,6 +176,11 @@ class CourseGenerator {
   std::int64_t frame_period_ = 0, frame_phase_ = 0, last_frame_ = -1;
   std::int32_t fixed_cue_period_ = 0;
   int difficulty_ = kNormal;
+  std::vector<std::int32_t> track_samples_;  // (prepare_disc's, for each track's middle)
+  std::int32_t half_ = 0;                    // the song's middle, as a stream time
+  int run_left_ = 0, last_part_value_ = 0;   // Extreme's runs of one obstacle
+  std::uint32_t run_seed_ = 0;
+  std::int32_t last_part_time_ = 0, last_part_length_ = 0;
   std::int32_t spacing() const;  // how far after a placed part the next may be
   Cue current_cue_;
 

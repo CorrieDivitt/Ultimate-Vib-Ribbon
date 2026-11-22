@@ -181,6 +181,7 @@ void CourseGenerator::start_round(int round, std::int32_t start_time, std::uint3
   offset_ = 0;
   track_ = &script_.tracks[script_.round_tracks[std::size_t(round - 1)]];
   begin(start_time);
+  half_ = start_time + (end_ - offset_) / 2;  // (the script covers the song)
 }
 
 void CourseGenerator::prepare_disc(const std::vector<std::int32_t>& track_samples, std::uint32_t key) {
@@ -188,6 +189,7 @@ void CourseGenerator::prepare_disc(const std::vector<std::int32_t>& track_sample
   const int count = std::min(int(track_samples.size()), 100);
   require(count > 0, "a disc needs at least one track");
   disc_key_ = key;
+  track_samples_ = track_samples;
   track_ = &script_.tracks[script_.medley_tracks[0]];
   std::int32_t end = std::max(track_->patterns.back().start, track_->control.back().start);
   if (!track_->events.empty()) end = std::max(end, track_->events.back().start);
@@ -218,6 +220,7 @@ void CourseGenerator::start_track(int track, std::int32_t start_time) {
   offset_ = disc_starts_[std::size_t(track - 1)];
   track_ = &script_.tracks[script_.medley_tracks[0]];
   begin(start_time);
+  half_ = start_time + track_samples_[std::size_t(track - 1)] / 2;
 }
 
 void CourseGenerator::begin(std::int32_t start_time) {
@@ -241,6 +244,10 @@ void CourseGenerator::begin(std::int32_t start_time) {
     if (e.camera >= 0) camera = &e;
   }
   if (camera) send_effect(*camera, false, false, false, true);
+
+  // Extreme's runs start afresh with the track (from the round and the script's seed).
+  run_left_ = 0;
+  run_seed_ = 0x9E3779B9u ^ (std::uint32_t(round_) * 2654435761u) ^ script_seed_;
 
   // The detector starts afresh with the track.
   pending_.reset();
@@ -360,12 +367,32 @@ void CourseGenerator::place() {
   CourseEvent ev;
   ev.type = CourseEvent::Type::Part;
   ev.time = pending_->time;
-  ev.value = pending_->cue.selector->next();
-  if (difficulty_ == kEasy && fixed_cue_period_ == 0 && ev.value >= 4 && ev.value <= 9) {
-    // A pair comes as one of its two obstacles, the first and the second in turn.
+  // A pair as one of its two obstacles, the first and the second in turn.
+  auto single = [&](int value) {
     static constexpr int kFirst[6] = {0, 0, 0, 1, 1, 2}, kSecond[6] = {1, 2, 3, 2, 3, 3};
-    ev.value = (events_.size() & 1) ? kSecond[ev.value - 4] : kFirst[ev.value - 4];
+    if (value < 4 || value > 9) return value;
+    return (events_.size() & 1) ? kSecond[value - 4] : kFirst[value - 4];
+  };
+  const bool extreme = difficulty_ == kExtreme && fixed_cue_period_ == 0;
+  // Extreme (owner): the same obstacle several beats running, while the parts come back to
+  // back (a gap of more than two lengths ends a run).
+  const bool run_on = extreme && run_left_ > 0 && !events_.empty() && pending_->time - last_part_time_ <= 2 * last_part_length_;
+  if (run_on) {
+    ev.value = last_part_value_;
+    --run_left_;
+  } else {
+    ev.value = pending_->cue.selector->next();
+    if (difficulty_ == kEasy && fixed_cue_period_ == 0) ev.value = single(ev.value);
+    // Extreme: no pairs in the song's first half (owner).
+    if (extreme && pending_->time < half_) ev.value = single(ev.value);
+    if (extreme) {
+      run_seed_ = next_random(run_seed_);
+      run_left_ = int((run_seed_ >> 16) % 4);  // 0 to 3 more of the same: runs of 1 to 4
+    }
   }
+  last_part_time_ = pending_->time;
+  last_part_length_ = pending_length_;
+  last_part_value_ = ev.value;
   ev.length = pending_->cue.period;
   ev.scale = pending_scale_;
   events_.push_back(ev);
