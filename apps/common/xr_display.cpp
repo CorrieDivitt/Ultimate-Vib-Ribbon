@@ -242,7 +242,10 @@ class XrDisplay::Impl {
     // the course for that moment. Smoothed; frames the runtime times oddly are left out.
     if (start_xr > 0) {
       const double lead = double(state.predictedDisplayTime - start_xr) * 1e-6;
-      if (lead > 0 && lead < 200) lead_ms_ = lead_ms_ > 0 ? lead_ms_ + (lead - lead_ms_) * 0.05 : lead;
+      if (lead > 0 && lead < 200) {
+        lead_ms_ = lead_ms_ > 0 ? lead_ms_ + (lead - lead_ms_) * 0.05 : lead;
+        if (++lead_frames_ == 600) std::printf("Display lead: %.1f ms (each frame is seen this long after it is started)\n", lead_ms_);
+      }
     }
     const std::uint64_t waited_ns = SDL_GetTicksNS();
     // The frame's timing by the runtime's own display times: a gap of more than one
@@ -410,6 +413,8 @@ class XrDisplay::Impl {
     xrGetInstanceProperties(instance_, &props);
     runtime_name_ = props.runtimeName;
     std::printf("Headset wear sensor: %s\n", presence_ ? "yes (recentres when the headset is put on)" : "not offered by this runtime");
+    std::printf("Headset clock: %s\n", time_conversion_ ? "readable (the course is drawn for when each frame is seen; Touch presses keep their own times)"
+                                                         : "not readable (no display lead; Touch presses timed by the frame)");
     XrSystemGetInfo sys{XR_TYPE_SYSTEM_GET_INFO};
     sys.formFactor = XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY;
     xr_check(xrGetSystem(instance_, &sys, &system_), "xrGetSystem (is the headset on and connected?)");
@@ -1141,6 +1146,7 @@ class XrDisplay::Impl {
   std::uint64_t recentre_at_ns_ = 0;
   bool presence_ = false, refresh_rates_ = false, passthrough_ext_ = false, time_conversion_ = false;
   double lead_ms_ = 0;  // predicted display time minus the start of draw(), smoothed
+  int lead_frames_ = 0;
   [[maybe_unused]] PFN_xrVoidFunction convert_time_ = nullptr;  // (this instance's clock conversion)
   XrAction haptic_left_ = XR_NULL_HANDLE, haptic_right_ = XR_NULL_HANDLE;
   XrPassthroughFB passthrough_ = XR_NULL_HANDLE;

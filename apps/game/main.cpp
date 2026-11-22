@@ -1058,7 +1058,11 @@ bool run_calibration(Session& s, SettingsPanel& panel, bool picture) {
   auto suggestion = [&](const TapCalibration& c) { return std::clamp(c.suggested_ms(setting), lowest, highest); };
   static const char* const kPresses[5] = {"Treffer", "Presses", "Pulsaciones", "Appuis", "Pressioni"};
   static const char* const kLast[5] = {"Zuletzt", "Last", "Última", "Dernier", "Ultima"};
-  static const char* const kAverage[5] = {"Mittel", "Average", "Media", "Moyenne", "Media"};
+  // (Owner, session 5: "average -9 ms, suggested -75" was confusing; the average is how far
+  // off the presses were at the current setting, and the suggestion is the setting plus it.)
+  static const char* const kAverage[5] = {"Abweichung", "Off by", "Desvío", "Décalage", "Scostamento"};
+  static const char* const kEarly[5] = {"früh", "early", "pronto", "en avance", "presto"};
+  static const char* const kLate[5] = {"spät", "late", "tarde", "en retard", "tardi"};
   static const char* const kSpread[5] = {"Streuung", "Spread", "Dispersión", "Écart", "Scarto"};
   static const char* const kNow[5] = {"Jetzt", "Now", "Ahora", "Actuel", "Ora"};
   static const char* const kSuggested[5] = {"Vorschlag", "Suggested", "Sugerido", "Suggéré", "Consigliato"};
@@ -1141,9 +1145,9 @@ bool run_calibration(Session& s, SettingsPanel& panel, bool picture) {
     if (cancel) break;
     if (confirm && finished && enough) {
       const double v = suggestion(cal);
+      std::printf("%s timing %+.0f ms (calibrated at %+.0f ms: off by %+.1f ms, spread %.1f ms over %d presses; display lead %.0f ms)\n",
+                  picture ? "Picture" : "Sound", v, setting, cal.average_ms(), cal.spread_ms(), cal.count(), s.renderer.display_lead_ms());
       setting = v;
-      std::printf("%s timing %+.0f ms (calibrated: average %+.1f ms, spread %.1f ms over %d presses)\n", picture ? "Picture" : "Sound", v,
-                  cal.average_ms(), cal.spread_ms(), cal.count());
       apply_settings(s);
       if (s.write_save) s.write_save();
       s.fx.number(1, 90, 5);
@@ -1162,13 +1166,16 @@ bool run_calibration(Session& s, SettingsPanel& panel, bool picture) {
     if (cal.count() >= 4) {
       char spread[16];
       std::snprintf(spread, sizeof spread, "%.0f ms", cal.spread_ms());
-      rows.push_back(std::string(kAverage[l]) + ": " + ms_text(cal.average_ms()) + "   " + kSpread[l] + ": " + spread);
+      const double avg = cal.average_ms();
+      rows.push_back(std::string(kAverage[l]) + ": " + ms_text(avg) + (std::lround(avg) == 0 ? "" : std::string(" ") + (avg < 0 ? kEarly[l] : kLate[l])) +
+                     "   " + kSpread[l] + ": " + spread);
     }
     if (finished && enough) {
       char now_t[16], sug[16];
       std::snprintf(now_t, sizeof now_t, "%.0f ms", setting);
       std::snprintf(sug, sizeof sug, "%.0f ms", suggestion(cal));
-      rows.push_back(std::string(kNow[l]) + ": " + now_t + "   " + kSuggested[l] + ": " + sug);
+      // The sum, so the suggestion reads as what it is: now plus how far off.
+      rows.push_back(std::string(kSuggested[l]) + ": " + sug + "   (" + kNow[l] + " " + now_t + ", " + kAverage[l] + " " + ms_text(cal.average_ms()) + ")");
       rows.push_back(kUse[l]);
     } else if (finished) {
       rows.push_back(kTooFew[l]);
