@@ -83,6 +83,7 @@ class SettingsPanel {
     Vsync,            // vsync
     FrameLimit,       // frame_limit: off or a number of frames a second
     PictureShape,     // picture_43: fill the window, or the original's 4:3 with bars
+    LowLatency,       // low_latency: fewer frames waiting in line (monitor)
   };
   // A display mode the monitor offers, for the Resolution item.
   struct DisplayMode {
@@ -121,6 +122,19 @@ class SettingsPanel {
   void set_display_modes(std::vector<DisplayMode> modes) { display_modes_ = std::move(modes); }
   void home() { cursor_ = 0, first_ = 0; }
   Item current() const { return items_.empty() ? Item::Continue : items_[std::size_t(cursor_)]; }
+
+  // The mouse (task 4.16 G). The row under a point of the picture, `x` and `y` from -1
+  // (left, top) to 1 (right, bottom), `aspect` the picture's width / height, as draw()
+  // lays the rows out now; -1 if none.
+  int row_at(float x, float y, float aspect) const;
+  // The cursor to that row (hovering); true if it moved.
+  bool hover(int row);
+  // A click on that row: the cursor goes there, and the input that does what a click
+  // means there: the left button confirms (a group, an action, a switch) or steps the
+  // value forward; the right button steps it back, or goes back where there is no value.
+  Input click(int row, bool right_button);
+  // The keys and the mouse, a dimmed line at the bottom of the screen (the monitor's settings).
+  Hud::Layer draw_keys(std::uint32_t seed);
 
   // One step, `seconds` since the last (for repeat while left or right is held).
   // Changes the options in place. `vr`: which of each setting is in use.

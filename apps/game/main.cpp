@@ -457,6 +457,13 @@ struct Session {
   std::array<int, 4> applied_window{-1, -1, -1, -1};
   int last_fullscreen = 1;
   std::uint64_t frame_deadline_ns = 0;
+  // The mouse (task 4.16 G): wheel steps and drag still to turn into camera moves; the
+  // right or middle button held (a drag once it has moved); when it last moved.
+  double mouse_zoom_steps = 0, mouse_turn_pixels = 0;
+  bool drag_button = false, dragging = false;
+  float drag_x = 0, drag_y = 0;
+  std::uint64_t mouse_moved_ns = 0;
+  bool cursor_hidden = false;
 };
 
 // In a headset the evolution meter (the dots around Vibri that show the run of hits)
@@ -532,9 +539,19 @@ SceneView beside_view(const Session& s, float vibri_z) {
 // down zooms out, smoothly, twice as close or as far for each second at full tilt;
 // the left stick left or right takes the view round her, 90 degrees a second.
 // `zoom`: play's or the menus' own (each saved).
-void zoom_with_stick(Session& s, double seconds, double& zoom) {
-  if (!s.opt.vr && !beside_vibri(s)) return;  // (on a monitor only with the view beside Vibri)
+void zoom_with_stick(Session& s, double seconds, double& zoom, double& angle) {
+  if (!s.opt.vr && !beside_vibri(s)) {  // (on a monitor only with the view beside Vibri)
+    s.mouse_zoom_steps = s.mouse_turn_pixels = 0;
+    return;
+  }
   float y = 0, x = 0;
+  if (!s.opt.headset) {  // the monitor's keyboard (task 4.16 G): Ctrl and the arrows, as the sticks
+    const bool* keys = SDL_GetKeyboardState(nullptr);
+    if (SDL_GetModState() & SDL_KMOD_CTRL) {
+      x = float(keys[SDL_SCANCODE_RIGHT]) - float(keys[SDL_SCANCODE_LEFT]);
+      y = float(keys[SDL_SCANCODE_UP]) - float(keys[SDL_SCANCODE_DOWN]);
+    }
+  }
   for (const auto& [id, pad] : s.pads) {
     const float v = -float(SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_RIGHTY)) / 32767.0f;  // SDL: up is negative
     if (std::abs(v) > std::abs(y)) y = v;
@@ -548,13 +565,22 @@ void zoom_with_stick(Session& s, double seconds, double& zoom) {
   }
   if (std::abs(x) > 0.2f) {
     const double t = (std::abs(x) - 0.2) / 0.8 * (x > 0 ? 1.0 : -1.0);
-    double& a = view_angle(s);
-    a += 90.0 * t * std::min(seconds, 0.1);
-    a = std::remainder(a, 360.0);  // kept within -180 to 180
+    angle += 90.0 * t * std::min(seconds, 0.1);
+    angle = std::remainder(angle, 360.0);  // kept within -180 to 180
     s.turning = true;
   } else if (s.turning) {
     s.turning = false;
-    std::printf("View angle %.0f degrees\n", view_angle(s));
+    std::printf("View angle %.0f degrees\n", angle);
+  }
+  // The mouse: a drag turns the view (a quarter of a degree a pixel), the wheel zooms
+  // (a quarter of a doubling a step), at once.
+  if (s.mouse_turn_pixels != 0) {
+    angle = std::remainder(angle + 0.25 * s.mouse_turn_pixels, 360.0);
+    s.mouse_turn_pixels = 0;
+  }
+  if (s.mouse_zoom_steps != 0) {
+    zoom = std::clamp(zoom * std::exp2(0.25 * s.mouse_zoom_steps), 1.0 / 36.0, 4.0);
+    s.mouse_zoom_steps = 0;
   }
   if (std::abs(y) > 0.2f) {
     const double t = (std::abs(y) - 0.2) / 0.8 * (y > 0 ? 1.0 : -1.0);
@@ -564,6 +590,127 @@ void zoom_with_stick(Session& s, double seconds, double& zoom) {
     s.zooming = false;
     std::printf("Zoom %.3f\n", zoom);
   }
+}
+
+void zoom_with_stick(Session& s, double seconds, double& zoom) { zoom_with_stick(s, seconds, zoom, view_angle(s)); }
+
+// The monitor's menus with the camera beside Vibri (task 4.16): a menu camera turned
+// round what it looks at, about the vertical, by `angle` degrees, and moved towards it
+// by `zoom` (as the headset's menu zoom).
+SceneView menu_view(SceneView v, double zoom, double angle) {
+  const double a = angle * 3.14159265358979 / 180.0;
+  const float c = float(std::cos(a)), sn = float(std::sin(a)), k = 1.0f / float(zoom);
+  const float dx = v.eye.x - v.target.x, dz = v.eye.z - v.target.z;
+  v.eye = {v.target.x + (dx * c - dz * sn) * k, v.target.y + (v.eye.y - v.target.y) * k, v.target.z + (dx * sn + dz * c) * k};
+  return v;
+}
+
+// R3 (or Home on the keyboard): in a headset the recentre; on a monitor with the view
+// beside Vibri, that view (play's, or in the menus theirs) back as it starts.
+void r3_pressed(Session& s, bool menus) {
+  if (s.opt.headset) {
+    s.renderer.recentre();
+    return;
+  }
+  if (!beside_vibri(s)) return;
+  const Options defaults;
+  if (menus) s.save.options.menu_zoom = defaults.menu_zoom, s.save.options.menu_angle = defaults.menu_angle;
+  else s.save.options.zoom = defaults.zoom, s.save.options.view_angle = defaults.view_angle;
+  s.fx.number(1, 90, 5);
+  std::printf("View back as it starts\n");
+}
+
+bool is_mouse(const SDL_Event& e) {
+  return e.type == SDL_EVENT_MOUSE_MOTION || e.type == SDL_EVENT_MOUSE_WHEEL || e.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
+         e.type == SDL_EVENT_MOUSE_BUTTON_UP;
+}
+// Ctrl and an arrow on the monitor with the view beside Vibri: the camera's, not a press.
+bool camera_key(const Session& s, const SDL_KeyboardEvent& k) {
+  const bool arrow = k.key == SDLK_UP || k.key == SDLK_DOWN || k.key == SDLK_LEFT || k.key == SDLK_RIGHT;
+  return arrow && (k.mod & SDL_KMOD_CTRL) && !s.opt.headset && beside_vibri(s);
+}
+
+// The mouse on the monitor (task 4.16 G). Turns a mouse event into what it means:
+// dragging with the right or middle button turns the view beside Vibri, the wheel zooms
+// it where `wheel_zooms` (play) or with Ctrl held; otherwise the wheel's steps (up +)
+// come back for a list to scroll. A right click is one without a drag. `x`, `y`: the
+// pointer in the picture, -1 to 1 (top left -1, -1), when it is over the picture.
+struct MouseInput {
+  int wheel = 0;
+  bool moved = false, left_click = false, right_click = false, over = false;
+  float x = 0, y = 0;
+};
+MouseInput mouse_event(Session& s, const SDL_Event& e, bool wheel_zooms) {
+  MouseInput m;
+  if (s.opt.headset) return m;
+  auto place = [&](float wx, float wy) {  // window points to the picture (bars left out)
+    int w = 0, h = 0, pw = 0, ph = 0;
+    SDL_GetWindowSize(s.window, &w, &h);
+    SDL_GetWindowSizeInPixels(s.window, &pw, &ph);
+    if (w <= 0 || h <= 0 || pw <= 0 || ph <= 0) return;
+    const float px = wx * float(pw) / float(w), py = wy * float(ph) / float(h);
+    const float a = s.renderer.picture_aspect();
+    float pic_w = float(pw), pic_h = float(ph);
+    if (a > 0 && float(pw) / float(ph) > a) pic_w = float(ph) * a;
+    else if (a > 0) pic_h = float(pw) / a;
+    m.x = (px - (float(pw) - pic_w) * 0.5f) / pic_w * 2.0f - 1.0f;
+    m.y = (py - (float(ph) - pic_h) * 0.5f) / pic_h * 2.0f - 1.0f;
+    m.over = std::abs(m.x) <= 1.0f && std::abs(m.y) <= 1.0f;
+  };
+  const bool ctrl = SDL_GetModState() & SDL_KMOD_CTRL;
+  switch (e.type) {
+    case SDL_EVENT_MOUSE_MOTION:
+      s.mouse_moved_ns = SDL_GetTicksNS();
+      place(e.motion.x, e.motion.y);
+      m.moved = true;
+      if (s.drag_button) {
+        if (!s.dragging && std::abs(e.motion.x - s.drag_x) + std::abs(e.motion.y - s.drag_y) > 5.0f) s.dragging = true;
+        if (s.dragging) s.mouse_turn_pixels += double(e.motion.xrel);
+      }
+      break;
+    case SDL_EVENT_MOUSE_WHEEL: {
+      s.mouse_moved_ns = SDL_GetTicksNS();
+      place(e.wheel.mouse_x, e.wheel.mouse_y);
+      const float steps = e.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -e.wheel.y : e.wheel.y;
+      if ((wheel_zooms || ctrl) && beside_vibri(s)) s.mouse_zoom_steps += double(steps);
+      else m.wheel = steps > 0 ? 1 : steps < 0 ? -1 : 0;
+      break;
+    }
+    case SDL_EVENT_MOUSE_BUTTON_DOWN:
+      s.mouse_moved_ns = SDL_GetTicksNS();
+      place(e.button.x, e.button.y);
+      if (e.button.button == SDL_BUTTON_RIGHT || e.button.button == SDL_BUTTON_MIDDLE) {
+        s.drag_button = true, s.dragging = false;
+        s.drag_x = e.button.x, s.drag_y = e.button.y;
+      }
+      if (e.button.button == SDL_BUTTON_LEFT) m.left_click = true;
+      if (e.button.button == SDL_BUTTON_X1) m.right_click = true;  // (the mouse's back button: back)
+      break;
+    case SDL_EVENT_MOUSE_BUTTON_UP:
+      place(e.button.x, e.button.y);
+      if (e.button.button == SDL_BUTTON_RIGHT || e.button.button == SDL_BUTTON_MIDDLE) {
+        if (!s.dragging && e.button.button == SDL_BUTTON_RIGHT) m.right_click = true;
+        s.drag_button = s.dragging = false;
+      }
+      break;
+    default: break;
+  }
+  return m;
+}
+
+// The mouse over our settings panel: hovering moves the cursor, clicks act on the row
+// under the pointer (SettingsPanel::click), the wheel scrolls; into `in`. `aspect`: the picture's.
+void panel_mouse(Session& s, SettingsPanel& panel, const MouseInput& m, SettingsPanel::Input& in) {
+  const float aspect = s.renderer.picture_aspect();
+  const int row = m.over ? panel.row_at(m.x, m.y, aspect) : -1;
+  if (m.moved && row >= 0) panel.hover(row);
+  if (m.left_click || m.right_click) {
+    const SettingsPanel::Input c = panel.click(row, m.right_click);
+    if (row < 0 && m.left_click) return;  // (a left click off the rows does nothing)
+    in.confirm |= c.confirm, in.cancel |= c.cancel, in.left |= c.left, in.right |= c.right;
+  }
+  if (m.wheel > 0) in.up = true;
+  if (m.wheel < 0) in.down = true;
 }
 
 // The right stick in play and in the settings' preview: the zoom, or, with the course
@@ -744,6 +891,7 @@ void apply_settings(Session& s) {
     apply_window(s);
     s.renderer.set_vsync(o.vsync);
     s.renderer.set_picture_aspect(o.picture_43 ? 4.0f / 3.0f : 0.0f);
+    s.renderer.set_low_latency(o.low_latency);
   }
 }
 
@@ -762,7 +910,7 @@ void setup_panel(SettingsPanel& p, bool vr, bool pause) {
   else
     p.set_group(I::Visual, {I::OriginalLook, I::RestoreLook, I::WobbleSize, I::WobbleHold, I::Smooth, I::LineWidth, I::Glow, I::Camera,
                             I::Zoom, I::ViewAngle, I::FieldOfView, I::SeeAhead, I::SeeBehind, I::Performance});
-  if (!vr) p.set_group(I::Display, {I::WindowMode, I::Resolution, I::Vsync, I::FrameLimit, I::PictureShape});
+  if (!vr) p.set_group(I::Display, {I::WindowMode, I::Resolution, I::Vsync, I::FrameLimit, I::LowLatency, I::PictureShape});
   if (vr)
     p.set_group(I::Modifiers, {I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::WrapCourse, I::WrapSize, I::ScoreNumbers, I::FixedCourses});
   else
@@ -865,6 +1013,14 @@ void draw_frame(Session& s, std::vector<vibr::Layer>& layers, double update_ms, 
       }
   }
   const std::uint64_t now = SDL_GetTicksNS();
+  if (!s.opt.headset) {  // the mouse pointer hides after 2 s still, and shows when it moves (task 4.16 G)
+    const bool idle = now - s.mouse_moved_ns > 2'000'000'000ull && !s.drag_button;
+    if (idle != s.cursor_hidden) {
+      if (idle) SDL_HideCursor();
+      else SDL_ShowCursor();
+      s.cursor_hidden = idle;
+    }
+  }
   const int level = s.save.options.perf_overlay;
   if (level > 0 && s.perf) {
     if (now - s.perf_text_ns > 250'000'000) {
@@ -874,7 +1030,8 @@ void draw_frame(Session& s, std::vector<vibr::Layer>& layers, double update_ms, 
         s.perf_print_ns = now;
         std::string line = "Perf";
         for (const std::string& r : s.perf_text) line += "  |  " + r;
-        if (s.opt.headset) line += "  |  display lead " + std::to_string(int(std::lround(s.renderer.display_lead_ms()))) + " ms";
+        line += "  |  display lead " + std::to_string(int(std::lround(s.renderer.display_lead_ms()))) + " ms" +
+                (s.renderer.lead_measured() ? "" : " (estimated)");
         std::printf("%s\n", line.c_str());
       }
     }
@@ -1716,6 +1873,16 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
       if (window_key(s, e)) continue;  // (F11 or Alt+Enter: window or fullscreen)
+      if (is_mouse(e)) {  // (task 4.16 G: in play the camera; in the pause our settings)
+        const MouseInput m = mouse_event(s, e, !paused);
+        if (paused && s.panel) panel_mouse(s, *s.panel, m, pin);
+        continue;
+      }
+      if (e.type == SDL_EVENT_KEY_DOWN && camera_key(s, e.key)) continue;  // (Ctrl and the arrows: the camera)
+      if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_HOME && !e.key.repeat) {
+        r3_pressed(s, false);
+        continue;
+      }
       switch (e.type) {
         case SDL_EVENT_QUIT: return Result::Quit;
         case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
@@ -1781,7 +1948,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
               case SDL_GAMEPAD_BUTTON_SOUTH: pin.confirm = true; break;
               case SDL_GAMEPAD_BUTTON_EAST: pin.cancel = true; break;
               case SDL_GAMEPAD_BUTTON_BACK: case SDL_GAMEPAD_BUTTON_START: resume = true; break;
-              case SDL_GAMEPAD_BUTTON_RIGHT_STICK: s.renderer.recentre(); break;
+              case SDL_GAMEPAD_BUTTON_RIGHT_STICK: r3_pressed(s, false); break;
               case SDL_GAMEPAD_BUTTON_LEFT_STICK: l3_pressed(s); break;
               default: break;
             }
@@ -1793,7 +1960,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
           }
           // Select (View): the original's own Start, which ends the song and asks "again?".
           if (e.gbutton.button == SDL_GAMEPAD_BUTTON_BACK) return Result::Abort;
-          if (e.gbutton.button == SDL_GAMEPAD_BUTTON_RIGHT_STICK) s.renderer.recentre();  // R3
+          if (e.gbutton.button == SDL_GAMEPAD_BUTTON_RIGHT_STICK) r3_pressed(s, false);  // R3
           if (e.gbutton.button == SDL_GAMEPAD_BUTTON_LEFT_STICK) l3_pressed(s);           // L3
           if (e.gbutton.button == SDL_GAMEPAD_BUTTON_DPAD_LEFT || e.gbutton.button == SDL_GAMEPAD_BUTTON_DPAD_RIGHT)
             change_jitter_scale(s, e.gbutton.button == SDL_GAMEPAD_BUTTON_DPAD_RIGHT);  // (unused by play)
@@ -2171,6 +2338,10 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     if (paused || going == Going::Counting) {  // the settings, or the count-in's number, over everything
       panel_layer = paused ? s.panel->draw(s.save.options, s.opt.headset, f.jitter_seed)
                            : s.panel->draw_big(std::to_string(3 - std::min(2, int(going_t / kCountStep))), f.jitter_seed);
+      if (paused && !s.opt.headset) {  // the keys and the mouse, at the bottom (task 4.16 G)
+        const Hud::Layer keys = s.panel->draw_keys(next_random(f.jitter_seed));
+        panel_layer.lines.insert(panel_layer.lines.end(), keys.lines.begin(), keys.lines.end());  // (the same camera)
+      }
       convert(panel_layer.lines, panel_lines);
       layers.push_back({&panel_lines, matrix(panel_layer.view), panel_layer.view.fov_y});
     }
@@ -2373,6 +2544,7 @@ int run(int argc, char** argv) {
       apply_window(s);
       renderer.set_vsync(save.options.vsync);
       renderer.set_picture_aspect(save.options.picture_43 ? 4.0f / 3.0f : 0.0f);
+      renderer.set_low_latency(save.options.low_latency);
     }
     std::uint32_t seed = opt.seed;
     int last_rank = 0, last_score = 0, lost_song = 0, points_before_lost = 0;
@@ -2587,7 +2759,7 @@ int run(int argc, char** argv) {
       bool in_settings = false, toggle_settings = false, settings_after_film = false, picker_start = false;
       PlayPreview preview;
       std::vector<SceneLine> preview_lines;
-      std::vector<vibr::LineInstance> settings_lines[2];
+      std::vector<vibr::LineInstance> settings_lines[3];
       std::uint64_t last_ns = SDL_GetTicksNS();
       double behind = 0;
       bool course_chosen = false, running = true, replay = false;
@@ -2644,6 +2816,27 @@ int run(int argc, char** argv) {
             if (down) *p[which] = true;
             if (which < 4) *h[which] = down;
           };
+          if (is_mouse(e)) {  // (task 4.16 G)
+            const MouseInput m = mouse_event(s, e, false);
+            if (in_settings) {  // our settings: hover, click, wheel
+              SettingsPanel::Input pi;
+              panel_mouse(s, panel, m, pi);
+              const bool what[6] = {pi.up, pi.down, pi.left, pi.right, pi.confirm, pi.cancel};
+              for (int k = 0; k < 6; ++k)
+                if (what[k]) press(k, true), press(k, false);
+            } else {  // the original's menus and the picker: the wheel moves, left confirms, right goes back
+              if (m.wheel > 0) press(0, true), press(0, false);
+              if (m.wheel < 0) press(1, true), press(1, false);
+              if (m.left_click && m.over) press(4, true), press(4, false);
+              if (m.right_click) press(5, true), press(5, false);
+            }
+            continue;
+          }
+          if ((e.type == SDL_EVENT_KEY_DOWN || e.type == SDL_EVENT_KEY_UP) && camera_key(s, e.key)) continue;
+          if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_HOME && !e.key.repeat) {
+            r3_pressed(s, !in_settings);
+            continue;
+          }
           switch (e.type) {
             case SDL_EVENT_QUIT: running = false; break;
             case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
@@ -2722,7 +2915,7 @@ int run(int argc, char** argv) {
                   break;
                 case SDL_GAMEPAD_BUTTON_EAST: case SDL_GAMEPAD_BUTTON_NORTH: press(5, down); break;
                 case SDL_GAMEPAD_BUTTON_BACK: break;  // (Select: nothing in the menus; in play the original's Start)
-                case SDL_GAMEPAD_BUTTON_RIGHT_STICK: if (down) renderer.recentre(); break;  // R3
+                case SDL_GAMEPAD_BUTTON_RIGHT_STICK: if (down) r3_pressed(s, !in_settings); break;  // R3
                 case SDL_GAMEPAD_BUTTON_LEFT_STICK:  // L3
                   if (down) {
                     l3_pressed(s);
@@ -2762,6 +2955,7 @@ int run(int argc, char** argv) {
         // (In the settings the right stick zooms play's view, which the preview shows.)
         if (in_settings) zoom_or_circle_with_stick(s, frame_dt, play_zoom(s));
         else if (opt.vr) zoom_with_stick(s, frame_dt, s.save.options.vr_menu_zoom);
+        else if (beside_vibri(s)) zoom_with_stick(s, frame_dt, s.save.options.menu_zoom, s.save.options.menu_angle);  // (the monitor's menus)
         behind = std::min(behind + double(now_ns - last_ns) * 1e-9, 0.1);
         last_ns = now_ns;
         while (behind >= 1.0 / TitleScreens::kFrameRate) {
@@ -3284,6 +3478,11 @@ int run(int argc, char** argv) {
             return vibr::look_at({v.eye.x, v.eye.y, v.eye.z}, {v.target.x, v.target.y, v.target.z}, {0, -1, 0});
           };
           std::vector<vibr::Layer> out{{&settings_lines[0], matrix(view), view.fov_y}, {&settings_lines[1], matrix(pl.view), pl.view.fov_y}};
+          if (!opt.headset) {  // the keys and the mouse, at the bottom (task 4.16 G)
+            const Hud::Layer keys = panel.draw_keys(next_random(jitter_seed + 1));
+            to_instances(s, keys.lines, menu_display_frame, settings_lines[2]);
+            out.push_back({&settings_lines[2], matrix(keys.view), keys.view.fov_y});
+          }
           draw_frame(s, out, double(ticked_ns - now_ns) * 1e-6, double(SDL_GetTicksNS() - ticked_ns) * 1e-6);
           continue;
         }
@@ -3349,6 +3548,7 @@ int run(int argc, char** argv) {
                      v.target.z + (v.eye.z - v.target.z) * k};
           }
           if (opt.vr && at_title && !in_kiosk) v = opening_forward(v);
+          if (!opt.headset && beside_vibri(s) && i < layers.size()) v = menu_view(v, save.options.menu_zoom, save.options.menu_angle);
           out.push_back({&menu_lines[i], vibr::look_at({v.eye.x, v.eye.y, v.eye.z}, {v.target.x, v.target.y, v.target.z}, {0, -1, 0}), v.fov_y});
         }
         draw_frame(s, out, double(ticked_ns - now_ns) * 1e-6, double(SDL_GetTicksNS() - ticked_ns) * 1e-6);

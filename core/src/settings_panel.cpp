@@ -13,7 +13,7 @@ namespace vib {
 namespace {
 
 constexpr double kTau = 6.28318530717958647692;
-constexpr int kItemCount = 64;
+constexpr int kItemCount = 65;
 constexpr int kLanguages = 5;  // German, English, Spanish, French, Italian (the PAL menus)
 
 // Our own words. Order as SettingsPanel::Item.
@@ -23,33 +23,33 @@ const char* const kLabels[kLanguages][kItemCount] = {
      "Sicht nach hinten", "Ansicht zentrieren", "Soundeffekte", "Vibration", "Tonversatz", "Lied beenden", "Fortsetzen", "Leistung", "Punkte als Zahl", "Gleiche Strecke", "Effektlautstärke", "Scrolltempo", "Timing-Anzeige", "FC-Jubel", "Strecke um dich", "Kreisgröße", "Grafik", "Modifikatoren", "Eigene Farben", "Zurück",
      "Linie", "Block", "Grube", "Schleife", "Welle", "Block + Grube", "Block + Schleife", "Block + Welle", "Grube + Schleife",
      "Grube + Welle", "Schleife + Welle", "Vibri Engel", "Vibri Hase", "Vibri Frosch", "Vibri Wurm", "Hintergrund", "Menü", "Farben zurücksetzen", "Kalibrierung", "Ton kalibrieren", "Bildversatz", "Bild kalibrieren", "Leuchten", "Bildrate", "Klassischer Bildschirm", "Bildschirmgröße", "Originaler Look", "Meinen Look zurück",
-     "Kamera", "Sichtfeld", "Anzeige", "Fenstermodus", "Auflösung", "VSync", "Bildratenlimit", "Bildformat"},
+     "Kamera", "Sichtfeld", "Anzeige", "Fenstermodus", "Auflösung", "VSync", "Bildratenlimit", "Bildformat", "Geringe Latenz"},
     // English
     {"Continue", "Wobble size", "Wobble hold", "Smooth motion", "Line width", "Zoom", "View angle", "See ahead", "See behind",
      "Recenter view", "Sound effects", "Vibration", "Sound timing", "Quit song", "Resume", "Performance", "Score in numbers", "Consistent courses", "Effects volume", "Scroll speed", "Timing feedback", "FC celebration", "Course around you", "Circle size", "Visual", "Modifiers", "Custom colors", "Back",
      "Road line", "Block", "Pit", "Loop", "Wave", "Block + Pit", "Block + Loop", "Block + Wave", "Pit + Loop", "Pit + Wave",
      "Loop + Wave", "Vibri angel", "Vibri rabbit", "Vibri frog", "Vibri worm", "Background", "Menu", "Reset colors", "Calibration", "Sound calibration", "Picture timing", "Picture calibration", "Glow", "Refresh rate", "Classic screen", "Screen size", "Original look", "Restore my look",
-     "Camera", "Field of view", "Display", "Window mode", "Resolution", "VSync", "Frame limit", "Picture shape"},
+     "Camera", "Field of view", "Display", "Window mode", "Resolution", "VSync", "Frame limit", "Picture shape", "Low latency"},
     // Spanish
     {"Continuar", "Tamaño del temblor", "Ritmo del temblor", "Movimiento suave", "Grosor de línea", "Zoom", "Ángulo de vista",
      "Ver adelante", "Ver atrás", "Centrar vista", "Efectos de sonido", "Vibración", "Desfase de sonido", "Salir de la canción", "Reanudar", "Rendimiento", "Puntos en números", "Recorridos fijos", "Volumen de efectos", "Velocidad de avance", "Precisión en ms", "Celebrar FC", "Recorrido alrededor", "Tamaño del círculo", "Imagen", "Modificadores", "Colores propios", "Volver",
      "Línea", "Bloque", "Foso", "Rizo", "Onda", "Bloque + Foso", "Bloque + Rizo", "Bloque + Onda", "Foso + Rizo", "Foso + Onda",
      "Rizo + Onda", "Vibri ángel", "Vibri conejo", "Vibri rana", "Vibri gusano", "Fondo", "Menú", "Restablecer colores", "Calibración", "Calibrar sonido", "Desfase de imagen", "Calibrar imagen", "Resplandor", "Frecuencia", "Pantalla clásica", "Tamaño de pantalla", "Aspecto original", "Recuperar mi aspecto",
-     "Cámara", "Campo de visión", "Pantalla", "Modo de ventana", "Resolución", "VSync", "Límite de fps", "Formato de imagen"},
+     "Cámara", "Campo de visión", "Pantalla", "Modo de ventana", "Resolución", "VSync", "Límite de fps", "Formato de imagen", "Baja latencia"},
     // French
     {"Continuer", "Taille du tremblement", "Rythme du tremblement", "Mouvement fluide", "Épaisseur des lignes", "Zoom",
      "Angle de vue", "Voir devant", "Voir derrière", "Recentrer la vue", "Effets sonores", "Vibration", "Décalage du son",
      "Quitter la chanson", "Reprise", "Performances", "Score en chiffres", "Parcours fixes", "Volume des effets", "Vitesse de défilement", "Précision en ms", "Fête du FC", "Parcours autour de toi", "Taille du cercle", "Visuel", "Modificateurs", "Couleurs perso", "Retour",
      "Ligne", "Bloc", "Fosse", "Boucle", "Vague", "Bloc + Fosse", "Bloc + Boucle", "Bloc + Vague", "Fosse + Boucle", "Fosse + Vague",
      "Boucle + Vague", "Vibri ange", "Vibri lapin", "Vibri grenouille", "Vibri ver", "Fond", "Menu", "Réinitialiser couleurs", "Calibrage", "Calibrer le son", "Décalage de l'image", "Calibrer l'image", "Halo", "Fréquence", "Écran classique", "Taille de l'écran", "Aspect d'origine", "Rétablir mon aspect",
-     "Caméra", "Champ de vision", "Affichage", "Mode fenêtre", "Résolution", "VSync", "Limite d'images", "Format d'image"},
+     "Caméra", "Champ de vision", "Affichage", "Mode fenêtre", "Résolution", "VSync", "Limite d'images", "Format d'image", "Faible latence"},
     // Italian
     {"Continua", "Ampiezza del tremolio", "Ritmo del tremolio", "Movimento fluido", "Spessore delle linee", "Zoom",
      "Angolo di vista", "Vista avanti", "Vista indietro", "Ricentra la vista", "Effetti sonori", "Vibrazione", "Ritardo audio",
      "Esci dalla canzone", "Ripresa", "Prestazioni", "Punteggio in cifre", "Percorsi fissi", "Volume effetti", "Velocità di scorrimento", "Precisione in ms", "Festa FC", "Percorso intorno a te", "Dimensione del cerchio", "Grafica", "Modificatori", "Colori personalizzati", "Indietro",
      "Linea", "Blocco", "Fossa", "Giro", "Onda", "Blocco + Fossa", "Blocco + Giro", "Blocco + Onda", "Fossa + Giro", "Fossa + Onda",
      "Giro + Onda", "Vibri angelo", "Vibri coniglio", "Vibri rana", "Vibri verme", "Sfondo", "Menu", "Ripristina colori", "Calibrazione", "Calibra audio", "Ritardo immagine", "Calibra immagine", "Bagliore", "Frequenza", "Schermo classico", "Dimensione schermo", "Aspetto originale", "Ripristina il mio aspetto",
-     "Telecamera", "Campo visivo", "Schermo", "Modalità finestra", "Risoluzione", "VSync", "Limite fotogrammi", "Formato immagine"},
+     "Telecamera", "Campo visivo", "Schermo", "Modalità finestra", "Risoluzione", "VSync", "Limite fotogrammi", "Formato immagine", "Bassa latenza"},
 };
 const char* const kMore[kLanguages] = {"Weitere Einstellungen (Start)", "More options (Start)", "Más ajustes (Start)", "Autres réglages (Start)",
                                        "Altre impostazioni (Start)"};
@@ -87,6 +87,13 @@ const char* const kCameraNames[kLanguages][2] = {
 const char* const kWindowModes[kLanguages][3] = {
     {"Fenster", "Randlos", "Vollbild"}, {"Window", "Borderless", "Fullscreen"}, {"Ventana", "Sin bordes", "Completa"},
     {"Fenêtre", "Sans bordure", "Plein écran"}, {"Finestra", "Senza bordi", "Schermo intero"},
+};
+const char* const kKeys[kLanguages] = {
+    "F11 Vollbild   F3 Leistung   Strg+Pfeile oder Maus: Kamera",
+    "F11 fullscreen   F3 performance   Ctrl+arrows or mouse: camera",
+    "F11 pantalla completa   F3 rendimiento   Ctrl+flechas o ratón: cámara",
+    "F11 plein écran   F3 performances   Ctrl+flèches ou souris: caméra",
+    "F11 schermo intero   F3 prestazioni   Ctrl+frecce o mouse: telecamera",
 };
 const char* const kDesktop[kLanguages] = {"Desktop", "Desktop", "Escritorio", "Bureau", "Desktop"};
 const char* const kFill[kLanguages] = {"Füllen", "Fill", "Llenar", "Remplir", "Riempi"};
@@ -270,6 +277,7 @@ std::string SettingsPanel::value(Item item, const Options& o, bool vr) const {
       std::snprintf(buf, sizeof buf, "%dx%d %d Hz", o.fullscreen_w, o.fullscreen_h, o.fullscreen_hz);
       break;
     case Item::Vsync: return on_off(o.vsync);
+    case Item::LowLatency: return on_off(o.low_latency);
     case Item::FrameLimit:
       if (o.frame_limit <= 0) return to_font_text(kOff[l]);
       std::snprintf(buf, sizeof buf, "%d fps", o.frame_limit);
@@ -390,6 +398,7 @@ bool SettingsPanel::change(Item item, int d, Options& o, bool vr) {
       return true;
     }
     case Item::Vsync: o.vsync = !o.vsync; return true;
+    case Item::LowLatency: o.low_latency = !o.low_latency; return true;
     case Item::FrameLimit: {
       constexpr int n = int(std::size(kFrameLimits));
       int at = 0;
@@ -539,7 +548,7 @@ SettingsPanel::Action SettingsPanel::tick(const Input& in, double seconds, Optio
       case Item::Smooth: case Item::SoundEffects: case Item::Vibration: case Item::ResumeStyle: case Item::Performance: case Item::ScoreNumbers: case Item::FixedCourses: case Item::TimingFeedback: case Item::FcCelebration: case Item::WrapCourse:
       case Item::ClassicScreen:
       case Item::OriginalLook: case Item::RestoreLook:
-      case Item::Camera: case Item::WindowMode: case Item::Vsync: case Item::PictureShape:
+      case Item::Camera: case Item::WindowMode: case Item::Vsync: case Item::PictureShape: case Item::LowLatency:
         return change(item, 1, o, vr) ? Action::Changed : Action::None;
       case Item::ResetColours: case Item::ColourRoad: case Item::ColourBlock: case Item::ColourPit: case Item::ColourLoop:
       case Item::ColourWave: case Item::ColourBlockPit: case Item::ColourBlockLoop: case Item::ColourBlockWave:
@@ -916,6 +925,72 @@ Hud::Layer SettingsPanel::draw(const Options& o, bool vr, std::uint32_t seed) {
   };
   if (first_ > 0) mark(top - row_height * 0.6f, -1.0f);
   if (first_ + shown < int(items_.size())) mark(top + row_height * (float(shown) - 0.4f), 1.0f);
+  tag_menu(layer.lines);  // (custom colours: Menu)
+  return layer;
+}
+
+// ---------------------------------------------------------------- the mouse (task 4.16 G)
+
+int SettingsPanel::row_at(float x, float y, float aspect) const {
+  if (items_.empty() || aspect <= 0) return -1;
+  // As draw(): rows 200 apart at depth 4000 (times size, which cancels on the screen),
+  // through the text camera (fov as start_layer's), y down.
+  const float half_height = 4000.0f * std::tan(0.5f * float(682 * kTau / 4096.0));
+  const float px = x * half_height * aspect, py = y * half_height;
+  if (px < label_x_ - 250.0f || px > value_right_ + 100.0f) return -1;
+  const float top = -top_ * half_height + 100.0f;  // (the first row's middle, as draw())
+  const int r = int(std::floor((py - (top - 100.0f)) / 200.0f));
+  const int shown = std::min(rows_, int(items_.size()));
+  if (r < 0 || r >= shown) return -1;
+  return std::clamp(first_, 0, std::max(0, int(items_.size()) - shown)) + r;
+}
+
+bool SettingsPanel::hover(int row) {
+  if (row < 0 || row >= int(items_.size()) || row == cursor_) return false;
+  cursor_ = row;
+  repeat_dir_ = scroll_dir_ = 0;
+  return true;
+}
+
+SettingsPanel::Input SettingsPanel::click(int row, bool right_button) {
+  Input in;
+  if (row < 0 || row >= int(items_.size())) {
+    in.cancel = right_button;  // (a right click off the rows: back)
+    return in;
+  }
+  hover(row);
+  const Item item = items_[std::size_t(row)];
+  const std::string v = value(item, Options{}, false);
+  const bool has_value = !v.empty() && v != ">";
+  bool confirms = is_group(item) || item == Item::Back;
+  switch (item) {
+    case Item::Continue: case Item::Recentre: case Item::QuitSong: case Item::SoundCalibration: case Item::PictureCalibration:
+    case Item::Smooth: case Item::SoundEffects: case Item::Vibration: case Item::ResumeStyle: case Item::ScoreNumbers:
+    case Item::FixedCourses: case Item::TimingFeedback: case Item::FcCelebration: case Item::WrapCourse: case Item::ClassicScreen:
+    case Item::OriginalLook: case Item::RestoreLook: case Item::Camera: case Item::WindowMode: case Item::Vsync:
+    case Item::PictureShape: case Item::LowLatency: case Item::ResetColours:
+      confirms = true;
+      break;
+    default: break;
+  }
+  if (right_button) {
+    if (has_value && item != Item::SoundCalibration && item != Item::PictureCalibration) in.left = true;
+    else in.cancel = true;
+  } else if (confirms) {
+    in.confirm = true;
+  } else {
+    in.right = true;
+  }
+  return in;
+}
+
+Hud::Layer SettingsPanel::draw_keys(std::uint32_t seed) {
+  Hud::Layer layer = start_layer(seed);
+  const float half_height = 4000.0f * std::tan(0.5f * layer.view.fov_y);
+  const Rgb dim{90, 90, 90};
+  const std::string text = to_font_text(kKeys[table_language(language_)]);
+  constexpr float kScale = 0.7f;
+  write(text, -0.5f * text_width(text, kScale), 0.92f * half_height, kScale, &dim, 4, layer.lines);
   tag_menu(layer.lines);  // (custom colours: Menu)
   return layer;
 }

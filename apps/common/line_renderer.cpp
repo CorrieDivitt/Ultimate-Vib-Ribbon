@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
+#include <deque>
 #include <stdexcept>
 #include <string>
 
@@ -140,6 +141,9 @@ class Renderer::Impl {
         r.timing_.period_ms = mode && mode->refresh_rate > 0 ? 1000.0 / double(mode->refresh_rate) : 0.0;
       }
     } measure{*this, start_ns};
+    // Frames handed over earlier that have reached the screen since (a poll: their time is
+    // known to within this moment).
+    if (present_wait_ok_) poll_presented();
     if (resize_ || extent_.width == 0) {
       vkDeviceWaitIdle(device_);
       create_swapchain();
@@ -153,6 +157,7 @@ class Renderer::Impl {
     if (r != VK_SUBOPTIMAL_KHR) check(r, "vkAcquireNextImageKHR");
     vkResetFences(device_, 1, &frame_fence_);
     measure.waited = SDL_GetTicksNS() - start_ns;  // the fence and the next image: vsync's wait
+    if (present_wait_ok_) poll_presented();  // (an image comes free as one is shown: the closest moment to poll)
 
     // Every layer's lines go into the one buffer, back to back.
     std::vector<std::uint32_t> firsts, counts;
@@ -220,9 +225,36 @@ class Renderer::Impl {
     present.swapchainCount = 1;
     present.pSwapchains = &swapchain_;
     present.pImageIndices = &image;
+    const std::uint64_t id = ++present_id_;
+    VkPresentIdKHR present_id{VK_STRUCTURE_TYPE_PRESENT_ID_KHR};
+    if (present_wait_ok_) {
+      present_id.swapchainCount = 1;
+      present_id.pPresentIds = &id;
+      present.pNext = &present_id;
+      pending_.push_back({id, start_ns});
+    }
     r = vkQueuePresentKHR(queue_, &present);
     if (r == VK_ERROR_OUT_OF_DATE_KHR || r == VK_SUBOPTIMAL_KHR) resize_ = true;
     else check(r, "vkQueuePresentKHR");
+    // Low latency with present wait: wait here until the frame before this one is on the
+    // screen, so at most this frame waits in line and the next is built close to its turn.
+    if (present_wait_ok_ && low_latency_ && !resize_ && id > 1) wait_presented(id - 1, 100'000'000);
+  }
+
+  // Display lead (task 4.16 F): how long from the start of a draw() until its frame
+  // reaches the screen, smoothed; measured with present wait, else estimated from the
+  // frames that can wait in line (FIFO: the images but one; otherwise one frame).
+  double display_lead_ms() const {
+    if (lead_ms_ > 0) return lead_ms_;
+    const double period = timing_.period_ms > 0 ? timing_.period_ms : 1000.0 / 60.0;
+    if (present_mode_ == VK_PRESENT_MODE_FIFO_KHR) return period * double(std::max(1u, image_count_ - 1));
+    return period;
+  }
+  bool lead_measured() const { return lead_ms_ > 0; }
+  void set_low_latency(bool on) {
+    if (on == low_latency_) return;
+    low_latency_ = on;
+    resize_ = true;
   }
 
  private:
@@ -244,7 +276,12 @@ class Renderer::Impl {
 
     VkApplicationInfo app{VK_STRUCTURE_TYPE_APPLICATION_INFO};
     app.pApplicationName = "Vib-Ribbon VR";
-    app.apiVersion = VK_API_VERSION_1_0;
+    // 1.1 where the loader has it (for VK_KHR_present_wait's feature query; task 4.16 F).
+    std::uint32_t loader = VK_API_VERSION_1_0;
+    if (auto version = reinterpret_cast<PFN_vkEnumerateInstanceVersion>(vkGetInstanceProcAddr(nullptr, "vkEnumerateInstanceVersion")))
+      version(&loader);
+    instance_api_ = loader >= VK_API_VERSION_1_1 ? VK_API_VERSION_1_1 : VK_API_VERSION_1_0;
+    app.apiVersion = instance_api_;
     VkInstanceCreateInfo info{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
     info.pApplicationInfo = &app;
     info.enabledExtensionCount = std::uint32_t(exts.size());
@@ -304,14 +341,51 @@ class Renderer::Impl {
     q.queueFamilyIndex = queue_family_;
     q.queueCount = 1;
     q.pQueuePriorities = &priority;
-    const char* ext = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
+    std::vector<const char*> exts = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
     VkDeviceCreateInfo info{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
+    // When each frame reached the screen (task 4.16 F): VK_KHR_present_id and
+    // VK_KHR_present_wait, where the driver has both (needs Vulkan 1.1 for the query).
+    VkPhysicalDevicePresentIdFeaturesKHR id_features{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR};
+    VkPhysicalDevicePresentWaitFeaturesKHR wait_features{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_WAIT_FEATURES_KHR};
+    {
+      VkPhysicalDeviceProperties props;
+      vkGetPhysicalDeviceProperties(gpu_, &props);
+      std::uint32_t n = 0;
+      vkEnumerateDeviceExtensionProperties(gpu_, nullptr, &n, nullptr);
+      std::vector<VkExtensionProperties> have(n);
+      vkEnumerateDeviceExtensionProperties(gpu_, nullptr, &n, have.data());
+      auto has = [&](const char* name) {
+        return std::any_of(have.begin(), have.end(), [&](const VkExtensionProperties& e) { return std::strcmp(e.extensionName, name) == 0; });
+      };
+      auto features2 = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2>(vkGetInstanceProcAddr(instance_, "vkGetPhysicalDeviceFeatures2"));
+      if (instance_api_ >= VK_API_VERSION_1_1 && props.apiVersion >= VK_API_VERSION_1_1 && features2 &&
+          has(VK_KHR_PRESENT_ID_EXTENSION_NAME) && has(VK_KHR_PRESENT_WAIT_EXTENSION_NAME)) {
+        VkPhysicalDeviceFeatures2 f{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+        f.pNext = &id_features;
+        id_features.pNext = &wait_features;
+        features2(gpu_, &f);
+        if (id_features.presentId && wait_features.presentWait) {
+          exts.push_back(VK_KHR_PRESENT_ID_EXTENSION_NAME);
+          exts.push_back(VK_KHR_PRESENT_WAIT_EXTENSION_NAME);
+          id_features.pNext = &wait_features;
+          wait_features.pNext = nullptr;
+          info.pNext = &id_features;
+          present_wait_ok_ = true;
+        }
+      }
+    }
     info.queueCreateInfoCount = 1;
     info.pQueueCreateInfos = &q;
-    info.enabledExtensionCount = 1;
-    info.ppEnabledExtensionNames = &ext;
+    info.enabledExtensionCount = std::uint32_t(exts.size());
+    info.ppEnabledExtensionNames = exts.data();
     check(vkCreateDevice(gpu_, &info, nullptr, &device_), "vkCreateDevice");
     vkGetDeviceQueue(device_, queue_family_, 0, &queue_);
+    if (present_wait_ok_) {
+      wait_for_present_ = reinterpret_cast<PFN_vkWaitForPresentKHR>(vkGetDeviceProcAddr(device_, "vkWaitForPresentKHR"));
+      present_wait_ok_ = wait_for_present_ != nullptr;
+    }
+    std::printf("Monitor: %s\n", present_wait_ok_ ? "frames' display times measured (present wait)"
+                                                  : "frames' display times estimated (no present wait on this driver)");
 
     std::uint32_t count = 0;
     vkGetPhysicalDeviceSurfaceFormatsKHR(gpu_, surface_, &count, nullptr);
@@ -528,7 +602,8 @@ class Renderer::Impl {
 
     VkSwapchainCreateInfoKHR info{VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR};
     info.surface = surface_;
-    info.minImageCount = caps.minImageCount + 1;
+    // Low latency (task 4.16 F): as few images as the display allows, so fewer frames wait in line.
+    info.minImageCount = low_latency_ ? std::max(2u, caps.minImageCount) : caps.minImageCount + 1;
     if (caps.maxImageCount && info.minImageCount > caps.maxImageCount) info.minImageCount = caps.maxImageCount;
     info.imageFormat = surface_format_.format;
     info.imageColorSpace = surface_format_.colorSpace;
@@ -555,9 +630,12 @@ class Renderer::Impl {
     present_mode_ = info.presentMode;
     info.clipped = VK_TRUE;
     check(vkCreateSwapchainKHR(device_, &info, nullptr, &swapchain_), "vkCreateSwapchainKHR");
+    pending_.clear();  // (a new swapchain counts its presents afresh)
+    last_waited_ = 0;
 
     std::uint32_t count = 0;
     vkGetSwapchainImagesKHR(device_, swapchain_, &count, nullptr);
+    image_count_ = count;
     std::vector<VkImage> images(count);
     vkGetSwapchainImagesKHR(device_, swapchain_, &count, images.data());
 
@@ -636,6 +714,37 @@ class Renderer::Impl {
   VkImageView depth_view_ = VK_NULL_HANDLE;
   bool resize_ = false;
   bool vsync_ = true;
+  bool low_latency_ = false;
+  std::uint32_t instance_api_ = VK_API_VERSION_1_0, image_count_ = 2;
+  bool present_wait_ok_ = false;
+  PFN_vkWaitForPresentKHR wait_for_present_ = nullptr;
+  std::uint64_t present_id_ = 0, last_waited_ = 0;
+  struct Pending {
+    std::uint64_t id, start_ns;
+  };
+  std::deque<Pending> pending_;
+  double lead_ms_ = 0;
+  // Waits up to `timeout` ns for present `id`; on success every pending frame up to it is
+  // on the screen, and the lead is updated from the newest of them.
+  bool wait_presented(std::uint64_t id, std::uint64_t timeout) {
+    if (id <= last_waited_) return true;
+    const VkResult r = wait_for_present_(device_, swapchain_, id, timeout);
+    if (r != VK_SUCCESS) return false;
+    const std::uint64_t now = SDL_GetTicksNS();
+    last_waited_ = id;
+    std::uint64_t start = 0;
+    while (!pending_.empty() && pending_.front().id <= id) start = pending_.front().start_ns, pending_.pop_front();
+    if (start && now > start) {
+      const double ms = double(now - start) * 1e-6;
+      if (ms < 200.0) lead_ms_ = lead_ms_ > 0 ? lead_ms_ + (ms - lead_ms_) * 0.05 : ms;
+    }
+    return true;
+  }
+  void poll_presented() {
+    while (!pending_.empty() && wait_presented(pending_.front().id, 0)) {
+    }
+    while (pending_.size() > 16) pending_.pop_front();  // (never shown, e.g. while minimised)
+  }
   float shape_ = 0.0f;  // the picture's width / height; 0: the whole window
   VkPresentModeKHR present_mode_ = VK_PRESENT_MODE_FIFO_KHR;
 };
@@ -657,5 +766,8 @@ void Renderer::draw(const std::vector<Layer>& layers, float line_width) {
 FrameTiming Renderer::timing() const { return impl_->timing(); }
 void Renderer::set_vsync(bool on) { impl_->set_vsync(on); }
 void Renderer::set_picture_aspect(float aspect) { impl_->set_shape(aspect); }
+void Renderer::set_low_latency(bool on) { impl_->set_low_latency(on); }
+double Renderer::display_lead_ms() const { return impl_->display_lead_ms(); }
+bool Renderer::lead_measured() const { return impl_->lead_measured(); }
 
 }  // namespace vibr

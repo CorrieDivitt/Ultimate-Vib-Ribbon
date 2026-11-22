@@ -77,11 +77,12 @@ TEST(save_text_round_trips_and_tolerates_old_files) {
     m.options.jitter_hold = 2, m.options.camera = 1, m.options.vr_camera = 0, m.options.zoom = 0.5, m.options.view_angle = -60;
     m.options.fov = 75, m.options.ahead_seconds = kWholeSongSeconds, m.options.behind_seconds = 30, m.options.window_mode = 2;
     m.options.fullscreen_w = 2560, m.options.fullscreen_h = 1440, m.options.fullscreen_hz = 144, m.options.vsync = false;
-    m.options.frame_limit = 144, m.options.picture_43 = true;
+    m.options.frame_limit = 144, m.options.picture_43 = true, m.options.low_latency = true, m.options.menu_zoom = 2.0, m.options.menu_angle = 30;
     const Options b = SaveData::from_text(m.to_text()).options;
     CHECK(b.jitter_hold == 2 && b.camera == 1 && b.vr_camera == 0 && b.zoom == 0.5 && b.view_angle == -60 && b.fov == 75);
     CHECK(b.ahead_seconds == kWholeSongSeconds && b.behind_seconds == 30 && b.window_mode == 2 && b.fullscreen_w == 2560 &&
           b.fullscreen_h == 1440 && b.fullscreen_hz == 144 && !b.vsync && b.frame_limit == 144 && b.picture_43);
+    CHECK(b.low_latency && b.menu_zoom == 2.0 && b.menu_angle == 30 && !SaveData().options.low_latency && SaveData().options.menu_zoom == 1.0);
     const Options d0 = SaveData().options;  // the monitor starts as the original; the headset beside Vibri
     CHECK(d0.jitter_hold == 0 && d0.camera == 0 && d0.vr_camera == 1 && d0.fov == 60 && d0.ahead_seconds == 8 && d0.behind_seconds == 2);
     CHECK(d0.window_mode == 0 && d0.fullscreen_w == 0 && d0.vsync && d0.frame_limit == 0 && !d0.picture_43);

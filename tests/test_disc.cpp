@@ -1198,7 +1198,7 @@ TEST(disc_sces02873_settings_labels_with_defaults_fit_beside_their_values) {
                               I::ColourRoad, I::ColourBlock, I::ColourPit, I::ColourLoop, I::ColourWave, I::ColourBlockPit, I::ColourBlockLoop,
                               I::ColourBlockWave, I::ColourPitLoop, I::ColourPitWave, I::ColourLoopWave, I::ColourAngel, I::ColourRabbit,
                               I::ColourFrog, I::ColourWorm, I::ColourBackground, I::ColourMenu, I::ResetColours, I::Calibration, I::SoundCalibration, I::PictureTiming, I::PictureCalibration, I::Glow, I::RefreshRate, I::ClassicScreen, I::ClassicSize, I::OriginalLook, I::RestoreLook, I::Continue,
-                              I::Camera, I::FieldOfView, I::Display, I::WindowMode, I::Resolution, I::Vsync, I::FrameLimit, I::PictureShape};
+                              I::Camera, I::FieldOfView, I::Display, I::WindowMode, I::Resolution, I::Vsync, I::FrameLimit, I::PictureShape, I::LowLatency};
   Options longest;
   longest.camera = longest.vr_camera = 1;
   longest.window_mode = 2;
@@ -1303,15 +1303,37 @@ TEST(disc_sces02873_monitor_settings_step_and_show) {
   CHECK(p.label(I::PictureShape, false) == "Picture shape (4:3)" && p.value(I::PictureShape, o, false) == "Fill");
   p.tick(confirm, 0.02, o, false);
   CHECK(o.picture_43 && p.value(I::PictureShape, o, false) == "4:3");
+  // The mouse: the row under the pointer, hovering, clicking (left confirms a switch or
+  // steps a value forward, right steps back or goes back).
+  p.set_place(0.6f, 14, 1.0f);
+  p.set_columns(-1600.0f, 1600.0f);
+  {
+    const float half = 4000.0f * std::tan(0.5f * float(682 * 6.28318530717958647692 / 4096.0));
+    const float first_y = (-0.6f * half + 100.0f) / half, step = 200.0f / half;
+    CHECK(p.row_at(0.0f, first_y, 4.0f / 3.0f) == 0 && p.row_at(0.0f, first_y + 3.0f * step, 4.0f / 3.0f) == 3);
+    CHECK(p.row_at(0.0f, first_y - 1.2f * step, 4.0f / 3.0f) == -1 && p.row_at(0.99f, first_y, 4.0f / 3.0f) == -1);  // above, beside
+    CHECK(p.hover(4) && p.current() == I::FieldOfView && !p.hover(4));
+    SettingsPanel::Input c = p.click(1, false);  // Camera: a switch
+    CHECK(c.confirm && !c.right && p.current() == I::Camera);
+    c = p.click(4, false);  // Field of view: a value, forward
+    CHECK(c.right && !c.confirm);
+    c = p.click(4, true);  // and back
+    CHECK(c.left && !c.cancel);
+    c = p.click(-1, true);  // off the rows: back
+    CHECK(c.cancel);
+    CHECK(p.draw_keys(5).lines.size() > 100);
+  }
+  CHECK(p.label(I::LowLatency, false) == "Low latency" && p.value(I::LowLatency, o, false) == "Off");
   // Every new label and value is in the font, in every language.
   for (int language = 0; language < 5; ++language) {
     const Pak g(iso.read("GAME/" + language_prefix(language) + "FILES.PAK"));
     SettingsPanel q(g, language, &words);
+    CHECK(q.draw_keys(1).lines.size() > 100);
     Options v;
     for (const int cam : {0, 1})
       for (const int mode : {0, 1, 2}) {
         v.camera = v.vr_camera = cam, v.window_mode = mode, v.picture_43 = mode == 1;
-        for (const I item : {I::Camera, I::FieldOfView, I::Display, I::WindowMode, I::Resolution, I::Vsync, I::FrameLimit, I::PictureShape})
+        for (const I item : {I::Camera, I::FieldOfView, I::Display, I::WindowMode, I::Resolution, I::Vsync, I::FrameLimit, I::PictureShape, I::LowLatency})
           for (const bool vr : {false, true}) {
             CHECK(q.label(item, vr).find('?') == std::string::npos);
             CHECK(q.value(item, v, vr).find('?') == std::string::npos);

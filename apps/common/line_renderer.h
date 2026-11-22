@@ -139,6 +139,11 @@ class Display {
   virtual void set_picture_aspect(float) {}
   // The picture's width / height as drawn (0 unknown, e.g. minimised).
   virtual float picture_aspect() const { return 0.0f; }
+  // A monitor: fewer frames waiting in line (two swapchain images; with present wait,
+  // each draw waits until the frame before it is on the screen).
+  virtual void set_low_latency(bool) {}
+  // Whether display_lead_ms() is measured (present wait) or an estimate.
+  virtual bool lead_measured() const { return true; }
   // The colour behind the lines, as shown on a monitor (0-1 each; the original's black).
   void set_background(float r, float g, float b) { background_[0] = r, background_[1] = g, background_[2] = b; }
 
@@ -161,6 +166,9 @@ class Renderer : public Display {
   void set_vsync(bool on) override;
   void set_picture_aspect(float aspect) override;
   float picture_aspect() const override { return aspect(); }
+  void set_low_latency(bool on) override;
+  double display_lead_ms() const override;  // from the start of a draw() to the screen, smoothed (task 4.16 F)
+  bool lead_measured() const override;
   void draw(const std::vector<LineInstance>& lines, const Mat4& view, float fov_y, float line_width);
   void draw(const std::vector<Layer>& layers, float line_width) override;
   FrameTiming timing() const override;

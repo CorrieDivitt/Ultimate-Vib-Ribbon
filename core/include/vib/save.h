@@ -106,6 +106,12 @@ struct Options {
   bool vsync = true;      // off: frames as fast as they come (no tearing where the driver offers it)
   int frame_limit = 0;    // frames a second at most (0: none)
   bool picture_43 = false;  // the original's 4:3 picture with bars at the sides, instead of the whole window
+  bool low_latency = false; // fewer frames waiting in line for the monitor (each built nearer its turn)
+  // The monitor's menus with the camera beside Vibri: every menu camera turned round
+  // what it looks at (degrees) and moved towards it (larger: closer), as the headset's
+  // menus can be zoomed and looked round.
+  double menu_zoom = 1.0;
+  double menu_angle = 0.0;
   float music_volume = 1.0f, effects_volume = 1.0f;
 };
 
