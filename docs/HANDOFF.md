@@ -1,6 +1,6 @@
 # Vib Ribbon VR: Handoff Document
 
-Last updated 2026-11-21 (session 5, the Quest 3 standalone build). Read this first in any new session, then the tracker.
+Last updated 2026-11-22 (end of session 5). Read this first in any new session, then the tracker.
 
 - Repository: https://github.com/CorrieDivitt/Vib-Ribbon-VR. Master copies of this file, the plan and the tracker source live in its `docs/` folder.
 
@@ -11,6 +11,18 @@ Last updated 2026-11-21 (session 5, the Quest 3 standalone build). Read this fir
 Confidence labels used below: **[measured]** = computed this session from the disc or repo files. **[source]** = stated by the linked project or page. **[summary]** = from an automated summary of a decompiled source file, not yet read line by line. **[inferred]** = my reasoning from measured data, needs confirming.
 
 ## 1. Where things stand
+
+**End of session 5 (2026-11-22, about 01:00 Toronto):** the owner locked in everything built this session. Done:
+- Phase 5, the Quest 3 standalone build (5.1 to 5.4) and 4.15 passthrough (section 2ag and the notes after it):
+  - the APK builds on the owner's PC with Android Studio (`android/gradlew.bat assembleDebug`, JAVA_HOME = Android Studio's jbr, Java 25; AGP 9.5.1, Gradle 9.6.0; CMake 3.31.6 from the SDK) and in CI;
+  - the disc goes into the app's folder with adb (start the game once first, then push, then `chmod -R a+rwX`);
+  - 120 Hz with about 7 ms to spare; songs prepared off the frame loop; refresh rate setting; passthrough as a Background choice; Sound calibration near 0 ms on the headset.
+- 4.1: Touch controller layout for play and menus, presses at the controller's own time, vibration on misses.
+- 4.5: the course drawn for when each frame reaches the eyes (display lead about 22 ms on the Quest); calibration screen explains its suggestion; markers end at the 16th.
+- 4.2: classic screen (the monitor picture on a 4:3 screen in the headset, with the headset's line width and smooth wobble); comfort options dropped by the owner.
+- 3.6: Original look and Restore my look; the owner did the DuckStation side-by-side and marked it done.
+- **Every PCVR task is done. Next session: 4.16, the Ultimate PC (flat-screen Windows) version.** The prompt is in section 1a.
+- Quest workflow commands are on the tracker: "Session 5 (first Quest build)", "Quest: everyday", "Quest: save file". For logs: `adb logcat -G 16M`, then after playing `adb logcat -d -s vibplay:* -f /sdcard/Download/quest-log.txt` and `adb pull` (do not `logcat -c` before collecting a problem's log; `-b crash` holds native crashes).
 
 **Session 5 (2026-11-21 evening to 11-22, the Quest 3 standalone build): Phase 5 done; then 4.1, 4.5, 3.6 and 4.2 done (Touch press times and vibration, display lead, Original look and the DuckStation check, classic screen). All PCVR tasks done; next 4.16 (Ultimate PC version).** The game builds on the owner's PC (Android Studio, `android/gradlew.bat assembleDebug`) and runs on the Quest 3 itself: 120 Hz with about 7 ms to spare, Touch layout, Refresh rate, calibration (Sound timing about 0 on the headset), smooth song starts, passthrough; all locked in. Order taken: 5.1 and 5.2, then 5.3 with 5.4's numbers, the song-start fix, 4.15. Owner builds locally with Android Studio (option B). Built and pushed: the Android project, the Android code paths, CI's APK job (section 2ag). CI passed on the first run (Windows, Ubuntu, Android). **Waiting for the owner's first headset test** (tracker command "Session 5 (first Quest build)").
 - Owner's Android setup (session 5): Android Studio installed; SDK at `%LOCALAPPDATA%\Android\Sdk` with platforms android-35 and android-37.0, build-tools 35.0.1 and 36.0.0, a `cmake` folder (versions not listed yet), NDK 27.3 and 28.2, cmdline-tools. `java` on PATH is Java 8 (1.8.0_511), too old for Gradle's Android plugin, so the commands set `JAVA_HOME` to Android Studio's own `jbr`. Headset serial 2G0YC5ZG7208JX seen by adb.
@@ -59,7 +71,13 @@ Confidence labels used below: **[measured]** = computed this session from the di
   - The original's values in brackets in the settings.
 - Next session: more quality-of-life enhancements, owner to pick. Candidates on the tracker are 4.11 to 4.15 (wrap-around course, timing feedback, colour options, speed modifier, passthrough), plus anything new the owner lists. The prompt for the next session is in section 1a.
 
-## 1a. Prompt for session 5
+## 1a. Prompt for session 6
+
+```
+Continue the Vib Ribbon VR project (repo CorrieDivitt/Vib-Ribbon-VR). Read the project's claude/HANDOFF.md first (section 1 "End of session 5", then the sections on the first playable build 2e, the settings panel 2m, the performance overlay 2n, the infinite horizon 2p, the score, meter and numbers 2q-2t, scroll speed 2y, timing feedback 2z, full combo 2aa, custom colours 2ad and the classic screen notes after 2ag), then the tracker at https://claude.ai/artifact/42iBUS2Aiu81652cgnRM1k, including my notes box (artifact db, path tracker/notes). This session is about task 4.16, the Ultimate PC version: a flat-screen Windows build shipped alongside the VR build, offering most of the VR settings (maybe Android flat later). Start by laying out a plan: which headset features should come to the monitor and how (for example the far road and whole-song horizon, smooth wobble at the monitor's refresh rate, a view beside Vibri with zoom and view angle, the score above Vibri and the meter and numbers below, the course around you or a flat equivalent, refresh rate and frame pacing, mouse and keyboard and gamepad controls), which settings already work on the monitor, and how both builds are packaged and shipped (one download, start-menu shortcuts or a launcher, where save.txt lives, the disc image location), each with its size and what I need to do, and let me pick the order. Then build them one at a time, waiting for my test before moving on. Keep the standing rules: give commands in code blocks, keep the tracker and handoff up to date at each step (check the tracker's script parses before publishing), commit with the usual attribution, check CI, and write our own code (nothing copied from revib or open-ribbon, no game data or text in the repo, never show me images of the game's character).
+```
+
+**Prompt for session 5 (done):**
 
 ```
 Continue the Vib Ribbon VR project (repo CorrieDivitt/Vib-Ribbon-VR). Read the project's claude/HANDOFF.md first (section 1 "End of session 4", then the sections on the VR display 2h and 2k, audio 2e, the performance overlay 2n and passthrough under "Tracker tidy"), then the tracker at https://claude.ai/artifact/42iBUS2Aiu81652cgnRM1k, including my notes box (artifact db, path tracker/notes). This session is about the Meta Quest 3 standalone build (Phase 5). Start by laying out a plan for 5.1 (Android ARM64 build with the NDK, the Khronos OpenXR loader and Vulkan, packaged as an APK I can sideload with adb; Developer Mode is on), 5.2 (getting my disc image onto the headset), 5.3 (audio on Android and calibration there), 5.4 (performance at 90/120 Hz, measured with the overlay) and passthrough (4.15, XR_FB_passthrough, as a Background choice), each with its size and what I need to install or do, and let me pick the order. Then build them one at a time, waiting for my headset test before moving on. Keep the standing rules: give commands in code blocks, keep the tracker and handoff up to date at each step (check the tracker's script parses before publishing), commit with the usual attribution, check CI, and write our own code (nothing copied from revib or open-ribbon, no game data or text in the repo, never show me images of the game's character).
