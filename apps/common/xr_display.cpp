@@ -9,10 +9,8 @@
 #define XR_USE_PLATFORM_ANDROID
 #define XR_USE_TIMESPEC  // XR_KHR_convert_timespec_time: the runtime's clock against CLOCK_MONOTONIC
 #elif defined(_WIN32)
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
 #include <windows.h>  // XR_KHR_win32_convert_performance_counter_time
+#include <unknwn.h>   // (IUnknown, which openxr_platform.h's Win32 part names)
 #define XR_USE_PLATFORM_WIN32
 #endif
 #define XR_USE_GRAPHICS_API_VULKAN
