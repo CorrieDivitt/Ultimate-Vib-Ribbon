@@ -31,15 +31,66 @@ Nothing of the game is in this repository or in the downloads: no code, pictures
 
 ## Playing
 
-- **Options menu on every screen:** Start on a gamepad, P or Tab on the keyboard, the menu button on Touch controllers, or the on-screen button on a phone. In a song it pauses. Most settings are here: camera, colours, scroll speed, timing feedback, glow, calibration, Original look and more.
-- **Camera:** beside Vibri by default, moved and zoomed with the analog sticks (or the mouse) on every screen; **Original** gives the original's view. In VR the course can wrap around you, and the headset shows a classic screen option too.
-- **Scroll speed** changes mid-song with the triggers (L2/R2) or Page Up/Page Down.
-- **Your own music:** pick tracks, play all of them, or in order, as the original does with audio CDs; speed courses too.
+- **Options menu on every screen:** Start on a gamepad, P or Tab on the keyboard, the menu button on Touch controllers, or the on-screen button on a phone. In a song it pauses. Every setting shows the original game's value in brackets, so the original is always one glance away.
 - **Exit** is on the title menu (B jumps to it).
+- **Your own music** becomes courses, as the original does with audio CDs: pick tracks, play all of them, or in order; speed courses too.
+
+## Features
+
+Everything below is new in this port. The original's look and behaviour are the starting point, and **Original look** (Options > Visual) puts every look setting back to the original's in one go; **Restore my look** brings yours back.
+
+### Timing
+
+- **Audio-clock timing.** The game runs from the music, not from the PlayStation's 50 Hz frame, so judging stays steady at 60, 120 or 240 Hz and in any headset.
+- **Sound calibration** and **Picture calibration** (Options > Calibration): short tests that measure your speakers' and display's delay and suggest the right **Sound timing** and **Picture timing**. Judging always follows the sound.
+- **Timing feedback:** each hit shows how early or late you were, in milliseconds, for a moment near Vibri.
+- **Resume:** after a pause, either rewind a little and play on (the original) or count in from the same spot.
+- **Low latency** (monitor): fewer frames waiting for the display, for a snappier picture.
+
+### Camera and view
+
+- **Camera beside Vibri** (the default) or **Original**. Beside Vibri, the analog sticks (or the mouse) turn round her and zoom, on every screen including the menus; the right stick click puts the view back. **Zoom**, **View angle** and **Field of view** set it precisely.
+- **See ahead** and **See behind:** how far ahead the road is drawn and how long passed obstacles stay, from the original's 8 and 2 seconds up to the **whole song**.
+- **Scroll speed** (0.5x to 10x), like a rhythm game's speed modifier: it changes how fast the road comes at you, not the timing. Change it mid-song with the triggers (L2/R2) or Page Up/Page Down.
+
+### The lines
+
+- **Wobble size:** how far the lines shake (0 makes them still; 1 is the original).
+- **Wobble hold:** how often the shake changes. **Off** is the original's 50 times a second; 1 to 3 changes it every 1 to 3 frames of your display, which is calmer or livelier at high refresh rates.
+- **Smooth motion:** the original steps Vibri and the menus through their poses at 15 to 30 a second; this blends between them for fluid movement at your display's rate.
+- **Line width**, **Glow** (a soft halo round every line, faint to strong) and **Custom colors** (a colour for the road, each obstacle and pair, each form of Vibri, the background and the menus).
+
+### Courses and scoring
+
+- **Difficulty** (experimental): Easy, Normal (the original's courses exactly), Hard and Extreme. See below.
+- **Consistent courses:** the original's courses vary a little from play to play; this makes each song's course the same every time, for practice.
+- **Score in numbers** during play, a **Full Combo** celebration for a song cleared without a miss, and an **Effects volume** for the hit sounds.
+
+### In VR
+
+- **Course around you:** the road wraps round you in a ring (**Circle size** sets how wide); Vibri runs round it, the new road comes round one side and the old fades away behind you.
+- **Classic screen:** the game exactly as on a monitor, the original's cameras and all, on a big screen in front of you (**Screen size** sets it).
+- **Passthrough background** on the Quest: the lines over your own room.
+- **Refresh rate:** Auto (the highest up to 120 Hz) or any rate your headset offers; **Recenter view**; Touch controller **vibration**.
+
+### On a monitor
+
+Window, borderless or fullscreen; any **Resolution** and refresh rate; **VSync** on or off; a **Frame limit**; and **Picture shape**: fill the screen or the original's 4:3 with bars. The Windows launcher sets these before you start, too.
+
+### On a phone or tablet (experimental)
+
+On-screen **Touch buttons**, drawn as the obstacles' shapes or as the PlayStation buttons (L1, Down, R1, X); tap and swipe in the menus, drag and pinch to move the camera. A gamepad works too.
+
+### Also
+
+- A **Performance** overlay (one line or detailed) showing frame times and late frames.
+- Sound effects and vibration can be turned off, as in the original.
 
 ### Experimental features
 
-The **Difficulty** setting (Options > Modifiers > Difficulty: Easy, Normal, Hard, Extreme) is experimental, and feedback is welcome. **Normal is the original game's courses exactly**; the other levels are our own changes to how courses are made from the music and may still change. Extreme puts an obstacle on nearly every beat, with single obstacles only in each song's first half. High scores are kept at Normal only.
+The **Difficulty** setting (Options > Modifiers > Difficulty) is experimental, and feedback is welcome. **Normal is the original game's courses exactly**; the other levels are our own changes to how courses are made from the music and may still change. Easy has fewer obstacles and no pairs; Hard has more; Extreme puts an obstacle on nearly every beat, a little faster, with single obstacles only in each song's first half and the same obstacle often several beats running. High scores are kept at Normal only.
+
+The **Android** version is experimental too.
 
 ## Feedback and problems
 
