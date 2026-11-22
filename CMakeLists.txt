@@ -41,7 +41,12 @@ if(VIB_BUILD_TOOLS AND NOT ANDROID)
   add_subdirectory(tools/vibtool)
 endif()
 
-if(VIB_BUILD_VIEWER AND NOT ANDROID)
+if(ANDROID)
+  # The Quest 3 standalone build (task 5.1): the game as libmain.so, which the
+  # Android project in android/ packages with SDL's Java side into an APK.
+  add_subdirectory(apps/common)
+  add_subdirectory(apps/game)
+elseif(VIB_BUILD_VIEWER)
   add_subdirectory(apps/common)
   add_subdirectory(apps/viewer)
   add_subdirectory(apps/game)

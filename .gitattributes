@@ -12,3 +12,6 @@
 *.ico binary
 *.mp3 binary
 *.flac binary
+gradlew text eol=lf
+*.bat text eol=crlf
+*.jar binary

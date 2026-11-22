@@ -1,12 +1,30 @@
 # Shared by the desktop apps: SDL3 (window, audio, input) and the Vulkan line renderer.
 # Needs the Vulkan SDK (headers, loader and the glslc shader compiler).
 
-find_package(Vulkan REQUIRED)
-find_program(VIB_GLSLC glslc HINTS "$ENV{VULKAN_SDK}/Bin" "$ENV{VULKAN_SDK}/bin" REQUIRED)
+if(ANDROID)
+  # The NDK has the Vulkan headers and loader in its sysroot, and glslc in shader-tools.
+  find_library(VIB_VULKAN_LIBRARY vulkan REQUIRED)
+  if(NOT TARGET Vulkan::Vulkan)
+    add_library(Vulkan::Vulkan INTERFACE IMPORTED)
+    target_link_libraries(Vulkan::Vulkan INTERFACE "${VIB_VULKAN_LIBRARY}")
+  endif()
+  file(GLOB vib_ndk_shader_tools "${ANDROID_NDK}/shader-tools/*")
+  find_program(VIB_GLSLC glslc PATHS ${vib_ndk_shader_tools} NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH REQUIRED)
+else()
+  find_package(Vulkan REQUIRED)
+  find_program(VIB_GLSLC glslc HINTS "$ENV{VULKAN_SDK}/Bin" "$ENV{VULKAN_SDK}/bin" REQUIRED)
+endif()
 
 include(FetchContent)
-set(SDL_SHARED OFF CACHE BOOL "" FORCE)
-set(SDL_STATIC ON CACHE BOOL "" FORCE)
+if(ANDROID)  # SDL's Java side loads libSDL3.so, then our libmain.so
+  set(SDL_SHARED ON CACHE BOOL "" FORCE)
+  set(SDL_STATIC OFF CACHE BOOL "" FORCE)
+  set(VIB_SDL SDL3::SDL3-shared)
+else()
+  set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+  set(SDL_STATIC ON CACHE BOOL "" FORCE)
+  set(VIB_SDL SDL3::SDL3-static)
+endif()
 set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
 set(SDL_TESTS OFF CACHE BOOL "" FORCE)
 set(SDL_EXAMPLES OFF CACHE BOOL "" FORCE)
@@ -33,7 +51,7 @@ endforeach()
 
 add_library(vib_render STATIC line_renderer.cpp ${shader_incs})
 target_include_directories(vib_render PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}" PRIVATE "${shader_out}")
-target_link_libraries(vib_render PUBLIC SDL3::SDL3-static PRIVATE vib_warnings Vulkan::Vulkan)
+target_link_libraries(vib_render PUBLIC ${VIB_SDL} PRIVATE vib_warnings Vulkan::Vulkan)
 
 # The player's own music: MP3 and FLAC (dr_mp3 and dr_flac by David Reid, public
 # domain or MIT-0), pinned to one commit.
@@ -55,7 +73,7 @@ endif()
 
 # Headsets through OpenXR (the Khronos loader, built static). On by default on
 # Windows, where PC headsets run; the Quest's own build comes later.
-if(WIN32)
+if(WIN32 OR ANDROID)
   set(vib_vr_default ON)
 else()
   set(vib_vr_default OFF)

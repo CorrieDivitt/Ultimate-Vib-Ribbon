@@ -1,0 +1,114 @@
+plugins {
+    id 'com.android.application'
+}
+
+// ---- Which NDK, CMake and build tools to use: the newest suitable ones installed
+// in the Android SDK, unless gradle.properties or -P names one (vibNdkVersion,
+// vibCmakeVersion, vibBuildTools). Android Studio's SDK Manager installs them.
+
+def sdkDir = {
+    def props = new Properties()
+    def lp = rootProject.file('local.properties')
+    if (lp.exists()) lp.withInputStream { props.load(it) }
+    def dir = props.getProperty('sdk.dir') ?: System.getenv('ANDROID_HOME') ?: System.getenv('ANDROID_SDK_ROOT')
+    dir ? new File(dir) : null
+}()
+
+def versionParts = { String v -> v.tokenize('.-').collect { it.isInteger() ? it.toInteger() : 0 } }
+def versionLess = { String a, String b ->
+    def x = versionParts(a), y = versionParts(b)
+    for (int i = 0; i < Math.max(x.size(), y.size()); ++i) {
+        int p = i < x.size() ? x[i] : 0, q = i < y.size() ? y[i] : 0
+        if (p != q) return p < q
+    }
+    false
+}
+def newestInstalled = { String folder, String atLeast ->
+    def dir = sdkDir ? new File(sdkDir, folder) : null
+    def names = (dir?.listFiles() ?: []).findAll { it.isDirectory() }*.name.findAll { !versionLess(it, atLeast) }
+    names ? names.sort { a, b -> versionLess(a, b) ? -1 : (versionLess(b, a) ? 1 : 0) }.last() : null
+}
+
+def ndkVer = findProperty('vibNdkVersion') ?: newestInstalled('ndk', '26')
+def cmakeVer = findProperty('vibCmakeVersion') ?: newestInstalled('cmake', '3.24')
+def buildToolsVer = findProperty('vibBuildTools') ?: newestInstalled('build-tools', '35')
+if (!cmakeVer)
+    throw new GradleException('Needs CMake 3.24 or newer in the Android SDK: Android Studio > SDK Manager > SDK Tools > CMake (tick "Show Package Details" and pick the newest).')
+if (!ndkVer)
+    throw new GradleException('Needs an Android NDK in the Android SDK: Android Studio > SDK Manager > SDK Tools > NDK (Side by side).')
+
+// ---- SDL's Java side (its activity, audio, controllers), from the same SDL release
+// the native build uses (apps/common/CMakeLists.txt), downloaded once into build/.
+
+def sdlTag = 'release-3.2.26'
+def sdlJava = new File(buildDir, 'sdl-java')
+def fetchSdlJava = tasks.register('fetchSdlJava') {
+    inputs.property('tag', sdlTag)
+    outputs.dir(sdlJava)
+    doLast {
+        def zip = new File(buildDir, "SDL-${sdlTag}.zip")
+        if (!zip.exists()) {
+            zip.parentFile.mkdirs()
+            new URL("https://github.com/libsdl-org/SDL/archive/refs/tags/${sdlTag}.zip").withInputStream { i ->
+                zip.withOutputStream { it << i }
+            }
+        }
+        project.delete(sdlJava)
+        project.copy {
+            from(zipTree(zip)) { include "SDL-${sdlTag}/android-project/app/src/main/java/**" }
+            into sdlJava
+            eachFile { f -> f.path = f.path.substring(f.path.indexOf('/java/') + '/java/'.length()) }
+            includeEmptyDirs = false
+        }
+    }
+}
+tasks.named('preBuild') { dependsOn fetchSdlJava }
+
+android {
+    namespace 'io.github.corriedivitt.vibribbonvr'
+    compileSdk 35
+    if (buildToolsVer) buildToolsVersion buildToolsVer
+    ndkVersion ndkVer
+
+    defaultConfig {
+        applicationId 'io.github.corriedivitt.vibribbonvr'
+        minSdk 29
+        targetSdk 32
+        versionCode 1
+        versionName '0.1'
+        ndk { abiFilters 'arm64-v8a' }  // Quest 3 (and the Steam Frame's Android side later)
+        externalNativeBuild {
+            cmake {
+                arguments '-DANDROID_STL=c++_shared', '-DVIB_BUILD_TESTS=OFF', '-DVIB_BUILD_TOOLS=OFF'
+                targets 'vibplay', 'SDL3-shared'  // libmain.so and libSDL3.so
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            // Optimised native code even in the debug APK: the headset needs the speed.
+            externalNativeBuild { cmake { arguments '-DCMAKE_BUILD_TYPE=RelWithDebInfo' } }
+        }
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.debug  // (sideloaded, not a store release)
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path file('../../CMakeLists.txt')
+            version cmakeVer
+        }
+    }
+
+    sourceSets {
+        main { java.srcDirs += sdlJava }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}

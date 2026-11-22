@@ -1,0 +1,19 @@
+// The Quest 3 standalone build (task 5.1). Open this folder in Android Studio, or
+// run gradlew assembleDebug here. The native code is the repository's own CMake
+// project (../CMakeLists.txt); this project adds SDL's Java side and the manifest.
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+rootProject.name = 'VibRibbonVR'
+include ':app'

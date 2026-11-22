@@ -54,7 +54,13 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
+
+#ifdef __ANDROID__
+#include <android/log.h>
+#include <unistd.h>
+#endif
 
 #include "audio.h"
 #include "line_renderer.h"
@@ -85,6 +91,59 @@
 #include "vib/file_picker.h"
 
 namespace {
+
+#ifdef __ANDROID__
+// On the headset (Quest standalone build): the app's own folder on the shared
+// storage, /sdcard/Android/data/<package>/files. adb can push into it and no
+// storage permission is needed. The disc, save.txt and music live there.
+std::string headset_folder() {
+  const char* p = SDL_GetAndroidExternalStoragePath();
+  if (!p) throw std::runtime_error(std::string("no app folder on the headset's storage: ") + SDL_GetError());
+  return p;
+}
+
+// printf and stderr go nowhere on Android: send them to logcat (adb logcat -s vibplay).
+void log_to_logcat() {
+  static int fds[2];
+  if (pipe(fds) != 0) return;
+  std::setvbuf(stdout, nullptr, _IOLBF, 0);
+  std::setvbuf(stderr, nullptr, _IONBF, 0);
+  dup2(fds[1], 1);
+  dup2(fds[1], 2);
+  std::thread([] {
+    char buf[1024];
+    std::string line;
+    for (ssize_t n; (n = read(fds[0], buf, sizeof buf)) > 0;)
+      for (ssize_t i = 0; i < n; ++i)
+        if (buf[i] == '\n') {
+          __android_log_write(ANDROID_LOG_INFO, "vibplay", line.c_str());
+          line.clear();
+        } else {
+          line += buf[i];
+        }
+  }).detach();
+}
+
+// The disc image pushed to the headset: the first .cue (by name) in files/disc,
+// else in files itself.
+std::string find_disc_on_headset() {
+  const std::filesystem::path root = std::filesystem::path(headset_folder());
+  for (const std::filesystem::path& dir : {root / "disc", root}) {
+    std::vector<std::filesystem::path> cues;
+    std::error_code ec;
+    for (std::filesystem::directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec)) {
+      std::string ext = it->path().extension().string();
+      for (char& c : ext) c = char(std::tolower(static_cast<unsigned char>(c)));
+      if (ext == ".cue") cues.push_back(it->path());
+    }
+    if (!cues.empty()) {
+      std::sort(cues.begin(), cues.end());
+      return cues.front().string();
+    }
+  }
+  throw std::runtime_error("no disc image on the headset: push your .cue and .bin files into " + (root / "disc").string());
+}
+#endif
 
 using namespace vib;
 
@@ -250,6 +309,14 @@ bool is_music_file(const std::filesystem::path& p) {
 
 // Where the folder browser starts the first time: the system's music folder, else home.
 std::string default_music_folder() {
+#ifdef __ANDROID__
+  {  // the headset: a music folder beside the disc (adb push your files there)
+    const std::filesystem::path music = std::filesystem::path(headset_folder()) / "music";
+    std::error_code ec;
+    std::filesystem::create_directories(music, ec);
+    return music.string();
+  }
+#endif
   if (const char* music = SDL_GetUserFolder(SDL_FOLDER_MUSIC)) return music;
   if (const char* home = SDL_GetUserFolder(SDL_FOLDER_HOME)) return home;
   return {};
@@ -1886,6 +1953,13 @@ int run(int argc, char** argv) {
     else if (opt.cue.empty() && a.size() > 0 && a[0] != '-') opt.cue = a;
     else throw std::runtime_error("unknown argument: " + a);
   }
+#ifdef __ANDROID__
+  opt.vr = true;  // the headset build is always in the headset
+  if (opt.cue.empty()) opt.cue = find_disc_on_headset();
+  // Keep running while the activity is paused: OpenXR's session states say when to
+  // draw (SDL would otherwise stop the loop inside its event polling).
+  SDL_SetHint(SDL_HINT_ANDROID_BLOCK_ON_PAUSE, "0");
+#endif
   if (opt.cue.empty()) {
     std::fputs("usage: vibplay <disc.cue> [bronze|silver|gold | --song 1-6] [--fixed] [--smooth] [--seed N]\n"
                "               [--music file.mp3|file.flac] [--vr] [--vr-scale metres] [--last seconds] [--offset ms] [--sfx 0-1] [--music 0-1] [--width x]\n",
@@ -1903,10 +1977,14 @@ int run(int argc, char** argv) {
   if (!window) throw std::runtime_error(std::string("SDL_CreateWindow: ") + SDL_GetError());
   // Saved high scores and options, in the per-user folder SDL picks for the platform.
   std::string save_path;
+#ifdef __ANDROID__
+  save_path = headset_folder() + "/save.txt";  // (beside the disc: adb pull can fetch it)
+#else
   if (char* pref = SDL_GetPrefPath("VibRibbonVR", "VibRibbonVR")) {
     save_path = std::string(pref) + "save.txt";
     SDL_free(pref);
   }
+#endif
   SaveData save;
   if (!save_path.empty()) {
     std::ifstream in(path_from_utf8(save_path));
@@ -2963,6 +3041,9 @@ int run(int argc, char** argv) {
 }  // namespace
 
 int main(int argc, char** argv) {
+#ifdef __ANDROID__
+  log_to_logcat();
+#endif
   try {
     int code;
     do code = run(argc, argv);
@@ -2970,7 +3051,9 @@ int main(int argc, char** argv) {
     return code;
   } catch (const std::exception& e) {
     std::fprintf(stderr, "vibplay: %s\n", e.what());
+#ifndef __ANDROID__  // (a 2D dialog would never be seen in the headset; logcat has it)
     SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "vibplay", e.what(), nullptr);  // so a failure is never just a closed window
+#endif
     return 1;
   }
 }

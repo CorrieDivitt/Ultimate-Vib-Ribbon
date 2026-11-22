@@ -3,6 +3,10 @@
 #include <SDL3/SDL.h>
 #include <vulkan/vulkan.h>
 
+#ifdef __ANDROID__
+#include <jni.h>  // (before openxr_platform.h, which names JavaVM and jobject)
+#define XR_USE_PLATFORM_ANDROID
+#endif
 #define XR_USE_GRAPHICS_API_VULKAN
 #include <openxr/openxr.h>
 #include <openxr/openxr_platform.h>
@@ -158,6 +162,10 @@ class XrDisplay::Impl {
     if (device_) vkDestroyDevice(device_, nullptr);
     if (vk_instance_) vkDestroyInstance(vk_instance_, nullptr);
     if (instance_) xrDestroyInstance(instance_);
+#ifdef __ANDROID__
+    if (activity_)
+      if (auto* env = static_cast<JNIEnv*>(SDL_GetAndroidJNIEnv())) env->DeleteGlobalRef(activity_);
+#endif
   }
 
   const char* gpu_name() const { return gpu_name_.c_str(); }
@@ -261,12 +269,34 @@ class XrDisplay::Impl {
   }
 
   void create_instance() {
+#ifdef __ANDROID__
+    // On the headset itself the loader must be told the app's Java VM and activity
+    // before anything else (XR_KHR_loader_init), and so must the runtime.
+    auto* env = static_cast<JNIEnv*>(SDL_GetAndroidJNIEnv());
+    if (!env || env->GetJavaVM(&java_vm_) != JNI_OK) throw std::runtime_error("no Java VM for the OpenXR loader");
+    jobject activity = static_cast<jobject>(SDL_GetAndroidActivity());
+    if (!activity) throw std::runtime_error("no Android activity for the OpenXR loader");
+    activity_ = env->NewGlobalRef(activity);
+    env->DeleteLocalRef(activity);
+    {
+      PFN_xrInitializeLoaderKHR init = nullptr;
+      xr_check(xrGetInstanceProcAddr(XR_NULL_HANDLE, "xrInitializeLoaderKHR", reinterpret_cast<PFN_xrVoidFunction*>(&init)),
+               "xrGetInstanceProcAddr(xrInitializeLoaderKHR)");
+      XrLoaderInitInfoAndroidKHR li{XR_TYPE_LOADER_INIT_INFO_ANDROID_KHR};
+      li.applicationVM = java_vm_;
+      li.applicationContext = activity_;
+      xr_check(init(reinterpret_cast<const XrLoaderInitInfoBaseHeaderKHR*>(&li)), "xrInitializeLoaderKHR");
+    }
+#endif
     // Vulkan, and (where the runtime has it) word of the headset being put on.
     std::uint32_t n = 0;
     xrEnumerateInstanceExtensionProperties(nullptr, 0, &n, nullptr);
     std::vector<XrExtensionProperties> available(n, {XR_TYPE_EXTENSION_PROPERTIES});
     xrEnumerateInstanceExtensionProperties(nullptr, n, &n, available.data());
     std::vector<const char*> exts = {XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME};
+#ifdef __ANDROID__
+    exts.push_back(XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME);
+#endif
     for (const auto& e : available)
       if (std::strcmp(e.extensionName, XR_EXT_USER_PRESENCE_EXTENSION_NAME) == 0) {
         exts.push_back(XR_EXT_USER_PRESENCE_EXTENSION_NAME);
@@ -282,10 +312,20 @@ class XrDisplay::Impl {
     info.applicationInfo.apiVersion = XR_API_VERSION_1_0;
     info.enabledExtensionCount = std::uint32_t(exts.size());
     info.enabledExtensionNames = exts.data();
+#ifdef __ANDROID__
+    XrInstanceCreateInfoAndroidKHR android_info{XR_TYPE_INSTANCE_CREATE_INFO_ANDROID_KHR};
+    android_info.applicationVM = java_vm_;
+    android_info.applicationActivity = activity_;
+    info.next = &android_info;
+#endif
     const XrResult r = xrCreateInstance(&info, &instance_);
+#ifdef __ANDROID__
+    if (XR_FAILED(r)) throw std::runtime_error("the headset's OpenXR runtime did not answer (XrResult " + std::to_string(int(r)) + ")");
+#else
     if (XR_FAILED(r))
       throw std::runtime_error(
           "no OpenXR runtime answered (is the headset connected, and Meta Quest Link or SteamVR set as the OpenXR runtime?)");
+#endif
     XrInstanceProperties props{XR_TYPE_INSTANCE_PROPERTIES};
     xrGetInstanceProperties(instance_, &props);
     runtime_name_ = props.runtimeName;
@@ -924,6 +964,10 @@ class XrDisplay::Impl {
 
   float scale_;
   XrInstance instance_ = XR_NULL_HANDLE;
+#ifdef __ANDROID__
+  JavaVM* java_vm_ = nullptr;
+  jobject activity_ = nullptr;  // a global reference, kept for the instance's life
+#endif
   XrSystemId system_ = XR_NULL_SYSTEM_ID;
   XrSession session_ = XR_NULL_HANDLE;
   XrSpace space_ = XR_NULL_HANDLE, head_ = XR_NULL_HANDLE;
