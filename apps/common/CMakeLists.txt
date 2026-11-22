@@ -91,6 +91,11 @@ if(VIB_VR)
     GIT_SHALLOW TRUE
     EXCLUDE_FROM_ALL)
   FetchContent_MakeAvailable(OpenXR)
+  # The OpenXR loader picks the DLL C runtime for its static library; the Windows
+  # download (the package preset) links the runtime in everywhere, so it must match.
+  if(MSVC AND DEFINED CMAKE_MSVC_RUNTIME_LIBRARY AND TARGET openxr_loader)
+    set_target_properties(openxr_loader PROPERTIES MSVC_RUNTIME_LIBRARY "${CMAKE_MSVC_RUNTIME_LIBRARY}")
+  endif()
   add_library(vib_xr STATIC xr_display.cpp ${shader_incs})
   target_include_directories(vib_xr PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}" PRIVATE "${shader_out}")
   target_link_libraries(vib_xr PUBLIC vib_render PRIVATE vib_warnings Vulkan::Vulkan OpenXR::openxr_loader)
