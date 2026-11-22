@@ -631,14 +631,13 @@ TEST(disc_sces02873_title_language_and_mode_menus) {
       for (int i = 0; i < 100; ++i) e.tick(none);
       std::size_t at_rest = 0;
       for (const Hud::Layer& l : e.layers()) at_rest += l.lines.size();
-      e.tick(cancel);  // to "back"
+      e.tick(down);    // to "demo"
       e.tick(none);
-      e.tick(down);    // on to "exit"
+      e.tick(cancel);  // B: to "exit" (owner), not "back"
       for (int i = 0; i < 3; ++i) e.tick(none);
       std::size_t chosen = 0;
       for (const Hud::Layer& l : e.layers()) chosen += l.lines.size();
       CHECK(chosen == at_rest && chosen > 0);  // (every word still drawn, ours among them)
-      e.tick(down);  // (the last item: it stays)
       e.tick(confirm);
       CHECK(e.choice() == C::Exit);
     }

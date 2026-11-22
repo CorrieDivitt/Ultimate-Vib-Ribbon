@@ -33,3 +33,6 @@ __pycache__/
 
 # Reference recordings made from the game
 *.jsonl
+
+# The Windows download, built by tools/package/build-windows.ps1
+/dist/

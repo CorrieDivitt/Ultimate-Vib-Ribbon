@@ -401,7 +401,7 @@ void TitleIntro::update_menus(const Input& in, std::vector<SceneLine>& out) {
   } else if (current_ == Menu::Mode) {
     if (active) {
       const int from = mode_index_;
-      if (in.cancel) mode_index_ = 2;  // to "back"
+      if (in.cancel) mode_index_ = exit_item_ ? 3 : 2;  // to "back" (ours: to "exit", owner)
       if (in.down) mode_index_ = std::min(mode_index_ + 1, exit_item_ ? 3 : 2);  // (ours: "exit" below "back")
       if (in.up) mode_index_ = std::max(mode_index_ - 1, 0);
       sounds(mode_index_ != from && (in.up || in.down));
