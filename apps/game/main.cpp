@@ -66,6 +66,7 @@
 
 #ifdef __ANDROID__
 #include <android/log.h>
+#include <jni.h>
 #include <unistd.h>
 #endif
 
@@ -141,6 +142,48 @@ void log_to_logcat() {
 }
 
 #ifndef VIB_PHONE
+// Task 6.14: a message the player can read when the game cannot start in the headset.
+// Our MessageActivity (android/app/src/quest/java) is an ordinary Android window, which
+// the headset shows as a flat panel with the system's font (the game's font is on the
+// disc, which may be what is missing). It runs in its own process, so it stays open after
+// the game closes. False if it could not be started.
+bool show_headset_message(const std::string& title, const std::string& text) {
+  auto* env = static_cast<JNIEnv*>(SDL_GetAndroidJNIEnv());
+  auto activity = static_cast<jobject>(SDL_GetAndroidActivity());
+  if (!env || !activity) return false;
+  bool ok = false;
+  jclass intent_class = env->FindClass("android/content/Intent");
+  jmethodID make = intent_class ? env->GetMethodID(intent_class, "<init>", "()V") : nullptr;
+  jmethodID set_class = intent_class ? env->GetMethodID(intent_class, "setClassName", "(Landroid/content/Context;Ljava/lang/String;)Landroid/content/Intent;") : nullptr;
+  jmethodID put = intent_class ? env->GetMethodID(intent_class, "putExtra", "(Ljava/lang/String;Ljava/lang/String;)Landroid/content/Intent;") : nullptr;
+  jmethodID flags = intent_class ? env->GetMethodID(intent_class, "addFlags", "(I)Landroid/content/Intent;") : nullptr;
+  jclass context = env->GetObjectClass(activity);
+  jmethodID start = env->GetMethodID(context, "startActivity", "(Landroid/content/Intent;)V");
+  if (make && set_class && put && flags && start && !env->ExceptionCheck()) {
+    jobject intent = env->NewObject(intent_class, make);
+    auto str = [&](const std::string& t) { return env->NewStringUTF(t.c_str()); };
+    jstring name = str("io.github.corriedivitt.vibribbonvr.MessageActivity");
+    jstring k_title = str("title"), v_title = str(title), k_text = str("text"), v_text = str(text);
+    env->DeleteLocalRef(env->CallObjectMethod(intent, set_class, activity, name));
+    env->DeleteLocalRef(env->CallObjectMethod(intent, put, k_title, v_title));
+    env->DeleteLocalRef(env->CallObjectMethod(intent, put, k_text, v_text));
+    env->DeleteLocalRef(env->CallObjectMethod(intent, flags, jint(0x10000000)));  // FLAG_ACTIVITY_NEW_TASK
+    if (!env->ExceptionCheck()) env->CallVoidMethod(activity, start, intent);
+    ok = !env->ExceptionCheck();
+    for (jobject o : {static_cast<jobject>(name), static_cast<jobject>(k_title), static_cast<jobject>(v_title), static_cast<jobject>(k_text),
+                      static_cast<jobject>(v_text), intent})
+      env->DeleteLocalRef(o);
+  }
+  if (env->ExceptionCheck()) {
+    env->ExceptionClear();
+    ok = false;
+  }
+  env->DeleteLocalRef(context);
+  if (intent_class) env->DeleteLocalRef(intent_class);
+  env->DeleteLocalRef(activity);
+  return ok;
+}
+
 // The disc image pushed to the headset: the first .cue (by path) anywhere in the
 // app's folder, a few folders deep (files/disc/ is where the tracker's command puts it).
 std::string find_disc_on_headset() {
@@ -3973,6 +4016,19 @@ int main(int argc, char** argv) {
 #endif
 #if !defined(__ANDROID__) || defined(VIB_PHONE)  // (a 2D dialog would never be seen in the headset; logcat has it)
     SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "vibplay", e.what(), nullptr);  // so a failure is never just a closed window
+#else
+    // The headset: a flat panel instead of a black screen (task 6.14).
+    const std::string what = e.what();
+    if (what.rfind("no disc image on the headset", 0) == 0)
+      show_headset_message("Disc image not found",
+                           "Vib-Ribbon VR plays your own copy of the PAL disc (SCES-02873) from a disc image: a .cue file and its .bin files.\n\n"
+                           "No disc image was found on this headset. Copy the .cue and .bin files into\n\n"
+                           "    Android/data/io.github.corriedivitt.vibribbonvr/files/disc\n\n"
+                           "as QUEST.txt (beside the APK in the download) shows, then start the game again.\n\n"
+                           "Details: " + what);
+    else
+      show_headset_message("Vib-Ribbon VR could not start", what + "\n\nPlease send this message and the log (QUEST.txt says how) with a problem report.");
+    SDL_Delay(1500);  // (lets the panel start before this process ends)
 #endif
     return 1;
   }

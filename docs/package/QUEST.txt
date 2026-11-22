@@ -13,6 +13,17 @@ WHAT YOU NEED
   (unzip anywhere; the commands below are run in that folder in PowerShell).
 - The APK (Vib-Ribbon-VR-Quest-1.0.0.apk, beside this file) and your disc image's folder.
 
+THE EASY WAY: SIDEQUEST
+SideQuest (sidequestvr.com, free, for Windows, Mac and Linux) installs APKs on the
+headset without typing commands: with Developer Mode on and the headset plugged in,
+drag the APK onto SideQuest's window. Its file browser can also copy your disc image
+into the headset's Android/data/io.github.corriedivitt.vibribbonvr/files/disc folder
+(start the game once first, as in step 3 below). If the game then says it cannot find
+or read the disc, do steps 3 and 4 below: the chmod line there lets the game read
+files copied in from a PC.
+
+If you would rather do it directly, without SideQuest, follow the steps below.
+
 ONCE
 1. Plug the headset in, put it on and allow USB debugging ("Always allow"). Then:
      .\adb devices
@@ -47,6 +58,11 @@ in the game, the headset asks whether the game may read your music: allow it.
 (Without that permission, or with adb, the game's own folder works too:
      .\adb push "C:\path\to\music\." /sdcard/Android/data/io.github.corriedivitt.vibribbonvr/files/music/
      .\adb shell chmod -R a+rwX /sdcard/Android/data/io.github.corriedivitt.vibribbonvr/files )
+
+IF THE DISC IS MISSING
+With no disc image on the headset, the game opens a flat window that says so and where
+the files go, instead of starting in the headset. Copy the files (steps 3 and 4) and
+start the game again.
 
 UPDATING
 Install the new APK with step 2 again; your disc, music and save stay. (A test build

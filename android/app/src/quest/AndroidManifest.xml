@@ -41,5 +41,16 @@
                 <category android:name="org.khronos.openxr.intent.category.IMMERSIVE_HMD" />
             </intent-filter>
         </activity>
+
+        <!-- A flat panel with a message when the game cannot start in the headset (task 6.14):
+             no VR category, so the headset shows it as a window; its own process and task,
+             so it stays after the game has closed. -->
+        <activity
+            android:name="io.github.corriedivitt.vibribbonvr.MessageActivity"
+            android:exported="false"
+            android:process=":message"
+            android:taskAffinity="io.github.corriedivitt.vibribbonvr.message"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.DeviceDefault" />
     </application>
 </manifest>
