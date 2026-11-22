@@ -114,6 +114,7 @@ class XrDisplay::Impl {
     create_vulkan();
     create_session();
     choose_refresh_rate(refresh_hz);
+    create_passthrough();
     create_swapchains();
     create_pipeline();
     create_actions();
@@ -155,6 +156,8 @@ class XrDisplay::Impl {
     if (lines_memory_) vkFreeMemory(device_, lines_memory_, nullptr);
     if (fence_) vkDestroyFence(device_, fence_, nullptr);
     if (pool_) vkDestroyCommandPool(device_, pool_, nullptr);
+    if (pt_layer_) xr_function<PFN_xrDestroyPassthroughLayerFB>("xrDestroyPassthroughLayerFB")(pt_layer_);
+    if (passthrough_) xr_function<PFN_xrDestroyPassthroughFB>("xrDestroyPassthroughFB")(passthrough_);
     if (head_) xrDestroySpace(head_);
     if (space_) xrDestroySpace(space_);
     if (actions_) xrDestroyActionSet(actions_);
@@ -170,6 +173,23 @@ class XrDisplay::Impl {
 
   const char* gpu_name() const { return gpu_name_.c_str(); }
   const std::vector<float>& rates() const { return rates_; }
+  bool passthrough_available() const { return pt_layer_ != XR_NULL_HANDLE; }
+  // Passthrough on or off; started and paused only when it changes.
+  void set_passthrough(bool on) {
+    if (!pt_layer_ || on == pt_on_) return;
+    if (on) {
+      if (XR_FAILED(xr_function<PFN_xrPassthroughStartFB>("xrPassthroughStartFB")(passthrough_)) ||
+          XR_FAILED(xr_function<PFN_xrPassthroughLayerResumeFB>("xrPassthroughLayerResumeFB")(pt_layer_))) {
+        std::printf("Passthrough: could not start\n");
+        return;
+      }
+    } else {
+      xr_function<PFN_xrPassthroughLayerPauseFB>("xrPassthroughLayerPauseFB")(pt_layer_);
+      xr_function<PFN_xrPassthroughPauseFB>("xrPassthroughPauseFB")(passthrough_);
+    }
+    pt_on_ = on;
+    std::printf("Passthrough %s\n", on ? "on" : "off");
+  }
   void ask_refresh_rate(float hz) {
     if (refresh_rates_) choose_refresh_rate(hz);
   }
@@ -231,12 +251,21 @@ class XrDisplay::Impl {
         drawn = true;
       }
     }
-    const XrCompositionLayerBaseHeader* submitted[] = {reinterpret_cast<const XrCompositionLayerBaseHeader*>(&layer)};
+    // The room under the picture when passthrough is on.
+    XrCompositionLayerPassthroughFB room{XR_TYPE_COMPOSITION_LAYER_PASSTHROUGH_FB};
+    room.flags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
+    room.layerHandle = pt_layer_;
+    std::vector<const XrCompositionLayerBaseHeader*> submitted;
+    if (pt_on_) submitted.push_back(reinterpret_cast<const XrCompositionLayerBaseHeader*>(&room));
+    if (drawn) {
+      if (pt_on_) layer.layerFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
+      submitted.push_back(reinterpret_cast<const XrCompositionLayerBaseHeader*>(&layer));
+    }
     XrFrameEndInfo end{XR_TYPE_FRAME_END_INFO};
     end.displayTime = state.predictedDisplayTime;
     end.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
-    end.layerCount = drawn ? 1 : 0;
-    end.layers = submitted;
+    end.layerCount = std::uint32_t(submitted.size());
+    end.layers = submitted.data();
     xr_check(xrEndFrame(session_, &end), "xrEndFrame");
     timing_.submit_ms = double(SDL_GetTicksNS() - waited_ns) * 1e-6;
   }
@@ -310,6 +339,11 @@ class XrDisplay::Impl {
       } else if (std::strcmp(e.extensionName, XR_FB_DISPLAY_REFRESH_RATE_EXTENSION_NAME) == 0) {
         exts.push_back(XR_FB_DISPLAY_REFRESH_RATE_EXTENSION_NAME);
         refresh_rates_ = true;
+#ifdef __ANDROID__  // (owner's decision, session 4: passthrough in the Quest's own build only)
+      } else if (std::strcmp(e.extensionName, XR_FB_PASSTHROUGH_EXTENSION_NAME) == 0) {
+        exts.push_back(XR_FB_PASSTHROUGH_EXTENSION_NAME);
+        passthrough_ext_ = true;
+#endif
       }
     XrInstanceCreateInfo info{XR_TYPE_INSTANCE_CREATE_INFO};
     std::strncpy(info.applicationInfo.applicationName, "Vib-Ribbon VR", XR_MAX_APPLICATION_NAME_SIZE - 1);
@@ -454,6 +488,30 @@ class XrDisplay::Impl {
     xr_check(xrCreateReferenceSpace(session_, &space, &space_), "xrCreateReferenceSpace");
     space.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_VIEW;
     xr_check(xrCreateReferenceSpace(session_, &space, &head_), "xrCreateReferenceSpace (view)");
+  }
+
+  // The room behind the picture (task 4.15), where the runtime offers XR_FB_passthrough:
+  // made paused, started when the Background is Passthrough.
+  void create_passthrough() {
+    if (!passthrough_ext_) {
+      std::printf("Passthrough: not offered by this runtime\n");
+      return;
+    }
+    XrPassthroughCreateInfoFB pi{XR_TYPE_PASSTHROUGH_CREATE_INFO_FB};
+    if (XR_FAILED(xr_function<PFN_xrCreatePassthroughFB>("xrCreatePassthroughFB")(session_, &pi, &passthrough_))) {
+      passthrough_ = XR_NULL_HANDLE;
+      std::printf("Passthrough: could not be made\n");
+      return;
+    }
+    XrPassthroughLayerCreateInfoFB li{XR_TYPE_PASSTHROUGH_LAYER_CREATE_INFO_FB};
+    li.passthrough = passthrough_;
+    li.purpose = XR_PASSTHROUGH_LAYER_PURPOSE_RECONSTRUCTION_FB;
+    if (XR_FAILED(xr_function<PFN_xrCreatePassthroughLayerFB>("xrCreatePassthroughLayerFB")(session_, &li, &pt_layer_))) {
+      pt_layer_ = XR_NULL_HANDLE;
+      std::printf("Passthrough: its layer could not be made\n");
+      return;
+    }
+    std::printf("Passthrough: available (Custom colors > Background > Passthrough)\n");
   }
 
   // The headset's refresh rate: the one asked for if it offers it, else the highest.
@@ -934,7 +992,9 @@ class XrDisplay::Impl {
     for (std::size_t e = 0; e < 2; ++e) {
       const Eye& eye = eyes_[e];
       VkClearValue clear{};
-      clear.color = {{background[0], background[1], background[2], 1.0f}};
+      // With the room showing (passthrough) the picture starts transparent: the lines'
+      // blending leaves premultiplied alpha, which the compositor lays over the room.
+      clear.color = pt_on_ ? VkClearColorValue{{0.0f, 0.0f, 0.0f, 0.0f}} : VkClearColorValue{{background[0], background[1], background[2], 1.0f}};
       if (linear_colours_)  // (as the lines: decoded so it shows as on the monitor)
         for (int c = 0; c < 3; ++c) clear.color.float32[c] = to_linear(clear.color.float32[c]);
       VkRenderPassBeginInfo rp{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
@@ -1005,7 +1065,10 @@ class XrDisplay::Impl {
   // player however long the game ran before they put it on.
   bool recentre_ = true;
   std::uint64_t recentre_at_ns_ = 0;
-  bool presence_ = false, refresh_rates_ = false;
+  bool presence_ = false, refresh_rates_ = false, passthrough_ext_ = false;
+  XrPassthroughFB passthrough_ = XR_NULL_HANDLE;
+  XrPassthroughLayerFB pt_layer_ = XR_NULL_HANDLE;
+  bool pt_on_ = false;
   std::vector<float> rates_;  // offered (XR_FB_display_refresh_rate)
   float asked_ = 0;           // the rate last asked for
   float zoom_ = 1.0f;  // (Display::zoom: unused by the game, which keeps its own)
@@ -1051,6 +1114,8 @@ void XrDisplay::set_zoom(float z) { impl_->set_zoom(z); }
 std::vector<float> XrDisplay::refresh_rates() const { return impl_->rates(); }
 void XrDisplay::set_refresh_rate(float hz) { impl_->ask_refresh_rate(hz); }
 void XrDisplay::set_input_mode(InputMode mode) { impl_->set_mode(mode); }
+bool XrDisplay::passthrough_available() const { return impl_->passthrough_available(); }
+void XrDisplay::set_passthrough(bool on) { impl_->set_passthrough(on); }
 Display::ControllerSticks XrDisplay::controller_sticks() const { return impl_->sticks(); }
 FrameTiming XrDisplay::timing() const { return impl_->timing(); }
 const char* XrDisplay::runtime_name() const { return impl_->runtime_name(); }

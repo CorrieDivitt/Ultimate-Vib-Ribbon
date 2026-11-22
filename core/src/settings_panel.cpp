@@ -272,6 +272,7 @@ std::string SettingsPanel::value(Item item, const Options& o, bool vr) const {
     case Item::ResetColours: return {};
     default:
       if (const int slot = colour_item_slot(item); slot >= 0) {
+        if (slot == kColourBackground && o.colours[std::size_t(slot)] == kBackgroundPassthrough) return "Passthrough";
         const int c = std::clamp(int(o.colours[std::size_t(slot)]), 0, colour_choices(slot) - 1);
         return to_font_text(slot == kColourBackground ? kBackgroundNames[l][c] : kLineColourNames[l][c]);
       }
@@ -370,7 +371,7 @@ bool SettingsPanel::change(Item item, int d, Options& o, bool vr) {
     case Item::ColourBlockPit: case Item::ColourBlockLoop: case Item::ColourBlockWave: case Item::ColourPitLoop:
     case Item::ColourPitWave: case Item::ColourLoopWave: case Item::ColourAngel: case Item::ColourRabbit: case Item::ColourFrog:
     case Item::ColourWorm: case Item::ColourBackground: case Item::ColourMenu: {  // round the palette, either way
-      const int slot = colour_item_slot(item), n = colour_choices(slot);
+      const int slot = colour_item_slot(item), n = colour_choices(slot) + (slot == kColourBackground && passthrough_ ? 1 : 0);
       std::uint8_t& c = o.colours[std::size_t(slot)];
       c = std::uint8_t(((int(c) + d) % n + n) % n);
       return true;

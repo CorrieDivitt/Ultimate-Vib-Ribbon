@@ -990,6 +990,14 @@ TEST(disc_sces02873_settings_panel) {
       CHECK(p.value(I::ColourBackground, co, true) == "White");
       p.tick(rt, 0.0, co, true);
       CHECK(p.value(I::ColourBackground, co, true) == "Black");  // (six, then round)
+      p.set_passthrough_available(true);  // a headset that shows the room: Passthrough after White
+      for (int k = 0; k < 5; ++k) p.tick(rt, 0.0, co, true);
+      p.tick(rt, 0.0, co, true);
+      CHECK(p.value(I::ColourBackground, co, true) == "Passthrough" && co.colours[kColourBackground] == kBackgroundPassthrough);
+      CHECK(!light_background(co.colours) && background_colour(co.colours).r == 0);  // (drawn as black: lines keep their colours)
+      p.tick(rt, 0.0, co, true);
+      CHECK(p.value(I::ColourBackground, co, true) == "Black");
+      p.set_passthrough_available(false);
       p.tick(rt, 0.0, co, true);
       p.tick(dn2, 0.0, co, true);
       CHECK(p.current() == I::ResetColours);

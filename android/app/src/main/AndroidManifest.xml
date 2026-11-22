@@ -9,6 +9,8 @@
     <uses-feature android:name="android.hardware.vulkan.level" android:required="true" android:version="0" />
     <uses-feature android:name="android.hardware.gamepad" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <!-- The room behind the lines (Background > Passthrough). -->
+    <uses-feature android:name="com.oculus.feature.PASSTHROUGH" android:required="false" />
 
     <!-- Rumble on a gamepad (the Vibration setting). -->
     <uses-permission android:name="android.permission.VIBRATE" />

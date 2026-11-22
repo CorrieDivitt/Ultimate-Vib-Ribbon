@@ -121,6 +121,9 @@ class Display {
     bool held[4] = {};
   };
   virtual ControllerSticks controller_sticks() const { return {}; }
+  // A headset that can show the room behind the picture (Quest: XR_FB_passthrough).
+  virtual bool passthrough_available() const { return false; }
+  virtual void set_passthrough(bool) {}
   // The colour behind the lines, as shown on a monitor (0-1 each; the original's black).
   void set_background(float r, float g, float b) { background_[0] = r, background_[1] = g, background_[2] = b; }
 

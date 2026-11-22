@@ -41,6 +41,8 @@ class XrDisplay : public Display {
   void set_refresh_rate(float hz) override;
   void set_input_mode(InputMode mode) override;
   ControllerSticks controller_sticks() const override;
+  bool passthrough_available() const override;
+  void set_passthrough(bool on) override;
 
   const char* runtime_name() const;
   void set_scale(float metres_per_unit);

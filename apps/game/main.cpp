@@ -425,7 +425,12 @@ struct Session {
   int course_songs = 1;
   bool course_clean = false;
   bool zooming = false, turning = false;                  // the sticks are moving the view (headset)
-  bool stick_flicked = false;  // the headset controllers' right stick pushed sideways (scroll speed), until it comes back
+  bool stick_flicked = false;
+  // The last frame's layers, kept in a headset so slow work (preparing a song) can go on
+  // a worker thread while that frame is drawn again at the headset's rate (with_frames).
+  std::vector<std::vector<vibr::LineInstance>> held_lines;
+  std::vector<vibr::Layer> held_layers;
+  bool holding = false;  // the headset controllers' right stick pushed sideways (scroll speed), until it comes back
   bool demo = false;  // the title's demo: the game plays itself (missing now and then), any button ends it
   // The player's own music, played as a one-track audio CD: its course follows the
   // original's audio-CD rules (the medley script, placed by the disc's key).
@@ -662,6 +667,15 @@ void to_instances(const Session& s, const std::vector<SceneLine>& in, std::uint3
 // right of the recentred view, on the monitor at the top left). `update_ms`, `build_ms`: the game's own work for
 // this frame before drawing (rules, sound and input; making the lines).
 void draw_frame(Session& s, std::vector<vibr::Layer>& layers, double update_ms, double build_ms) {
+  if (s.opt.vr && !s.holding) {  // (kept for with_frames: a copy of this frame's own layers)
+    s.held_lines.resize(layers.size());
+    s.held_layers = layers;
+    for (std::size_t i = 0; i < layers.size(); ++i)
+      if (layers[i].lines) {
+        s.held_lines[i] = *layers[i].lines;
+        s.held_layers[i].lines = &s.held_lines[i];
+      }
+  }
   const std::uint64_t now = SDL_GetTicksNS();
   const int level = s.save.options.perf_overlay;
   if (level > 0 && s.perf) {
@@ -717,6 +731,7 @@ void draw_frame(Session& s, std::vector<vibr::Layer>& layers, double update_ms, 
   // The original's lines are one pixel on a 288-line picture.
   const Rgb bg = background_colour(s.save.options.colours);  // (custom colours: the background, on every screen)
   s.renderer.set_background(bg.r / 255.0f, bg.g / 255.0f, bg.b / 255.0f);
+  s.renderer.set_passthrough(s.save.options.colours[std::size_t(kColourBackground)] == kBackgroundPassthrough);
   s.renderer.draw(layers, float(s.line_width * std::max(1, s.renderer.height()) / 288.0));
   const vibr::FrameTiming t = s.renderer.timing();
   FrameSample f;
@@ -1209,6 +1224,23 @@ bool run_calibration(Session& s, SettingsPanel& panel, bool picture) {
   return true;
 }
 
+// Slow work without a stall in the headset (Quest, session 5: a song's preparation took
+// one frame of 117-175 ms): `work` runs on a worker thread while the last frame is drawn
+// again at the headset's rate. On the monitor it simply runs. Events wait in SDL's queue.
+template <typename F>
+auto with_frames(Session& s, F work) -> decltype(work()) {
+  if (!s.opt.vr || s.held_layers.empty()) return work();
+  auto job = std::async(std::launch::async, std::move(work));
+  s.holding = true;
+  while (job.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+    SDL_PumpEvents();
+    std::vector<vibr::Layer> layers = s.held_layers;
+    draw_frame(s, layers, 0.0, 0.0);
+  }
+  s.holding = false;
+  return job.get();
+}
+
 Result play_song(Session& s, int song, int track_index, int& points, std::uint32_t seed) {
   struct MenusAfter {  // whichever way the song ends, the Touch buttons go back to the menus'
     vibr::Display& d;
@@ -1218,23 +1250,36 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   // mode is on (--fixed, or the Consistent courses setting, read at each song's start).
   const bool fixed = s.opt.fixed || s.save.options.fixed_courses;
   const CourseTiming timing = fixed ? CourseTiming::consistent() : CourseTiming::like_original(seed);
-  const std::vector<std::int16_t> disc_pcm = s.music ? std::vector<std::int16_t>{} : s.disc.read_audio_track(song + 1);
-  const std::vector<std::int16_t>& pcm = s.music ? s.music->pcm : disc_pcm;
-  const std::vector<Block> blocks = make_blocks(pcm, timing.lead);
-  // How loud the music is around each block: gameplay's sounds follow it, as the
-  // original's do (10% in silence to full in loud music).
-  const std::vector<std::uint8_t> loudness = loudness_levels(blocks);
+  // The song's sound, read and decoded, its blocks for the analysis, its loudness, and
+  // what you hear: prepared off the frame loop (with_frames), as it is slow on a headset.
+  struct Prepared {
+    std::vector<std::int16_t> disc_pcm;
+    std::vector<Block> blocks;
+    std::vector<std::uint8_t> loudness;
+    std::vector<std::int16_t> out;
+  };
+  Prepared prepared = with_frames(s, [&s, song, timing]() {
+    Prepared p;
+    if (!s.music) p.disc_pcm = s.disc.read_audio_track(song + 1);
+    const std::vector<std::int16_t>& pcm = s.music ? s.music->pcm : p.disc_pcm;
+    p.blocks = make_blocks(pcm, timing.lead);
+    // How loud the music is around each block: gameplay's sounds follow it, as the
+    // original's do (10% in silence to full in loud music).
+    p.loudness = loudness_levels(p.blocks);
+    // What you hear: the 8 s the original spends analysing ahead in silence, then the
+    // song, lined up with what the analysis sees (the lead shifts both together).
+    const std::int64_t frames = std::int64_t(pcm.size() / 2);
+    p.out.reserve(std::size_t(kDelay) * 4 + pcm.size() + std::size_t(std::max<std::int64_t>(0, -timing.lead)) * 2);
+    p.out.assign(std::size_t(kDelay) * 2 * 2, 0);
+    const std::int64_t from = std::max<std::int64_t>(0, timing.lead);
+    if (from < frames) p.out.insert(p.out.end(), pcm.begin() + std::ptrdiff_t(from) * 2, pcm.begin() + std::ptrdiff_t(frames) * 2);
+    if (timing.lead < 0) p.out.insert(p.out.begin() + std::ptrdiff_t(kDelay) * 4, std::size_t(-timing.lead) * 2, 0);
+    return p;
+  });
+  const std::vector<Block>& blocks = prepared.blocks;
+  const std::vector<std::uint8_t>& loudness = prepared.loudness;
+  std::vector<std::int16_t>& out = prepared.out;
   const auto total = static_cast<std::int32_t>(blocks.size() * kBlockSize);
-
-  // What you hear: the 8 s the original spends analysing ahead in silence, then the
-  // song, lined up with what the analysis sees (the lead shifts both together).
-  std::vector<std::int16_t> out(std::size_t(kDelay) * 2 * 2, 0);
-  const std::int64_t frames = std::int64_t(pcm.size() / 2);
-  for (std::int64_t f = std::max<std::int64_t>(0, timing.lead); f < frames; ++f) {
-    out.push_back(pcm[std::size_t(f) * 2]);
-    out.push_back(pcm[std::size_t(f) * 2 + 1]);
-  }
-  if (timing.lead < 0) out.insert(out.begin() + std::ptrdiff_t(kDelay) * 4, std::size_t(-timing.lead) * 2, 0);
 
   // Testing: start the song this far in (--last), the music from there and no 8 s wait.
   std::int32_t skip = 0;
@@ -2086,6 +2131,7 @@ int run(int argc, char** argv) {
       std::vector<int> rates;
       for (const float r : renderer.refresh_rates()) rates.push_back(int(std::lround(r)));
       panel.set_refresh_rates(std::move(rates));
+      panel.set_passthrough_available(renderer.passthrough_available());
     }
     s.panel = &panel;
     PerfOverlay perf(pak, language, words ? &*words : nullptr);

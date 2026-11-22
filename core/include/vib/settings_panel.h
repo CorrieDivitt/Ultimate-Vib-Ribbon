@@ -96,6 +96,8 @@ class SettingsPanel {
   // The refresh rates the headset offers (whole Hz), for the Refresh rate item; with
   // none it only shows Auto.
   void set_refresh_rates(std::vector<int> rates) { refresh_rates_ = std::move(rates); }
+  // Whether the headset can show the room: Background then has Passthrough after its colours.
+  void set_passthrough_available(bool available) { passthrough_ = available; }
   void home() { cursor_ = 0, first_ = 0; }
   Item current() const { return items_.empty() ? Item::Continue : items_[std::size_t(cursor_)]; }
 
@@ -198,6 +200,7 @@ class SettingsPanel {
   bool active_ = true;
   bool wraps_ = true;
   std::vector<int> refresh_rates_;
+  bool passthrough_ = false;
   int repeat_dir_ = 0;
   double repeat_timer_ = 0;
   int scroll_dir_ = 0;  // up or down held: -1 or 1 (the list scrolls while held)

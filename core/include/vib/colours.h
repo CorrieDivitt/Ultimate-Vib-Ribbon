@@ -39,6 +39,11 @@ constexpr std::array<Rgb, kBackgroundColours> kBackgroundPalette = {{
     {0, 0, 0}, {10, 18, 60}, {40, 12, 58}, {8, 42, 22}, {48, 48, 52}, {255, 255, 255},
 }};
 
+// One more Background choice where the headset can show the room (Quest, XR_FB_passthrough;
+// task 4.15): the room behind the lines. Drawn as black (cleared transparent) and never
+// "light", so every line keeps its colour.
+constexpr int kBackgroundPassthrough = kBackgroundColours;
+
 // How many colours a slot can take.
 constexpr int colour_choices(int slot) { return slot == kColourBackground ? kBackgroundColours : kLineColours; }
 
