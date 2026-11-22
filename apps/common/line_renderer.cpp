@@ -637,15 +637,16 @@ class Renderer::Impl {
     if (extent_.width == UINT32_MAX) extent_ = {std::uint32_t(std::max(w, 0)), std::uint32_t(std::max(h, 0))};
     VkSurfaceTransformFlagBitsKHR transform = caps.currentTransform;
 #ifdef __ANDROID__
-    // Android gives the surface in the screen's natural (upright, on a phone) shape with a
-    // turn to apply. We draw upright pictures and let the system turn them: the images
-    // take the turned shape (sideways on a sideways phone) and no turn of our own.
+    // We draw upright pictures in the window's own shape and let the system turn them to
+    // the screen (no turn of our own: identity). Android's surface size and turn do not
+    // always agree on which way round the size is given, so the images take the shape of
+    // SDL's window (sideways on a sideways phone: the owner's S25 showed both mistakes).
     made_transform_ = caps.currentTransform;
     if (caps.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR) {
       transform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-      if (caps.currentTransform & (VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR | VK_SURFACE_TRANSFORM_ROTATE_270_BIT_KHR))
-        std::swap(extent_.width, extent_.height);
+      if (w > 0 && h > 0 && (w > h) != (extent_.width > extent_.height)) std::swap(extent_.width, extent_.height);
     }
+    std::printf("Swapchain %ux%u, window %dx%d, screen turn %d\n", extent_.width, extent_.height, w, h, int(caps.currentTransform));
 #endif
     extent_.width = std::clamp(extent_.width, caps.minImageExtent.width, caps.maxImageExtent.width);
     extent_.height = std::clamp(extent_.height, caps.minImageExtent.height, caps.maxImageExtent.height);

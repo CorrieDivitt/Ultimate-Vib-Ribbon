@@ -2722,12 +2722,7 @@ int run(int argc, char** argv) {
     (void)asked;
     throw std::runtime_error("no disc image on the headset");
 #elif defined(VIB_PHONE)
-    if (!asked)
-      SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, "Vib-Ribbon",
-                               "Choose your Vib-Ribbon disc image: its .cue file and all its .bin files, together (tap and hold to "
-                               "select several). They are copied into the game, once.\n\nYour own copy of the PAL disc (SCES-02873).",
-                               nullptr);
-    asked = true;
+    (void)asked;  // (import_disc explains what to pick)
     opt.cue = import_disc(headset_folder() + "/disc");
     if (opt.cue.empty()) {
       std::printf("No disc image imported: closing.\n");

@@ -7,7 +7,7 @@
 
     <application android:label="Vib-Ribbon">
         <activity
-            android:name="org.libsdl.app.SDLActivity"
+            android:name="io.github.corriedivitt.vibribbon.VibActivity"
             android:exported="true"
             android:launchMode="singleTask"
             android:screenOrientation="sensorLandscape"

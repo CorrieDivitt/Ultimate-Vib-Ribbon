@@ -10,11 +10,13 @@ INSTALLING
 1. Copy the APK (app-flat-debug.apk) to the phone, open it in the phone's Files app
    and allow installing from that app when asked. (Or with adb on a PC:
    adb install -r app-flat-debug.apk)
-2. Put your disc image's .cue and .bin files somewhere on the phone, for example in
-   Download (copy them from a PC over USB).
-3. Start Vib-Ribbon. It asks for the disc image: pick the .cue and all its .bin files
-   together (tap and hold one, then tap the others). It copies them in once; after that
-   you may delete your copies. Options > Change disc imports another.
+2. Put your disc image's .cue and .bin files in a folder of their own on the phone, for
+   example Download/Vib-Ribbon (copy them from a PC over USB). Android does not let
+   apps use the Download folder itself, so the files need their own folder.
+3. Start Vib-Ribbon. It asks for the disc image: tap Pick folder and choose that folder
+   (then "Use this folder" and Allow). It copies the .cue and its .bin files in once;
+   after that you may delete your copies. Pick files is there too (press and hold one
+   file, then tap the others). Options > Change disc imports another.
 
 PLAYING
 The screen turns sideways. Two buttons for each thumb:
