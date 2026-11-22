@@ -4,7 +4,14 @@ A fan-made VR version of Vib-Ribbon (NanaOn-Sha, 1999) for PCVR and Meta Quest 3
 
 The goals are timing that is responsive and consistent, and visuals that do justice to the original's line art. The plan is a native port: the game's logic reproduced in portable C++, driven by the audio clock rather than the PS1's 50 Hz frame, with the original models, animations and course scripts read from your own disc.
 
-**Status:** Phase 1, foundations. Nothing playable yet. See [docs/PLAN.md](docs/PLAN.md) and the tracker.
+**Status:** playable, heading for the first release. See [docs/PLAN.md](docs/PLAN.md), the tracker and the [release notes](docs/RELEASE_NOTES.md).
+
+| Version | Where it runs | State |
+|---|---|---|
+| Vib-Ribbon VR | PCVR (OpenXR: SteamVR, Meta Quest Link) | Release |
+| Vib-Ribbon VR for Quest | Meta Quest 3 standalone (an APK to sideload) | Release |
+| Vib-Ribbon | Windows on a monitor (the launcher offers both Windows versions) | Release |
+| Vib-Ribbon for Android | Android phones and tablets, flat, touch controls or a gamepad | **Experimental: feedback welcome** |
 
 ## You need your own disc
 

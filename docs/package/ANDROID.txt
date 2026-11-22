@@ -1,6 +1,10 @@
 Vib-Ribbon on Android phones and tablets
 https://github.com/CorrieDivitt/Vib-Ribbon-VR
 
+EXPERIMENTAL: the phone and tablet version is new and has been tried on few devices.
+Feedback is welcome (what phone, what worked, what did not), as an issue on the page
+above.
+
 The game is an APK you install yourself. It contains no part of the game: it plays your
 own copy of the PAL disc (SCES-02873), from a disc image (a .cue file and its .bin
 files) that the game copies in once. A 64-bit phone or tablet with Vulkan (most from

@@ -262,7 +262,7 @@ std::string SettingsPanel::value(Item item, const Options& o, bool vr) const {
   switch (item) {
     case Item::WobbleSize: std::snprintf(buf, sizeof buf, "%.1f", vr ? o.vr_jitter_scale : o.jitter_scale); break;
     case Item::WobbleHold:
-      if (!vr && o.jitter_hold <= 0) return "50 Hz";  // (the monitor: the original's own rate)
+      if (!vr && o.jitter_hold <= 0) return on_off(false);  // (the monitor: the original's own 50 Hz, shown as Off: owner)
       std::snprintf(buf, sizeof buf, "%d", vr ? o.vr_jitter_hold : o.jitter_hold);
       break;
     case Item::Smooth: return on_off(o.smooth_animation);
@@ -366,7 +366,7 @@ bool SettingsPanel::change(Item item, int d, Options& o, bool vr) {
   };
   switch (item) {
     case Item::WobbleSize: return step(vr ? o.vr_jitter_scale : o.jitter_scale, 0.1 * d, 0.0, 2.0);
-    case Item::WobbleHold: {  // (the monitor's goes from 0, the original's 50 Hz)
+    case Item::WobbleHold: {  // (the monitor's goes from 0, Off: the original's 50 Hz)
       int& hold = vr ? o.vr_jitter_hold : o.jitter_hold;
       const int before = hold;
       hold = std::clamp(hold + d, vr ? 1 : 0, 3);

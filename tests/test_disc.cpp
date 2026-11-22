@@ -1311,8 +1311,8 @@ TEST(disc_sces02873_monitor_settings_step_and_show) {
     p.home();
     while (p.current() != item) p.tick(down, 0.02, o, false);
   };
-  // Wobble hold on the monitor: the original's 50 Hz, then every 1 to 3 frames; the headset's stays 1 to 3.
-  CHECK(p.value(I::WobbleHold, o, false) == "50 Hz" && p.label(I::WobbleHold, false) == "Wobble hold (1)");
+  // Wobble hold on the monitor: Off (the original's 50 Hz, its value), then every 1 to 3 frames; the headset's stays 1 to 3.
+  CHECK(p.value(I::WobbleHold, o, false) == "Off" && p.label(I::WobbleHold, false) == "Wobble hold (Off)");
   go_to(I::WobbleHold);
   CHECK(p.tick(right, 0.02, o, false) == A::Changed && o.jitter_hold == 1 && o.vr_jitter_hold == 3);
   p.tick(right, 0.5, o, false), p.tick(right, 0.5, o, false);
