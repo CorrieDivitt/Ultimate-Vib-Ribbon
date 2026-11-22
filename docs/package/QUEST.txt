@@ -1,0 +1,55 @@
+Vib-Ribbon VR on a Meta Quest 3 (standalone, no PC needed to play)
+https://github.com/CorrieDivitt/Vib-Ribbon-VR
+
+The game is an APK you install on the headset yourself ("sideloading"). It contains no
+part of the game: it plays your own copy of the PAL disc (SCES-02873), from a disc
+image (a .cue file with its .bin files) that you copy onto the headset once.
+
+WHAT YOU NEED
+- Developer Mode on the headset: in the Meta Horizon app on your phone, Devices >
+  your headset > Headset settings > Developer Mode (you may be asked to make a free
+  developer account first). Restart the headset.
+- A USB-C cable, and adb on a Windows PC: Google's "SDK Platform-Tools" for Windows
+  (unzip anywhere; the commands below are run in that folder in PowerShell).
+- The APK (vib-ribbon-vr.apk or app-debug.apk) and your disc image's folder.
+
+ONCE
+1. Plug the headset in, put it on and allow USB debugging ("Always allow"). Then:
+     .\adb devices
+   The headset should be listed as "device".
+2. Install the game:
+     .\adb install -r "C:\path\to\app-debug.apk"
+3. Start it once and stop it, so that it makes its own folder (a folder made by adb
+   first would belong to adb, and the game could not read it):
+     .\adb shell am start -n io.github.corriedivitt.vibribbonvr/org.libsdl.app.SDLActivity
+     Start-Sleep 5
+     .\adb shell am force-stop io.github.corriedivitt.vibribbonvr
+4. Copy your disc image (the folder with the .cue and .bin files) and let the game read it:
+     .\adb shell mkdir -p /sdcard/Android/data/io.github.corriedivitt.vibribbonvr/files/disc
+     .\adb push "C:\path\to\your disc folder\." /sdcard/Android/data/io.github.corriedivitt.vibribbonvr/files/disc/
+     .\adb shell chmod -R a+rwX /sdcard/Android/data/io.github.corriedivitt.vibribbonvr/files
+   (The chmod line matters: files copied by adb belong to adb until it runs.)
+
+PLAYING
+In the headset: Library, then "Unknown sources" in its list of filters, then Vib-Ribbon VR.
+- Touch controllers: Block LT, Loop RT, Pit left grip / X / Y, Wave right grip / A / B.
+  The menu button opens the options menu (in a song it pauses). Left stick: go round
+  Vibri. Right stick: zoom; flicked sideways: scroll speed. Right stick click: recenter.
+  In the menus the left stick moves, RT or A chooses, LT or B goes back.
+- Exit is on the title's menu (B jumps to it).
+- An Xbox or other Bluetooth gamepad paired with the headset works too.
+
+YOUR OWN MUSIC
+Copy MP3 or FLAC files into the music folder, then run the chmod line again:
+     .\adb push "C:\path\to\music\." /sdcard/Android/data/io.github.corriedivitt.vibribbonvr/files/music/
+     .\adb shell chmod -R a+rwX /sdcard/Android/data/io.github.corriedivitt.vibribbonvr/files
+
+UPDATING
+Install the new APK with step 2 again; your disc, music and save stay.
+
+SAVE FILE AND LOG (for problem reports)
+     .\adb pull /sdcard/Android/data/io.github.corriedivitt.vibribbonvr/files/save.txt
+     .\adb logcat -d -s vibplay:* > quest-log.txt
+
+THIRD_PARTY_NOTICES.txt (inside the APK and beside this file) lists the libraries the
+game is built from and their licences.

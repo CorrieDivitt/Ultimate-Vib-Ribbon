@@ -55,7 +55,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: vib-ribbon-vr-quest-apk
-          path: android/app/build/outputs/apk/debug/*.apk
+          path: |
+            android/app/build/outputs/apk/debug/*.apk
+            docs/package/QUEST.txt
+            docs/notices/THIRD_PARTY_NOTICES.txt
 
   # The Windows download (task 4.16 I): the launcher, Vib-Ribbon.exe (monitor) and Vib-Ribbon VR.exe
   # (headset) with the C++ runtime linked in, a README and the licence, zipped and kept
