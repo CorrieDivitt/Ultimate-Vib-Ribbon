@@ -2509,6 +2509,8 @@ int run(int argc, char** argv) {
     out << save.to_text();
   };
 
+  SDL_SetHint(SDL_HINT_WINDOWS_INTRESOURCE_ICON, "1");  // (Windows: our icon, resource 1, on the window and the taskbar)
+  SDL_SetHint(SDL_HINT_WINDOWS_INTRESOURCE_ICON_SMALL, "1");
   if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD)) throw std::runtime_error(std::string("SDL_Init: ") + SDL_GetError());
   // The disc: named on the command line, else the one picked before (save.txt's
   // disc_path), else the player picks it now in a file dialog; remembered.

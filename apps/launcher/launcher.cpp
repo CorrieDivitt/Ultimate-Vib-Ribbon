@@ -717,6 +717,8 @@ int main(int argc, char** argv) {
   int screenshot_tab = 0;
   for (int i = 1; i + 2 < argc; ++i)
     if (std::string(argv[i]) == "--screenshot") screenshot = argv[i + 1], screenshot_tab = std::atoi(argv[i + 2]);
+  SDL_SetHint(SDL_HINT_WINDOWS_INTRESOURCE_ICON, "1");  // (our icon, resource 1, on the window and the taskbar)
+  SDL_SetHint(SDL_HINT_WINDOWS_INTRESOURCE_ICON_SMALL, "1");
   if (!SDL_Init(SDL_INIT_VIDEO)) {
     SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Vib-Ribbon Launcher", SDL_GetError(), nullptr);
     return 1;

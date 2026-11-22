@@ -1,0 +1,3 @@
+// The Windows programs' icon (task 4.16 I; drawn by tools/package/make_icon.py). Resource 1:
+// Explorer shows it, and SDL_HINT_WINDOWS_INTRESOURCE_ICON gives it to the windows.
+1 ICON "vibribbon.ico"

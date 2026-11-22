@@ -21,7 +21,7 @@ if(vib_commit)
   string(APPEND vib_launcher_version " (${vib_commit})")
 endif()
 
-add_executable(vib_launcher WIN32 launcher.cpp launcher.manifest)
+add_executable(vib_launcher WIN32 launcher.cpp launcher.manifest ${PROJECT_SOURCE_DIR}/apps/common/icon/vibribbon.rc)
 set_target_properties(vib_launcher PROPERTIES OUTPUT_NAME "Vib-Ribbon Launcher")
 target_compile_definitions(vib_launcher PRIVATE "VIB_LAUNCHER_VERSION=\"${vib_launcher_version}\"")
 target_link_libraries(vib_launcher PRIVATE vibcore vib_imgui vib_warnings)
