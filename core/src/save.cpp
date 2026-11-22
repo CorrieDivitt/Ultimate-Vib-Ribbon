@@ -77,6 +77,9 @@ void apply_original_look(Options& o) {
   original.scroll_speed = 1.0;
   original.score_numbers = original.timing_feedback = original.fc_celebration = false;
   original.vr_wrap = false;
+  // In a headset the original's one pixel is far too thick on an eye's tall picture:
+  // there it gives our headset default instead (owner, session 5).
+  original.vr_line_width = Options{}.vr_line_width;
   copy_look(original, o);
 }
 

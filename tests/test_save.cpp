@@ -95,7 +95,7 @@ TEST(original_look_sets_the_look_and_leaves_the_rest) {
   const Options before = o;
   apply_original_look(o);
   CHECK(o.glow == 0 && o.colours[2] == 0 && o.scroll_speed == 1.0 && !o.vr_wrap && !o.timing_feedback && !o.smooth_animation);
-  CHECK(o.line_width == 1.0 && o.vr_line_width == 1.0 && o.vr_jitter_hold == 1 && o.vr_ahead_seconds == 8.0 && o.vr_behind_seconds == 2.0);
+  CHECK(o.line_width == 1.0 && o.vr_line_width == Options{}.vr_line_width && o.vr_jitter_hold == 1 && o.vr_ahead_seconds == 8.0 && o.vr_behind_seconds == 2.0);
   CHECK(o.audio_offset_ms == 35 && o.picture_offset_ms == -60 && o.language == 3 && o.vr_zoom == 2.0);  // (not the look)
   copy_look(before, o);
   CHECK(o.glow == 3 && o.colours[2] == 4 && o.scroll_speed == 2.5 && o.vr_wrap && o.timing_feedback && o.vr_line_width == 0.2);

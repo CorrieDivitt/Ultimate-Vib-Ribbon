@@ -612,7 +612,7 @@ void apply_settings(Session& s) {
   if (s.opt.headset) s.opt.vr = !o.vr_classic;
   s.line_width = s.opt.vr ? o.vr_line_width : o.line_width;
   s.audio.adjust_offset(o.audio_offset_ms - s.audio.offset_ms());
-  Clip::set_smooth(s.opt.smooth || o.smooth_animation || s.opt.vr);  // always smooth in a headset
+  Clip::set_smooth(s.opt.smooth || o.smooth_animation || s.opt.headset);  // always smooth in a headset (the classic screen too: owner)
   s.audio.set_volumes(s.opt.music.value_or(o.music_volume), s.opt.sfx.value_or(o.effects_volume));
   if (s.opt.headset) s.renderer.set_refresh_rate(float(o.vr_refresh_hz));  // (asks only when it changed)
 }
@@ -2203,7 +2203,7 @@ int run(int argc, char** argv) {
     const bool fixed = opt.fixed || save.options.fixed_courses;
     std::printf("GPU: %s\nCourses: %s\n", renderer.gpu_name(), fixed ? "fixed (the same every play)" : "vary from play to play, like the original");
     // Smooth animation is always on in a headset (owner's decision): stepped poses look far worse up close.
-    Clip::set_smooth(opt.smooth || save.options.smooth_animation || opt.vr);
+    Clip::set_smooth(opt.smooth || save.options.smooth_animation || opt.headset);
     std::printf("Animation: %s\n", Clip::smooth() ? "smooth (poses blended)" : "stepped, like the original");
     Session s{opt, save, fixed, disc, script, scene, hud, audio, fx, window, renderer,
               opt.line_width.value_or(opt.vr ? save.options.vr_line_width : save.options.line_width), {}, {}};

@@ -92,7 +92,7 @@ struct Options {
 Options original_options();
 
 // The look settings (lines, wobble, smoothing, horizon, glow, colours, scroll speed and
-// our display extras) set to the original's in one go (Visual > Original look, for
+// our display extras; the headset's lines go to our default 0.05) set to the original's in one go (Visual > Original look, for
 // comparing with the original), and copied from one set of options to another (its
 // Restore). Timing, sound, language, controls and the like are left alone.
 void apply_original_look(Options& o);
