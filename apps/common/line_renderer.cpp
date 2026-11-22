@@ -259,7 +259,8 @@ class Renderer::Impl {
       pending_.push_back({id, start_ns});
     }
     r = vkQueuePresentKHR(queue_, &present);
-    if (r == VK_ERROR_OUT_OF_DATE_KHR || r == VK_SUBOPTIMAL_KHR) resize_ = true;
+    if (r == VK_ERROR_OUT_OF_DATE_KHR) resize_ = true;
+    else if (r == VK_SUBOPTIMAL_KHR) resize_ = suboptimal_needs_new_swapchain();
     else if (r == VK_ERROR_SURFACE_LOST_KHR) surface_lost_ = true;
     else check(r, "vkQueuePresentKHR");
     // Low latency with present wait: wait here until the frame before this one is on the
@@ -601,6 +602,18 @@ class Renderer::Impl {
     check(vkCreateFence(device_, &fi, nullptr, &frame_fence_), "vkCreateFence");
   }
 
+  // Android calls every present suboptimal while the system turns our images (see
+  // create_swapchain); a new swapchain only when the screen's turn has changed.
+  bool suboptimal_needs_new_swapchain() {
+#ifdef __ANDROID__
+    VkSurfaceCapabilitiesKHR caps;
+    if (vkGetPhysicalDeviceSurfaceCapabilitiesKHR(gpu_, surface_, &caps) != VK_SUCCESS) return true;
+    return caps.currentTransform != made_transform_;
+#else
+    return true;
+#endif
+  }
+
   void destroy_swapchain() {
     for (VkFramebuffer f : framebuffers_) vkDestroyFramebuffer(device_, f, nullptr);
     for (VkImageView v : views_) vkDestroyImageView(device_, v, nullptr);
@@ -622,6 +635,18 @@ class Renderer::Impl {
     SDL_GetWindowSizeInPixels(window_, &w, &h);
     extent_ = caps.currentExtent;
     if (extent_.width == UINT32_MAX) extent_ = {std::uint32_t(std::max(w, 0)), std::uint32_t(std::max(h, 0))};
+    VkSurfaceTransformFlagBitsKHR transform = caps.currentTransform;
+#ifdef __ANDROID__
+    // Android gives the surface in the screen's natural (upright, on a phone) shape with a
+    // turn to apply. We draw upright pictures and let the system turn them: the images
+    // take the turned shape (sideways on a sideways phone) and no turn of our own.
+    made_transform_ = caps.currentTransform;
+    if (caps.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR) {
+      transform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+      if (caps.currentTransform & (VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR | VK_SURFACE_TRANSFORM_ROTATE_270_BIT_KHR))
+        std::swap(extent_.width, extent_.height);
+    }
+#endif
     extent_.width = std::clamp(extent_.width, caps.minImageExtent.width, caps.maxImageExtent.width);
     extent_.height = std::clamp(extent_.height, caps.minImageExtent.height, caps.maxImageExtent.height);
     if (extent_.width == 0 || extent_.height == 0) { extent_ = {0, 0}; return; }
@@ -637,7 +662,7 @@ class Renderer::Impl {
     info.imageArrayLayers = 1;
     info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    info.preTransform = caps.currentTransform;
+    info.preTransform = transform;
     info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     info.presentMode = VK_PRESENT_MODE_FIFO_KHR;  // vsync; always available
     if (!vsync_) {  // as fast as frames come: mailbox (no tearing) if offered, else immediate
@@ -739,6 +764,7 @@ class Renderer::Impl {
   VkDeviceMemory depth_memory_ = VK_NULL_HANDLE;
   VkImageView depth_view_ = VK_NULL_HANDLE;
   bool resize_ = false;
+  VkSurfaceTransformFlagBitsKHR made_transform_ = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;  // (Android: the screen's turn when the swapchain was made)
   bool vsync_ = true;
   bool low_latency_ = false;
   bool surface_lost_ = false;

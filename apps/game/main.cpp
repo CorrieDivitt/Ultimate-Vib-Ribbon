@@ -2655,6 +2655,7 @@ int run(int argc, char** argv) {
 #ifdef VIB_PHONE
   opt.vr = false;  // (phones and tablets: the monitor's game, with touch controls)
   SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");  // (touches are the touch controls', not a mouse)
+  SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");  // (sideways only: a resizable window would let SDL allow upright)
 #endif
   opt.headset = opt.vr;
   if (!opt.seed_given) opt.seed = static_cast<std::uint32_t>(std::chrono::steady_clock::now().time_since_epoch().count());
@@ -2671,12 +2672,21 @@ int run(int argc, char** argv) {
   }
 #endif
   SaveData save;
+#ifdef VIB_PHONE
+  // A phone starts with the original's camera (owner: beside Vibri does not suit a touch
+  // screen); a save that has chosen a camera keeps it.
+  save.options.camera = 0;
+#endif
   if (!save_path.empty()) {
     std::ifstream in(path_from_utf8(save_path));
     if (in) {
       std::stringstream text;
       text << in.rdbuf();
       save = SaveData::from_text(text.str());
+#ifdef VIB_PHONE
+      const std::string t = "\n" + text.str();
+      if (t.find("\ncamera ") == std::string::npos) save.options.camera = 0;
+#endif
     }
     std::printf("Save file: %s\n", save_path.c_str());
   }
