@@ -42,22 +42,34 @@ jobs:
       - uses: gradle/actions/wrapper-validation@v4
       - name: CMake for the Android build (from the SDK)
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "cmake;3.31.6" "build-tools;36.0.0" > /dev/null
-      - name: Build the APK
+      - name: Build the APKs (Quest, and phones and tablets)
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon --stacktrace -PvibNdkVersion=$(basename "$ANDROID_NDK_LATEST_HOME")
-      - name: Check the APK holds the game and SDL
+        run: ./gradlew assembleQuestDebug assembleFlatDebug --no-daemon --stacktrace -PvibNdkVersion=$(basename "$ANDROID_NDK_LATEST_HOME")
+      - name: Check the APKs hold the game, SDL and the notices
         run: |
-          unzip -l android/app/build/outputs/apk/debug/app-debug.apk | grep -E 'lib/|AndroidManifest|classes' | tee apk.txt
-          grep -q 'lib/arm64-v8a/libmain.so' apk.txt
-          grep -q 'lib/arm64-v8a/libSDL3.so' apk.txt
-          grep -q 'lib/arm64-v8a/libc++_shared.so' apk.txt
-          unzip -l android/app/build/outputs/apk/debug/app-debug.apk | grep -q 'assets/THIRD_PARTY_NOTICES.txt'
+          for apk in android/app/build/outputs/apk/quest/debug/app-quest-debug.apk android/app/build/outputs/apk/flat/debug/app-flat-debug.apk; do
+            unzip -l "$apk" > apk.txt
+            grep -q 'lib/arm64-v8a/libmain.so' apk.txt
+            grep -q 'lib/arm64-v8a/libSDL3.so' apk.txt
+            grep -q 'lib/arm64-v8a/libc++_shared.so' apk.txt
+            grep -q 'assets/THIRD_PARTY_NOTICES.txt' apk.txt
+          done
+          # The phone build has no headset in it: no OpenXR loader symbols in its game.
+          ! unzip -p android/app/build/outputs/apk/flat/debug/app-flat-debug.apk lib/arm64-v8a/libmain.so | grep -aq XR_KHR_android_create_instance
+          unzip -p android/app/build/outputs/apk/quest/debug/app-quest-debug.apk lib/arm64-v8a/libmain.so | grep -aq XR_KHR_android_create_instance
       - uses: actions/upload-artifact@v4
         with:
           name: vib-ribbon-vr-quest-apk
           path: |
-            android/app/build/outputs/apk/debug/*.apk
+            android/app/build/outputs/apk/quest/debug/*.apk
             docs/package/QUEST.txt
+            docs/notices/THIRD_PARTY_NOTICES.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vib-ribbon-android-apk
+          path: |
+            android/app/build/outputs/apk/flat/debug/*.apk
+            docs/package/ANDROID.txt
             docs/notices/THIRD_PARTY_NOTICES.txt
 
   # The Windows download (task 4.16 I): the launcher, Vib-Ribbon.exe (monitor) and Vib-Ribbon VR.exe

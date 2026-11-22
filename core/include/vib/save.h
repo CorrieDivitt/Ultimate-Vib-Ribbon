@@ -119,6 +119,9 @@ struct Options {
   // Ours (task 4.17): 0 easier, 1 the original's courses, 2 harder (CourseGenerator::set_difficulty).
   // High scores are kept for the original's difficulty only.
   int difficulty = 1;
+  // Ours (task 4.20, phones and tablets): the touch buttons drawn as the obstacles' shapes
+  // (0) or as the original's PlayStation buttons, L1, Down, R1 and X (1).
+  int touch_style = 0;
   bool launcher_close = true;
   float music_volume = 1.0f, effects_volume = 1.0f;
 };

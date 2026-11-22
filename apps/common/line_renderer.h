@@ -142,6 +142,9 @@ class Display {
   // A monitor: fewer frames waiting in line (two swapchain images; with present wait,
   // each draw waits until the frame before it is on the screen).
   virtual void set_low_latency(bool) {}
+  // A phone or tablet came back from the background (task 4.20): the window's surface was
+  // replaced, so the next draw makes a new one.
+  virtual void surface_changed() {}
   // Whether display_lead_ms() is measured (present wait) or an estimate.
   virtual bool lead_measured() const { return true; }
   // The colour behind the lines, as shown on a monitor (0-1 each; the original's black).
@@ -167,6 +170,7 @@ class Renderer : public Display {
   void set_picture_aspect(float aspect) override;
   float picture_aspect() const override { return aspect(); }
   void set_low_latency(bool on) override;
+  void surface_changed() override;
   double display_lead_ms() const override;  // from the start of a draw() to the screen, smoothed (task 4.16 F)
   bool lead_measured() const override;
   void draw(const std::vector<LineInstance>& lines, const Mat4& view, float fov_y, float line_width);

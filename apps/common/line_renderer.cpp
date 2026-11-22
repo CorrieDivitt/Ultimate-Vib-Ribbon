@@ -122,6 +122,28 @@ class Renderer::Impl {
     resize_ = true;  // (a new swapchain with the other present mode)
   }
   void set_shape(float aspect) { shape_ = aspect; }
+  void surface_changed() { surface_lost_ = true; }
+  // A new surface for the window (the old one gone with its swapchain); false if the
+  // window has none yet (still in the background): drawing waits.
+  bool remake_surface() {
+    vkDeviceWaitIdle(device_);
+    destroy_swapchain();
+    if (surface_) vkDestroySurfaceKHR(instance_, surface_, nullptr);
+    surface_ = VK_NULL_HANDLE;
+    if (!SDL_Vulkan_CreateSurface(window_, instance_, nullptr, &surface_)) {
+      surface_ = VK_NULL_HANDLE;
+      return false;
+    }
+    VkBool32 can_present = VK_FALSE;
+    vkGetPhysicalDeviceSurfaceSupportKHR(gpu_, queue_family_, surface_, &can_present);
+    if (!can_present) return false;
+    surface_lost_ = false;
+    resize_ = true;
+    pending_.clear();
+    last_waited_ = 0;
+    std::printf("Display: a new surface (back from the background)\n");
+    return true;
+  }
 
   FrameTiming timing() const { return timing_; }
 
@@ -144,6 +166,8 @@ class Renderer::Impl {
     // Frames handed over earlier that have reached the screen since (a poll: their time is
     // known to within this moment).
     if (present_wait_ok_) poll_presented();
+    // The window's surface was replaced (a phone back from the background) or lost: a new one.
+    if (surface_lost_ && !remake_surface()) return;
     if (resize_ || extent_.width == 0) {
       vkDeviceWaitIdle(device_);
       create_swapchain();
@@ -154,6 +178,7 @@ class Renderer::Impl {
     std::uint32_t image = 0;
     VkResult r = vkAcquireNextImageKHR(device_, swapchain_, UINT64_MAX, image_ready_, VK_NULL_HANDLE, &image);
     if (r == VK_ERROR_OUT_OF_DATE_KHR) { resize_ = true; return; }
+    if (r == VK_ERROR_SURFACE_LOST_KHR) { surface_lost_ = true; return; }
     if (r != VK_SUBOPTIMAL_KHR) check(r, "vkAcquireNextImageKHR");
     vkResetFences(device_, 1, &frame_fence_);
     measure.waited = SDL_GetTicksNS() - start_ns;  // the fence and the next image: vsync's wait
@@ -235,6 +260,7 @@ class Renderer::Impl {
     }
     r = vkQueuePresentKHR(queue_, &present);
     if (r == VK_ERROR_OUT_OF_DATE_KHR || r == VK_SUBOPTIMAL_KHR) resize_ = true;
+    else if (r == VK_ERROR_SURFACE_LOST_KHR) surface_lost_ = true;
     else check(r, "vkQueuePresentKHR");
     // Low latency with present wait: wait here until the frame before this one is on the
     // screen, so at most this frame waits in line and the next is built close to its turn.
@@ -715,6 +741,7 @@ class Renderer::Impl {
   bool resize_ = false;
   bool vsync_ = true;
   bool low_latency_ = false;
+  bool surface_lost_ = false;
   std::uint32_t instance_api_ = VK_API_VERSION_1_0, image_count_ = 2;
   bool present_wait_ok_ = false;
   PFN_vkWaitForPresentKHR wait_for_present_ = nullptr;
@@ -767,6 +794,7 @@ FrameTiming Renderer::timing() const { return impl_->timing(); }
 void Renderer::set_vsync(bool on) { impl_->set_vsync(on); }
 void Renderer::set_picture_aspect(float aspect) { impl_->set_shape(aspect); }
 void Renderer::set_low_latency(bool on) { impl_->set_low_latency(on); }
+void Renderer::surface_changed() { impl_->surface_changed(); }
 double Renderer::display_lead_ms() const { return impl_->display_lead_ms(); }
 bool Renderer::lead_measured() const { return impl_->lead_measured(); }
 

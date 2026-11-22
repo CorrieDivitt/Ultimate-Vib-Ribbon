@@ -20,6 +20,7 @@ add_library(vibcore STATIC
   src/title_intro.cpp
   src/kiosk_movie.cpp
   src/settings_panel.cpp
+  src/touch_controls.cpp
   src/own_cd.cpp
   src/file_picker.cpp
   src/perf_overlay.cpp

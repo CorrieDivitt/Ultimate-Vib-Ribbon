@@ -93,6 +93,15 @@
 #include "vib/perf_overlay.h"
 #include "vib/own_cd.h"
 #include "vib/file_picker.h"
+#include "vib/touch_controls.h"
+
+// The phone and tablet build (task 4.20): Android, flat, touch controls, the disc imported.
+#if defined(__ANDROID__) && defined(VIB_ANDROID_FLAT)
+#define VIB_PHONE 1
+// Copies the files the player picks (the .cue and its .bin files) into `folder`, emptied
+// first; returns the .cue's path there, or "" (cancelled, or a reason shown). android_import.cpp.
+std::string import_disc(const std::string& folder);
+#endif
 
 namespace {
 
@@ -128,6 +137,7 @@ void log_to_logcat() {
   }).detach();
 }
 
+#ifndef VIB_PHONE
 // The disc image pushed to the headset: the first .cue (by path) anywhere in the
 // app's folder, a few folders deep (files/disc/ is where the tracker's command puts it).
 std::string find_disc_on_headset() {
@@ -159,6 +169,7 @@ std::string find_disc_on_headset() {
   std::printf("Disc: %s\n", cues.front().string().c_str());
   return cues.front().string();
 }
+#endif
 #endif
 
 using namespace vib;
@@ -494,6 +505,11 @@ struct Session {
   float drag_x = 0, drag_y = 0;
   std::uint64_t mouse_moved_ns = 0;
   bool cursor_hidden = false;
+  // Phones and tablets (task 4.20): the on-screen buttons, shown once the screen is touched
+  // (from the start on a phone) and hidden when a gamepad or keyboard is used.
+  TouchControls touch;
+  bool touch_on = false;
+  std::vector<vibr::LineInstance> touch_lines;
 };
 
 // In a headset the evolution meter (the dots around Vibri that show the run of hits)
@@ -673,6 +689,11 @@ struct MouseInput {
 MouseInput mouse_event(Session& s, const SDL_Event& e, bool wheel_zooms) {
   MouseInput m;
   if (s.opt.headset) return m;
+  // (A touch screen's own mouse events: the touch controls take touches.)
+  if ((e.type == SDL_EVENT_MOUSE_MOTION && e.motion.which == SDL_TOUCH_MOUSEID) ||
+      ((e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) && e.button.which == SDL_TOUCH_MOUSEID) ||
+      (e.type == SDL_EVENT_MOUSE_WHEEL && e.wheel.which == SDL_TOUCH_MOUSEID))
+    return m;
   auto place = [&](float wx, float wy) {  // window points to the picture (bars left out)
     int w = 0, h = 0, pw = 0, ph = 0;
     SDL_GetWindowSize(s.window, &w, &h);
@@ -845,6 +866,9 @@ void change_line_width(Session& s, bool thicker) {
 // nothing when it is already so.
 void apply_window(Session& s) {
   if (s.opt.headset) return;
+#ifdef __ANDROID__
+  return;  // (a phone's screen: always the whole of it)
+#endif
   const Options& o = s.save.options;
   const std::array<int, 4> want{o.window_mode, o.fullscreen_w, o.fullscreen_h, o.fullscreen_hz};
   if (want == s.applied_window) return;
@@ -888,6 +912,53 @@ bool window_key(Session& s, const SDL_Event& e) {
   apply_window(s);
   if (s.write_save) s.write_save();
   return true;
+}
+
+// Events every loop handles the same way: F11 / Alt+Enter (monitor); the app coming back
+// from the background (phones: a new surface to draw on); a gamepad or key used (the
+// touch buttons hide until the screen is touched again). True when the event was taken.
+bool common_event(Session& s, const SDL_Event& e) {
+  if (e.type == SDL_EVENT_DID_ENTER_FOREGROUND) s.renderer.surface_changed();
+  if (e.type == SDL_EVENT_WILL_ENTER_BACKGROUND || e.type == SDL_EVENT_DID_ENTER_FOREGROUND) s.touch.clear();
+  if (e.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN || (e.type == SDL_EVENT_KEY_DOWN && e.key.key != SDLK_AC_BACK)) s.touch_on = false;
+  return window_key(s, e);
+}
+
+bool is_finger(const SDL_Event& e) {
+  return e.type == SDL_EVENT_FINGER_DOWN || e.type == SDL_EVENT_FINGER_MOTION || e.type == SDL_EVENT_FINGER_UP;
+}
+
+// A touch (window 0 to 1) through the touch controls, in picture units (x times the
+// picture's aspect, y -1 at the top; bars left out). Shows the buttons.
+TouchControls::Result touch_event(Session& s, const SDL_Event& e) {
+  s.touch_on = true;
+  const float a = s.renderer.picture_aspect() > 0 ? s.renderer.picture_aspect() : 16.0f / 9.0f;
+  if (std::abs(s.touch.aspect() - a) > 1e-3f) s.touch.layout(a);
+  int pw = 0, ph = 0;
+  SDL_GetWindowSizeInPixels(s.window, &pw, &ph);
+  float px = e.tfinger.x * float(std::max(pw, 1)), py = e.tfinger.y * float(std::max(ph, 1));
+  float w = float(std::max(pw, 1)), h = float(std::max(ph, 1));
+  if (w / h > a) px -= (w - h * a) * 0.5f, w = h * a;  // (bars at the sides)
+  else if (w / h < a) py -= (h - w / a) * 0.5f, h = w / a;
+  const float x = (px / w * 2.0f - 1.0f) * a, y = py / h * 2.0f - 1.0f;
+  const double t = double(e.tfinger.timestamp) * 1e-9;
+  TouchControls::Result r;
+  if (e.type == SDL_EVENT_FINGER_DOWN) r = s.touch.down(std::int64_t(e.tfinger.fingerID), x, y, t);
+  else if (e.type == SDL_EVENT_FINGER_MOTION) r = s.touch.move(std::int64_t(e.tfinger.fingerID), x, y, t);
+  else r = s.touch.up(std::int64_t(e.tfinger.fingerID), x, y, t);
+  // The camera (beside Vibri): as the mouse's drag and wheel.
+  s.mouse_turn_pixels += double(r.turn) * 300.0;
+  s.mouse_zoom_steps += double(r.zoom) * 4.0;
+  return r;
+}
+
+// A tap in the menus as a click on our settings (the row under it).
+MouseInput tap_as_click(Session& s, const TouchControls::Result& r) {
+  MouseInput m;
+  m.left_click = m.over = m.moved = true;
+  const float a = s.touch.aspect();
+  m.x = r.tap_x / a, m.y = r.tap_y;
+  return m;
 }
 
 // The monitor's fullscreen modes, largest and fastest first, once each (a mode seen at
@@ -954,10 +1025,15 @@ void setup_panel(SettingsPanel& p, bool vr, bool pause) {
   std::vector<I> top;
   if (pause) top.push_back(I::Continue);
   top.insert(top.end(), {I::Visual, I::Modifiers, I::CustomColours, I::Calibration});
+#ifdef VIB_PHONE
+  top.push_back(I::TouchButtons);  // (phones: the touch buttons' look; no window to set up)
+  if (!pause) top.push_back(I::ChangeDisc);  // (a new disc imported, then the game starts again with it)
+#else
   if (!vr) top.push_back(I::Display);
   if (vr) top.push_back(I::Recentre);
 #ifndef __ANDROID__
   if (!pause) top.push_back(I::ChangeDisc);  // (task 4.16 I: the game starts again with the other disc)
+#endif
 #endif
   top.insert(top.end(), {I::SoundEffects, I::EffectsVolume, I::Vibration, I::ResumeStyle});
   if (pause) top.push_back(I::QuitSong);
@@ -1053,6 +1129,35 @@ void draw_frame(Session& s, std::vector<vibr::Layer>& layers, double update_ms, 
       else SDL_ShowCursor();
       s.cursor_hidden = idle;
     }
+  }
+  // The touch buttons (phones, task 4.20), over the frame, through the text camera.
+  if (s.touch_on && !s.opt.headset && s.panel) {
+    const float a = s.renderer.picture_aspect() > 0 ? s.renderer.picture_aspect() : 16.0f / 9.0f;
+    if (std::abs(s.touch.aspect() - a) > 1e-3f) s.touch.layout(a);
+    SceneView v;
+    v.eye = {0, 0, 0}, v.target = {0, 0, 4730}, v.fov_y = float(682 * 6.28318530717958647692 / 4096.0);
+    const float unit = 4000.0f * std::tan(0.5f * v.fov_y);
+    const auto style = s.save.options.touch_style == 1 ? TouchControls::Style::PlayStation : TouchControls::Style::Shapes;
+    s.touch_lines.clear();
+    auto add = [&](const SceneLine& l, float dx, float dy, float dz) {
+      const Rgb c = shown_colour(l.colour, line_part::kNone, s.save.options.colours);  // (inverted on a light background)
+      s.touch_lines.push_back({{l.a.x + dx, l.a.y + dy, l.a.z + dz}, {l.b.x + dx, l.b.y + dy, l.b.z + dz},
+                               {c.r / 255.0f, c.g / 255.0f, c.b / 255.0f, 1.0f}});
+    };
+    for (int i = 0; i < TouchControls::kButtonCount; ++i) {
+      const auto b = TouchControls::Button(i);
+      if (!s.touch.shown(b)) continue;
+      const std::uint8_t shade = s.touch.held(b) ? 235 : 120;
+      for (const SceneLine& l : s.touch.button_lines(b, style, unit, 4000.0f, shade)) add(l, 0, 0, 0);
+      if (const char* text = TouchControls::label(b, style)) {  // L1, R1
+        const TouchControls::Place& p = s.touch.place(b);
+        for (SceneLine l : s.panel->text_lines(to_font_text(text), 1.3f, 0, 0)) {
+          l.colour = {shade, shade, shade};
+          add(l, p.x * unit, p.y * unit, 4000.0f);
+        }
+      }
+    }
+    layers.push_back({&s.touch_lines, vibr::look_at({0, 0, 0}, {0, 0, 4730}, {0, -1, 0}), v.fov_y});
   }
   const int level = s.save.options.perf_overlay;
   if (level > 0 && s.perf) {
@@ -1499,7 +1604,7 @@ bool run_calibration(Session& s, SettingsPanel& panel, bool picture) {
     std::vector<std::uint64_t> presses;
     SDL_Event ev;
     while (SDL_PollEvent(&ev)) {
-      if (window_key(s, ev)) continue;  // (F11 or Alt+Enter: window or fullscreen)
+      if (common_event(s, ev)) continue;  // (F11 or Alt+Enter; the app coming back; touch buttons hidden)
       switch (ev.type) {
         case SDL_EVENT_QUIT:
           std::printf("Calibration: the game is closing\n");
@@ -1523,6 +1628,16 @@ bool run_calibration(Session& s, SettingsPanel& panel, bool picture) {
         case SDL_EVENT_GAMEPAD_AXIS_MOTION:
           if (trigger_edge(s, ev.gaxis) != 0) presses.push_back(ev.gaxis.timestamp);
           break;
+        case SDL_EVENT_FINGER_DOWN: case SDL_EVENT_FINGER_MOTION: case SDL_EVENT_FINGER_UP: {  // (phones: a touch anywhere is a press)
+          s.touch.set_mode(TouchControls::Mode::Menus);
+          const TouchControls::Result r = touch_event(s, ev);
+          if (ev.type == SDL_EVENT_FINGER_DOWN) {
+            if (r.back || r.options) cancel = true;
+            else if (finished) confirm = true;
+            else presses.push_back(ev.tfinger.timestamp);
+          }
+          break;
+        }
         case SDL_EVENT_KEY_DOWN:
           if (ev.key.repeat) break;
           if (ev.key.key == SDLK_ESCAPE || ev.key.key == SDLK_BACKSPACE) cancel = true;
@@ -1908,7 +2023,35 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     presses.clear();
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
-      if (window_key(s, e)) continue;  // (F11 or Alt+Enter: window or fullscreen)
+      if (common_event(s, e)) continue;  // (F11 or Alt+Enter; the app coming back; touch buttons hidden)
+      if (is_finger(e)) {  // (task 4.20: the touch buttons; in the pause our settings)
+        s.touch.set_mode(paused || celebrating ? TouchControls::Mode::Menus : TouchControls::Mode::Play);
+        const TouchControls::Result r = touch_event(s, e);
+        if (s.demo && e.type == SDL_EVENT_FINGER_DOWN) return Result::Abort;  // (any touch ends the demo)
+        if (r.presses && !paused && !celebrating) presses.push_back({r.presses, e.tfinger.timestamp});
+        if (r.options) {
+          if (paused) resume = true;
+          else pause = true;
+        }
+        if (paused && s.panel) {
+          if (r.back) pin.cancel = true;
+          if (r.tap) panel_mouse(s, *s.panel, tap_as_click(s, r), pin);
+          if (r.swipe == 1) pin.up = true;
+          if (r.swipe == 2) pin.down = true;
+          if (r.swipe == 3) pin.left = true;
+          if (r.swipe == 4) pin.right = true;
+        }
+        continue;
+      }
+      if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_AC_BACK) {  // (Android's back: the pause, or back in it)
+        if (paused) pin.cancel = true;
+        else pause = true;
+        continue;
+      }
+      if (e.type == SDL_EVENT_WILL_ENTER_BACKGROUND && !paused && !s.demo) {  // (a phone: the game left for another app)
+        pause = true;
+        continue;
+      }
       if (is_mouse(e)) {  // (task 4.16 G: in play the camera; in the pause our settings)
         const MouseInput m = mouse_event(s, e, !paused);
         if (paused && s.panel) panel_mouse(s, *s.panel, m, pin);
@@ -2025,6 +2168,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     }
     // Touch buttons: play's in play, the menus' in the pause.
     s.renderer.set_input_mode(paused || celebrating ? vibr::Display::InputMode::Menus : vibr::Display::InputMode::Play);
+    s.touch.set_mode(paused || celebrating ? TouchControls::Mode::Menus : TouchControls::Mode::Play);  // (phones' buttons)
     last_ns = now_ns;
     scroll_shown = ease_scroll(scroll_shown, scroll_wanted(), dt);
     scroll_note = std::max(0.0, scroll_note - dt);
@@ -2501,12 +2645,16 @@ int run(int argc, char** argv) {
     else if (opt.cue.empty() && a.size() > 0 && a[0] != '-') opt.cue = a;
     else throw std::runtime_error("unknown argument: " + a);
   }
-#ifdef __ANDROID__
+#if defined(__ANDROID__) && !defined(VIB_PHONE)
   opt.vr = true;  // the headset build is always in the headset
   if (opt.cue.empty()) opt.cue = find_disc_on_headset();
   // Keep running while the activity is paused: OpenXR's session states say when to
   // draw (SDL would otherwise stop the loop inside its event polling).
   SDL_SetHint(SDL_HINT_ANDROID_BLOCK_ON_PAUSE, "0");
+#endif
+#ifdef VIB_PHONE
+  opt.vr = false;  // (phones and tablets: the monitor's game, with touch controls)
+  SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");  // (touches are the touch controls', not a mouse)
 #endif
   opt.headset = opt.vr;
   if (!opt.seed_given) opt.seed = static_cast<std::uint32_t>(std::chrono::steady_clock::now().time_since_epoch().count());
@@ -2560,9 +2708,22 @@ int run(int argc, char** argv) {
 #endif
       }
     }
-#ifdef __ANDROID__
+#if defined(__ANDROID__) && !defined(VIB_PHONE)
     (void)asked;
     throw std::runtime_error("no disc image on the headset");
+#elif defined(VIB_PHONE)
+    if (!asked)
+      SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, "Vib-Ribbon",
+                               "Choose your Vib-Ribbon disc image: its .cue file and all its .bin files, together (tap and hold to "
+                               "select several). They are copied into the game, once.\n\nYour own copy of the PAL disc (SCES-02873).",
+                               nullptr);
+    asked = true;
+    opt.cue = import_disc(headset_folder() + "/disc");
+    if (opt.cue.empty()) {
+      std::printf("No disc image imported: closing.\n");
+      SDL_Quit();
+      return 2;
+    }
 #else
     if (!asked)
       SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, "Vib-Ribbon",
@@ -2592,7 +2753,11 @@ int run(int argc, char** argv) {
   Iso9660 iso(disc);
   // In a headset the window only takes the keyboard (keep it in front) and shows nothing.
   SDL_Window* window = opt.vr ? SDL_CreateWindow("Vib-Ribbon VR: look in the headset (keep this window in front for the keyboard)", 640, 120, 0)
-                              : SDL_CreateWindow("Vib-Ribbon", 1200, 900, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
+                              : SDL_CreateWindow("Vib-Ribbon", 1200, 900, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY
+#ifdef VIB_PHONE
+                                                                                 | SDL_WINDOW_FULLSCREEN
+#endif
+                                                 );
   if (!window) throw std::runtime_error(std::string("SDL_CreateWindow: ") + SDL_GetError());
   // The language's own archive: GAME/<its bit>_FILES.PAK (04 German, 02 English,
   // 08 Spanish, 10 French, 20 Italian), as the original names them.
@@ -2649,6 +2814,9 @@ int run(int argc, char** argv) {
     s.perf = &perf;
     if (save.options.perf_overlay > 0) std::printf("Performance overlay on (L3 or F3 steps it: off, one line, detailed)\n");
     s.write_save = write_save;
+#ifdef VIB_PHONE
+    s.touch_on = true;  // (a phone: the touch buttons from the start, until a gamepad is used)
+#endif
     if (!opt.headset) {  // the monitor's window and picture as saved (task 4.16)
       if (save.options.window_mode != 0) s.last_fullscreen = save.options.window_mode;
       apply_window(s);
@@ -2834,7 +3002,13 @@ int run(int argc, char** argv) {
         while (!ready()) {
           SDL_Event ev;
           while (SDL_PollEvent(&ev)) {
-            if (window_key(s, ev)) continue;
+            if (common_event(s, ev)) continue;
+            if (is_finger(ev)) {  // (phones: the back button cancels)
+              s.touch.set_mode(TouchControls::Mode::Menus);
+              if (touch_event(s, ev).back) return false;
+              continue;
+            }
+            if (ev.type == SDL_EVENT_KEY_DOWN && ev.key.key == SDLK_AC_BACK) return false;
             if (ev.type == SDL_EVENT_QUIT) {
               quit_requested = true;
               return false;
@@ -2931,13 +3105,40 @@ int run(int argc, char** argv) {
       while (running) {
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
-          if (window_key(s, e)) continue;  // (F11 or Alt+Enter: window or fullscreen)
+          if (common_event(s, e)) continue;  // (F11 or Alt+Enter; the app coming back; touch buttons hidden)
           auto press = [&](int which, bool down) {
             bool* p[6] = {&pressed.up, &pressed.down, &pressed.left, &pressed.right, &pressed.confirm, &pressed.cancel};
             bool* h[4] = {&held.up, &held.down, &held.left, &held.right};
             if (down) *p[which] = true;
             if (which < 4) *h[which] = down;
           };
+          if (is_finger(e)) {  // (task 4.20: taps, swipes and the two buttons)
+            s.touch.set_mode(TouchControls::Mode::Menus);
+            const TouchControls::Result r = touch_event(s, e);
+            if (r.options) {
+              if (in_kiosk) press(4, true), press(4, false), settings_after_film = true;
+              else if (in_picker) picker_start = true;
+              else toggle_settings = true;
+            }
+            if (r.back) press(5, true), press(5, false);
+            if (r.swipe) press(r.swipe - 1, true), press(r.swipe - 1, false);  // (1 up, 2 down, 3 left, 4 right)
+            if (r.tap) {
+              if (in_settings) {
+                SettingsPanel::Input pi;
+                panel_mouse(s, panel, tap_as_click(s, r), pi);
+                const bool what[6] = {pi.up, pi.down, pi.left, pi.right, pi.confirm, pi.cancel};
+                for (int k = 0; k < 6; ++k)
+                  if (what[k]) press(k, true), press(k, false);
+              } else {
+                press(4, true), press(4, false);
+              }
+            }
+            continue;
+          }
+          if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_AC_BACK) {  // (Android's back: back)
+            press(5, true), press(5, false);
+            continue;
+          }
           if (is_mouse(e)) {  // (task 4.16 G)
             const MouseInput m = mouse_event(s, e, false);
             if (in_settings) {  // our settings: hover, click, wheel
@@ -3084,6 +3285,7 @@ int run(int argc, char** argv) {
         }
         toggle_settings = false;
         // (In the settings the right stick zooms play's view, which the preview shows.)
+        s.touch.set_mode(TouchControls::Mode::Menus);  // (phones' buttons: options and back)
         if (in_settings) zoom_or_circle_with_stick(s, frame_dt, play_zoom(s));
         else if (opt.vr) zoom_with_stick(s, frame_dt, s.save.options.vr_menu_zoom);
         else if (beside_vibri(s)) zoom_with_stick(s, frame_dt, s.save.options.menu_zoom, s.save.options.menu_angle);  // (the monitor's menus)
@@ -3180,7 +3382,12 @@ int run(int argc, char** argv) {
                 const std::u8string f = path_from_utf8(opt.cue).parent_path().u8string();
                 folder.assign(reinterpret_cast<const char*>(f.data()), f.size());
               }
+#ifdef VIB_PHONE
+              const std::string picked = import_disc(headset_folder() + "/disc");  // (copied in; the old one goes)
+              if (picked.empty()) g_disc_changed = false;
+#else
               const std::string picked = pick_disc(window, folder);
+#endif
               last_ns = SDL_GetTicksNS();
               behind = 0;
               if (!picked.empty() && picked != opt.cue) {
@@ -3755,7 +3962,7 @@ int main(int argc, char** argv) {
     // has passed the line on (session 5: a close with no trace in the log).
     __android_log_print(ANDROID_LOG_ERROR, "vibplay", "vibplay stopped: %s", e.what());
 #endif
-#ifndef __ANDROID__  // (a 2D dialog would never be seen in the headset; logcat has it)
+#if !defined(__ANDROID__) || defined(VIB_PHONE)  // (a 2D dialog would never be seen in the headset; logcat has it)
     SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "vibplay", e.what(), nullptr);  // so a failure is never just a closed window
 #endif
     return 1;

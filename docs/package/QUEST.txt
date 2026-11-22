@@ -11,14 +11,14 @@ WHAT YOU NEED
   developer account first). Restart the headset.
 - A USB-C cable, and adb on a Windows PC: Google's "SDK Platform-Tools" for Windows
   (unzip anywhere; the commands below are run in that folder in PowerShell).
-- The APK (vib-ribbon-vr.apk or app-debug.apk) and your disc image's folder.
+- The APK (vib-ribbon-vr.apk or app-quest-debug.apk) and your disc image's folder.
 
 ONCE
 1. Plug the headset in, put it on and allow USB debugging ("Always allow"). Then:
      .\adb devices
    The headset should be listed as "device".
 2. Install the game:
-     .\adb install -r "C:\path\to\app-debug.apk"
+     .\adb install -r "C:\path\to\app-quest-debug.apk"
 3. Start it once and stop it, so that it makes its own folder (a folder made by adb
    first would belong to adb, and the game could not read it):
      .\adb shell am start -n io.github.corriedivitt.vibribbonvr/org.libsdl.app.SDLActivity

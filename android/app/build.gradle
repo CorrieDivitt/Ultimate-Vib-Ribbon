@@ -75,12 +75,28 @@ android {
         targetSdk = 32
         versionCode = 1
         versionName = '0.1'
-        ndk { abiFilters 'arm64-v8a' }  // Quest 3 (and the Steam Frame's Android side later)
+        ndk { abiFilters 'arm64-v8a' }  // Quest 3 (and the Steam Frame's Android side later); 64-bit phones
         externalNativeBuild {
             cmake {
                 arguments '-DANDROID_STL=c++_shared', '-DVIB_BUILD_TESTS=OFF', '-DVIB_BUILD_TOOLS=OFF'
                 targets 'vibplay', 'SDL3-shared'  // libmain.so and libSDL3.so
             }
+        }
+    }
+
+    // Two APKs from one project (owner, session 6): the Quest 3 (headset, OpenXR) and
+    // Android phones and tablets (flat, touch controls), each with its own package name,
+    // so both can be installed side by side.
+    flavorDimensions = ['device']
+    productFlavors {
+        quest {
+            dimension = 'device'
+            applicationId = 'io.github.corriedivitt.vibribbonvr'
+        }
+        flat {
+            dimension = 'device'
+            applicationId = 'io.github.corriedivitt.vibribbon'
+            externalNativeBuild { cmake { arguments '-DVIB_VR=OFF', '-DVIB_ANDROID_FLAT=ON' } }
         }
     }
 

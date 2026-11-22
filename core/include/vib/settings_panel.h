@@ -86,6 +86,7 @@ class SettingsPanel {
     LowLatency,       // low_latency: fewer frames waiting in line (monitor)
     ChangeDisc,       // an action: pick another disc image (the game starts again with it)
     Difficulty,       // difficulty: easier, the original's, harder courses (from the next song)
+    TouchButtons,     // touch_style: the touch buttons as obstacle shapes or PlayStation buttons (phones)
   };
   // A display mode the monitor offers, for the Resolution item.
   struct DisplayMode {

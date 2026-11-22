@@ -1,0 +1,41 @@
+Vib-Ribbon on Android phones and tablets
+https://github.com/CorrieDivitt/Vib-Ribbon-VR
+
+The game is an APK you install yourself. It contains no part of the game: it plays your
+own copy of the PAL disc (SCES-02873), from a disc image (a .cue file and its .bin
+files) that the game copies in once. A 64-bit phone or tablet with Vulkan (most from
+2019 on) is needed.
+
+INSTALLING
+1. Copy the APK (app-flat-debug.apk) to the phone, open it in the phone's Files app
+   and allow installing from that app when asked. (Or with adb on a PC:
+   adb install -r app-flat-debug.apk)
+2. Put your disc image's .cue and .bin files somewhere on the phone, for example in
+   Download (copy them from a PC over USB).
+3. Start Vib-Ribbon. It asks for the disc image: pick the .cue and all its .bin files
+   together (tap and hold one, then tap the others). It copies them in once; after that
+   you may delete your copies. Options > Change disc imports another.
+
+PLAYING
+The screen turns sideways. Two buttons for each thumb:
+  left:  Block above, Pit below          right: Loop above, Wave below
+  Pairs: press both at once.
+Options > Touch buttons shows them as the obstacles' shapes or as the original's
+PlayStation buttons (L1, Down, R1, X).
+- The button at the top right opens the options menu (in a song it pauses).
+- In the menus: tap to choose, swipe to move, the arrow at the top left goes back
+  (so does Android's back).
+- The camera (Options > Visual > Camera > Beside Vibri, the starting one): drag across
+  the screen away from the buttons to go round Vibri; pinch to zoom.
+- A Bluetooth gamepad works too; the touch buttons hide while it is used.
+- Exit is on the title's menu.
+
+YOUR OWN MUSIC
+Put MP3 or FLAC files in the phone's Music folder. The first time you open the music
+picker the game asks whether it may read your music: allow it.
+
+PROBLEMS
+With adb on a PC: adb logcat -d -s vibplay:* > phone-log.txt
+
+THIRD_PARTY_NOTICES.txt (inside the APK and beside this file) lists the libraries the
+game is built from and their licences.

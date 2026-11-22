@@ -84,6 +84,7 @@ TEST(save_text_round_trips_and_tolerates_old_files) {
     CHECK(b.ahead_seconds == kWholeSongSeconds && b.behind_seconds == 30 && b.window_mode == 2 && b.fullscreen_w == 2560 &&
           b.fullscreen_h == 1440 && b.fullscreen_hz == 144 && !b.vsync && b.frame_limit == 144 && b.picture_43 && b.disc_path == "F:/Vib Ribbon/disc.cue");
     CHECK(SaveData::from_text("disc_path D:/Games/Vib Ribbon (Europe).cue\n").options.disc_path == "D:/Games/Vib Ribbon (Europe).cue");
+    CHECK(SaveData().options.touch_style == 0 && SaveData::from_text("touch_style 1\n").options.touch_style == 1);
     CHECK(SaveData().options.difficulty == 1 && SaveData::from_text("difficulty 2\n").options.difficulty == 2 &&
           SaveData::from_text("difficulty 7\n").options.difficulty == 1);
     CHECK(b.low_latency && b.menu_zoom == 2.0 && b.menu_angle == 30 && !SaveData().options.low_latency && SaveData().options.menu_zoom == 1.0);

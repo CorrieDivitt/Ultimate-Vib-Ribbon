@@ -8,6 +8,7 @@ add_executable(vibcore_tests
   test_course_gen.cpp
   test_gameplay.cpp
   test_save.cpp
+  test_touch.cpp
   test_settings.cpp
   test_perf.cpp
   test_own_cd.cpp

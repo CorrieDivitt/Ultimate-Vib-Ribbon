@@ -172,6 +172,7 @@ std::string SaveData::to_text() const {
   out << "menu_angle " << buf << '\n';
   out << "launcher_vr " << (options.launcher_vr ? 1 : 0) << '\n';
   out << "difficulty " << options.difficulty << '\n';
+  out << "touch_style " << options.touch_style << '\n';
   out << "launcher_close " << (options.launcher_close ? 1 : 0) << '\n';
   std::snprintf(buf, sizeof buf, "%.2f", double(options.music_volume));
   out << "music_volume " << buf << '\n';
@@ -265,6 +266,7 @@ SaveData SaveData::from_text(const std::string& text) {
     else if (key == "low_latency") d.options.low_latency = parse_bool(value);
     else if (key == "launcher_vr") d.options.launcher_vr = parse_bool(value);
     else if (key == "difficulty" && number >= 0 && number <= 2) d.options.difficulty = int(number);
+    else if (key == "touch_style" && (number == 0 || number == 1)) d.options.touch_style = int(number);
     else if (key == "launcher_close") d.options.launcher_close = parse_bool(value);
     else if (key == "menu_zoom" && number > 0) d.options.menu_zoom = std::clamp(number, 1.0 / 36.0, 4.0);
     else if (key == "menu_angle") d.options.menu_angle = std::remainder(number, 360.0);

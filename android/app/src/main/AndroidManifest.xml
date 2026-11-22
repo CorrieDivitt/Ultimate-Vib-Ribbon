@@ -1,58 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Vib-Ribbon VR on the Quest 3, standalone. The activity is SDL's own; it loads
-     libSDL3.so and our libmain.so and calls main(). -->
+<!-- Vib-Ribbon on Android: what both APKs share (task 4.20). Each flavor's own manifest
+     (src/quest, src/flat) adds its activity and what only it needs. The activity is SDL's
+     own; it loads libSDL3.so and our libmain.so and calls main(). -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     android:installLocation="auto">
 
-    <!-- A headset app: head tracking and Vulkan required. -->
-    <uses-feature android:name="android.hardware.vr.headtracking" android:required="true" android:version="1" />
     <uses-feature android:name="android.hardware.vulkan.level" android:required="true" android:version="0" />
     <uses-feature android:name="android.hardware.gamepad" android:required="false" />
-    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
-    <!-- The room behind the lines (Background > Passthrough). -->
-    <uses-feature android:name="com.oculus.feature.PASSTHROUGH" android:required="false" />
 
     <!-- Rumble on a gamepad (the Vibration setting). -->
     <uses-permission android:name="android.permission.VIBRATE" />
-    <!-- Reading music from the headset's own Music folder (S.2), asked for when the music picker first opens. -->
+    <!-- Reading music from the device's own Music folder (S.2), asked for when the music picker first opens. -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
 
-    <!-- The Khronos OpenXR loader finds the headset's runtime through its broker. -->
-    <uses-permission android:name="org.khronos.openxr.permission.OPENXR" />
-    <uses-permission android:name="org.khronos.openxr.permission.OPENXR_SYSTEM" />
-    <queries>
-        <provider android:authorities="org.khronos.openxr.runtime_broker;org.khronos.openxr.system_runtime_broker" />
-        <intent>
-            <action android:name="org.khronos.openxr.OpenXRRuntimeService" />
-        </intent>
-        <intent>
-            <action android:name="org.khronos.openxr.OpenXRApiLayerService" />
-        </intent>
-    </queries>
-
     <application
-        android:label="Vib-Ribbon VR"
         android:allowBackup="false"
         android:hasCode="true">
-
-        <meta-data android:name="com.oculus.supportedDevices" android:value="quest3|quest3s|questpro|quest2" />
-
-        <activity
-            android:name="org.libsdl.app.SDLActivity"
-            android:exported="true"
-            android:launchMode="singleTask"
-            android:screenOrientation="landscape"
-            android:resizeableActivity="false"
-            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
-            android:configChanges="density|keyboard|keyboardHidden|navigation|orientation|screenLayout|screenSize|smallestScreenSize|uiMode">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-                <!-- Start in the headset (immersive), not as a 2D panel. -->
-                <category android:name="com.oculus.intent.category.VR" />
-                <category android:name="org.khronos.openxr.intent.category.IMMERSIVE_HMD" />
-            </intent-filter>
-        </activity>
     </application>
 </manifest>
