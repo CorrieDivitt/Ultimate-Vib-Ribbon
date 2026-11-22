@@ -103,7 +103,10 @@ android {
     }
 
     sourceSets {
-        main { java.srcDir(sdlJava) }
+        main {
+            java.srcDir(sdlJava)
+            assets.srcDir("${rootDir}/../docs/notices")  // THIRD_PARTY_NOTICES.txt inside the APK (task 6.3)
+        }
     }
 
     compileOptions {

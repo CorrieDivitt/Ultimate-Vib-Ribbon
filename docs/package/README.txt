@@ -41,3 +41,5 @@ YOUR SAVE FILE AND LOG
 Please send the log with any problem report.
 
 The Quest 3 standalone version is a separate download (an APK to sideload).
+THIRD_PARTY_NOTICES.txt lists the libraries the programs are built from, their licences
+and our thanks.

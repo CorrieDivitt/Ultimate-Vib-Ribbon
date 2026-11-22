@@ -51,6 +51,7 @@ jobs:
           grep -q 'lib/arm64-v8a/libmain.so' apk.txt
           grep -q 'lib/arm64-v8a/libSDL3.so' apk.txt
           grep -q 'lib/arm64-v8a/libc++_shared.so' apk.txt
+          unzip -l android/app/build/outputs/apk/debug/app-debug.apk | grep -q 'assets/THIRD_PARTY_NOTICES.txt'
       - uses: actions/upload-artifact@v4
         with:
           name: vib-ribbon-vr-quest-apk
@@ -82,7 +83,7 @@ jobs:
           $out = "Vib-Ribbon-VR"
           New-Item -ItemType Directory $out | Out-Null
           Copy-Item "build/package/apps/launcher/Vib-Ribbon Launcher.exe", "build/package/apps/game/Vib-Ribbon.exe", "build/package/apps/game/Vib-Ribbon VR.exe" $out
-          Copy-Item docs/package/README.txt, LICENSE $out
+          Copy-Item docs/package/README.txt, docs/notices/THIRD_PARTY_NOTICES.txt, LICENSE $out
           # Only Windows' own DLLs and the GPU driver's Vulkan loader may be needed.
           foreach ($exe in "Vib-Ribbon Launcher.exe", "Vib-Ribbon.exe", "Vib-Ribbon VR.exe") {
             $deps = dumpbin /dependents "$out/$exe" | Select-String '\.dll' | ForEach-Object { $_.ToString().Trim() }

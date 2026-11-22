@@ -1,13 +1,14 @@
 // Vib-Ribbon Launcher (task 4.16 I): the Windows download's front door, for players
-// who have not seen the game before. Three tabs: Setup (the disc image, checked against
+// who have not seen the game before. Four tabs: Setup (the disc image, checked against
 // the release we know, and where to play: monitor or headset), Display (the PC's
 // window, resolution, refresh rate, VSync, frame limit, picture shape, low latency, and
 // the headset's refresh rate) and Controls (pointing out the options menu in the game,
-// where everything else is, and that the sticks move the camera). Play writes the
+// where everything else is, and that the sticks move the camera), and About (credits,
+// the licences). Play writes the
 // choices into the game's own save.txt and starts Vib-Ribbon.exe or Vib-Ribbon VR.exe.
 //
 // Drawn with Dear ImGui on SDL3's renderer (our own layout and colours, a dark theme).
-// --screenshot <file.bmp> <tab 0-2> draws a tab into a file and quits (for checking the
+// --screenshot <file.bmp> <tab 0-3> draws a tab into a file and quits (for checking the
 // layout without a screen).
 
 #include <SDL3/SDL.h>
@@ -520,6 +521,28 @@ struct Launcher {
     }
   }
 
+  void about_tab() {
+    heading("About");
+    note("Vib-Ribbon VR is a free fan project. It contains no part of the game: it plays your own copy of the PAL disc. "
+         "Vib-Ribbon was made by NanaOn-Sha and published by Sony Computer Entertainment; this project is not affiliated "
+         "with or endorsed by either.");
+    divider();
+    heading("Thanks");
+    note("revib (pawix25) and open-ribbon, whose decompilation and file-format documentation were read to understand "
+         "how the original behaves (no code copied); The Cutting Room Floor; DuckStation, the reference for checking courses.");
+    divider();
+    heading("Built with");
+    note("SDL 3 (Zlib), Dear ImGui (MIT), dr_mp3 and dr_flac (public domain or MIT-0), the Khronos OpenXR loader (Apache 2.0) "
+         "with JsonCpp. The licences in full are in THIRD_PARTY_NOTICES.txt beside the launcher; the project's own in LICENSE (MIT).");
+    ImGui::Dummy(ImVec2(0, 6 * dpi()));
+    if (ImGui::Button("Open the notices")) {
+      const char* base_path = SDL_GetBasePath();
+      std::string file = std::string(base_path ? base_path : "") + "THIRD_PARTY_NOTICES.txt";
+      std::replace(file.begin(), file.end(), '\\', '/');
+      if (!SDL_OpenURL(("file:///" + file).c_str())) message = "THIRD_PARTY_NOTICES.txt was not found beside the launcher";
+    }
+  }
+
   // ------------------------------------------------------------ one frame
 
   // True when the launcher should close (the game started and that is wanted).
@@ -548,8 +571,8 @@ struct Launcher {
     ImGui::PushStyleColor(ImGuiCol_ChildBg, kPanel);
     ImGui::BeginChild("panel", ImVec2(0, -footer), ImGuiChildFlags_AlwaysUseWindowPadding);
     if (ImGui::BeginTabBar("tabs")) {
-      const char* names[] = {"  Setup  ", "  Display  ", "  Controls  "};
-      for (int i = 0; i < 3; ++i) {
+      const char* names[] = {"  Setup  ", "  Display  ", "  Controls  ", "  About  "};
+      for (int i = 0; i < 4; ++i) {
         const ImGuiTabItemFlags f = force_tab == i ? ImGuiTabItemFlags_SetSelected : 0;
         if (ImGui::BeginTabItem(names[i], nullptr, f)) {
           ImGui::Dummy(ImVec2(0, 10 * s));
@@ -557,6 +580,7 @@ struct Launcher {
           if (i == 0) setup_tab(ImGui::GetContentRegionAvail().x);
           if (i == 1) display_tab();
           if (i == 2) controls_tab();
+          if (i == 3) about_tab();
           ImGui::EndChild();
           ImGui::EndTabItem();
         }

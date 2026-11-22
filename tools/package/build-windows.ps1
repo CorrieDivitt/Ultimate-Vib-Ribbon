@@ -18,7 +18,7 @@ $folder = "dist\Vib-Ribbon-VR"
 if (Test-Path $folder) { Remove-Item -Recurse -Force $folder }
 New-Item -ItemType Directory $folder | Out-Null
 Copy-Item "$built\apps\launcher\Vib-Ribbon Launcher.exe", "$built\apps\game\Vib-Ribbon.exe", "$built\apps\game\Vib-Ribbon VR.exe" $folder
-Copy-Item docs\package\README.txt, LICENSE $folder
+Copy-Item docs\package\README.txt, docs\notices\THIRD_PARTY_NOTICES.txt, LICENSE $folder
 
 $commit = (git rev-parse --short HEAD).Trim()
 $zip = "dist\Vib-Ribbon-VR-$(Get-Date -Format yyyy-MM-dd)-$commit.zip"
