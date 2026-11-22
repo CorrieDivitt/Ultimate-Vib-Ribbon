@@ -85,12 +85,12 @@ TEST(save_text_round_trips_and_tolerates_old_files) {
           b.fullscreen_h == 1440 && b.fullscreen_hz == 144 && !b.vsync && b.frame_limit == 144 && b.picture_43 && b.disc_path == "F:/Vib Ribbon/disc.cue");
     CHECK(SaveData::from_text("disc_path D:/Games/Vib Ribbon (Europe).cue\n").options.disc_path == "D:/Games/Vib Ribbon (Europe).cue");
     CHECK(b.low_latency && b.menu_zoom == 2.0 && b.menu_angle == 30 && !SaveData().options.low_latency && SaveData().options.menu_zoom == 1.0);
-    const Options d0 = SaveData().options;  // the monitor starts as the original; the headset beside Vibri
-    CHECK(d0.jitter_hold == 0 && d0.camera == 0 && d0.vr_camera == 1 && d0.fov == 60 && d0.ahead_seconds == 8 && d0.behind_seconds == 2);
+    const Options d0 = SaveData().options;  // both start beside Vibri (owner); the monitor's wobble is the original's 50 Hz
+    CHECK(d0.jitter_hold == 0 && d0.camera == 1 && d0.vr_camera == 1 && d0.fov == 60 && d0.ahead_seconds == 8 && d0.behind_seconds == 2);
     CHECK(d0.window_mode == 0 && d0.fullscreen_w == 0 && d0.vsync && d0.frame_limit == 0 && !d0.picture_43);
     CHECK(SaveData::from_text("fov 500\nahead_seconds 1\njitter_hold 9\ncamera 4\nwindow_mode 7\n").options.fov == 110.0);
     const Options bad = SaveData::from_text("ahead_seconds 1\njitter_hold 9\ncamera 4\nwindow_mode 7\nfullscreen_mode 1 2\n").options;
-    CHECK(bad.ahead_seconds == 8.0 && bad.jitter_hold == 0 && bad.camera == 0 && bad.window_mode == 0 && bad.fullscreen_w == 0);
+    CHECK(bad.ahead_seconds == 8.0 && bad.jitter_hold == 0 && bad.camera == 1 && bad.window_mode == 0 && bad.fullscreen_w == 0);
   }
   CHECK(back.options.glow == 3 && SaveData().options.glow == 0 && SaveData::from_text("glow 9\n").options.glow == 0);
   CHECK(back.options.picture_offset_ms == -45 && SaveData().options.picture_offset_ms == 0 &&

@@ -1284,10 +1284,11 @@ TEST(disc_sces02873_monitor_settings_step_and_show) {
   CHECK(o.jitter_hold == 3 && p.tick(right, 0.5, o, false) == A::None);  // (stops at 3)
   // Camera: each display its own; the brackets show the original's.
   CHECK(p.label(I::Camera, false) == "Camera (Original)" && p.label(I::Camera, true) == "Camera (Original)");
-  CHECK(p.value(I::Camera, o, false) == "Original" && p.value(I::Camera, o, true) == "Beside Vibri");
+  CHECK(p.value(I::Camera, o, false) == "Beside Vibri" && p.value(I::Camera, o, true) == "Beside Vibri");  // (both start there)
   go_to(I::Camera);
-  CHECK(p.tick(confirm, 0.02, o, false) == A::Changed && o.camera == 1 && o.vr_camera == 1);
-  CHECK(p.tick(confirm, 0.02, o, true) == A::Changed && o.vr_camera == 0 && o.camera == 1);
+  CHECK(p.tick(confirm, 0.02, o, false) == A::Changed && o.camera == 0 && o.vr_camera == 1 && p.value(I::Camera, o, false) == "Original");
+  CHECK(p.tick(confirm, 0.02, o, true) == A::Changed && o.vr_camera == 0 && o.camera == 0);
+  o.camera = 1;
   // Zoom, angle, see ahead and behind: the monitor's own fields.
   go_to(I::Zoom);
   p.tick(right, 0.02, o, false);

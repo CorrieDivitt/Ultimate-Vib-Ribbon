@@ -87,9 +87,9 @@ struct Options {
   // jitter_scale), 1-3 afresh every this many of the monitor's frames, as in a headset.
   int jitter_hold = 0;
   // Play's camera: 0 the original's, 1 beside Vibri (the headset's view; the score
-  // above her and the meter and numbers below). The monitor starts with the original's,
-  // a headset with ours.
-  int camera = 0;
+  // above her and the meter and numbers below). Both start beside Vibri (owner, session 6:
+  // the sticks move the camera from the first run); Original look gives the original's.
+  int camera = 1;
   int vr_camera = 1;
   // On the monitor with the camera beside Vibri: how close (larger: closer), where
   // round her (degrees, as vr_angle) and how wide the view is (degrees, vertical).
