@@ -1004,6 +1004,7 @@ class XrDisplay::Impl {
           case XR_SESSION_STATE_LOSS_PENDING: {
             running_ = false;
             if (!tearing_down_) {
+              std::printf("Headset session %s: the game closes\n", sc.state == XR_SESSION_STATE_EXITING ? "exiting" : "lost");
               SDL_Event quit{};
               quit.type = SDL_EVENT_QUIT;
               SDL_PushEvent(&quit);
@@ -1026,6 +1027,7 @@ class XrDisplay::Impl {
           std::printf("Controllers: %s uses %s\n", hand, name);
         }
       } else if (ev.type == XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING) {
+        std::printf("Headset runtime going away: the game closes\n");
         SDL_Event quit{};
         quit.type = SDL_EVENT_QUIT;
         SDL_PushEvent(&quit);

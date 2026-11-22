@@ -1055,6 +1055,7 @@ bool run_calibration(Session& s, SettingsPanel& panel, bool picture) {
   const char* const* kHow = picture ? kPictureHow : kSoundHow;
   double& setting = picture ? s.save.options.picture_offset_ms : s.save.options.audio_offset_ms;
   const double lowest = picture ? -300.0 : -500.0, highest = picture ? 300.0 : 500.0;
+  std::printf("%s calibration: started at %+.0f ms\n", picture ? "Picture" : "Sound", setting);
   auto suggestion = [&](const TapCalibration& c) { return std::clamp(c.suggested_ms(setting), lowest, highest); };
   static const char* const kPresses[5] = {"Treffer", "Presses", "Pulsaciones", "Appuis", "Pressioni"};
   static const char* const kLast[5] = {"Zuletzt", "Last", "Última", "Dernier", "Ultima"};
@@ -1105,6 +1106,7 @@ bool run_calibration(Session& s, SettingsPanel& panel, bool picture) {
     while (SDL_PollEvent(&ev)) {
       switch (ev.type) {
         case SDL_EVENT_QUIT:
+          std::printf("Calibration: the game is closing\n");
           restore();
           SDL_PushEvent(&ev);  // (for the caller to see)
           return false;
@@ -1215,8 +1217,15 @@ bool run_calibration(Session& s, SettingsPanel& panel, bool picture) {
           const double a0 = 6.28318530717958647692 * k / kSides, a1 = 6.28318530717958647692 * (k + 1) / kSides;
           add(r * float(std::cos(a0)), kY + r * float(std::sin(a0)), r * float(std::cos(a1)), kY + r * float(std::sin(a1)), 255);
         }
+      // Only as many markers still to come as presses are still wanted (owner: the 16th is
+      // the last one drawn; a missed one brings one more at the far end). The warm-up's
+      // markers come first, and the ones already passed stay dimmed for a moment.
+      const int wanted_left = TapCalibration::kWanted - cal.count();
+      int coming = 0;
       for (int k = 0; k < TapCalibration::kClicks; ++k) {  // the markers: diamonds on the track
         const float x = float(double(k) - beat) * kSpacing;
+        const bool passed = double(k) < beat - 0.5;  // (out of a press's reach, near enough)
+        if (!passed && k >= TapCalibration::kWarmUp && k > cal.last_click() && coming++ >= wanted_left) break;
         if (x < -kSpacing * 0.6f || x > kReach) continue;
         const float d = 70.0f;
         const std::uint8_t g = x < 0 ? std::uint8_t(120) : std::uint8_t(255);  // (dimmed once past)
@@ -3152,9 +3161,18 @@ int main(int argc, char** argv) {
     int code;
     do code = run(argc, argv);
     while (code == kRestart);
+#ifdef __ANDROID__
+    std::printf("The game closed normally\n");
+    SDL_Delay(200);  // (lets the last lines reach logcat)
+#endif
     return code;
   } catch (const std::exception& e) {
     std::fprintf(stderr, "vibplay: %s\n", e.what());
+#ifdef __ANDROID__
+    // Straight to logcat as well: the process ends at once, before the pipe's thread
+    // has passed the line on (session 5: a close with no trace in the log).
+    __android_log_print(ANDROID_LOG_ERROR, "vibplay", "vibplay stopped: %s", e.what());
+#endif
 #ifndef __ANDROID__  // (a 2D dialog would never be seen in the headset; logcat has it)
     SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "vibplay", e.what(), nullptr);  // so a failure is never just a closed window
 #endif

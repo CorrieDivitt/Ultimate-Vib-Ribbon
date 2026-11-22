@@ -42,6 +42,8 @@ class TapCalibration {
     return ms;
   }
   int count() const { return int(offsets_.size()); }
+  // The click the last counted press went to (-1: none yet).
+  int last_click() const { return last_click_; }
   bool done() const { return count() >= kWanted; }
   // The track has run out (the result is what was gathered, if anything).
   static bool over(double heard) { return heard > double(length_frames()); }
