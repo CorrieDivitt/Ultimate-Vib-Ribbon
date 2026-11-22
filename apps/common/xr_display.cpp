@@ -464,16 +464,23 @@ class XrDisplay::Impl {
     if (XR_FAILED(enumerate(session_, 0, &n, nullptr)) || n == 0) return;
     std::vector<float> rates(n);
     if (XR_FAILED(enumerate(session_, n, &n, rates.data()))) return;
-    float pick = *std::max_element(rates.begin(), rates.end());
+    // By default the highest up to 120 Hz: the Quest 3's own display tops out at 120,
+    // though its runtime lists rates up to 207 (session 5). A rate asked for by name
+    // (save.txt vr_refresh_hz) may be any the headset offers.
+    constexpr float kDefaultMaxHz = 120.5f;
+    float pick = 0;
+    for (const float r : rates)
+      if (r <= kDefaultMaxHz && r > pick) pick = r;
+    if (pick == 0) pick = *std::min_element(rates.begin(), rates.end());
     if (wanted > 0)
       for (const float r : rates)
         if (std::abs(r - wanted) < std::abs(pick - wanted) || std::abs(r - wanted) < 0.5f) pick = r;
     std::string offered;
     for (const float r : rates) offered += (offered.empty() ? "" : ", ") + std::to_string(int(std::lround(r)));
+    float before = 0;
+    current(session_, &before);
     const XrResult r = request(session_, pick);
-    float now = 0;
-    current(session_, &now);
-    std::printf("Headset refresh rate: %.0f Hz (offers %s Hz)%s\n", double(now > 0 ? now : pick), offered.c_str(),
+    std::printf("Headset refresh rate: asked for %.0f Hz (was %.0f; offers %s Hz)%s\n", double(pick), double(before), offered.c_str(),
                 XR_FAILED(r) ? "; the request was refused" : "");
   }
 

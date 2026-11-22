@@ -48,7 +48,7 @@ struct Options {
   int vr_jitter_hold = 3;       // in a headset the jitter changes every this many of its frames (1-3; the owner's choice)
   double jitter_scale = 1.0;    // how far the lines wobble, times the original's (0: not at all)
   double vr_jitter_scale = 1.0; // the same in a headset
-  int vr_refresh_hz = 0;        // the headset's refresh rate to ask for; 0: the highest it offers
+  int vr_refresh_hz = 0;        // the headset's refresh rate to ask for; 0: the highest it offers up to 120 Hz
   bool resume_countdown = false;  // after a pause: count in at the same place, instead of rewinding a little
   int perf_overlay = 0;           // ours: the performance overlay, 0 off, 1 one line, 2 detailed
   bool score_numbers = false;     // ours: the score in numbers as well as the marks, during play
