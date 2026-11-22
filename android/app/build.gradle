@@ -32,8 +32,11 @@ def newestInstalled = { String folder, String atLeast ->
 def ndkVer = findProperty('vibNdkVersion') ?: newestInstalled('ndk', '26')
 def cmakeVer = findProperty('vibCmakeVersion') ?: newestInstalled('cmake', '3.24')
 def buildToolsVer = findProperty('vibBuildTools') ?: newestInstalled('build-tools', '36')
-if (!cmakeVer)
-    throw new GradleException('Needs CMake 3.24 or newer in the Android SDK: Android Studio > SDK Manager > SDK Tools > CMake (tick "Show Package Details" and pick the newest).')
+if (!cmakeVer) {
+    def found = (sdkDir ? new File(sdkDir, 'cmake').listFiles() : null)?.findAll { it.isDirectory() }*.name ?: []
+    throw new GradleException("Needs CMake 3.24 or newer in the Android SDK (found: ${found ? found.join(', ') : 'none'}). " +
+        'Install it with: sdkmanager "cmake;3.31.6" (in the SDK\'s cmdline-tools), or Android Studio > SDK Manager > SDK Tools > CMake with "Show Package Details" ticked.')
+}
 if (!ndkVer)
     throw new GradleException('Needs an Android NDK in the Android SDK: Android Studio > SDK Manager > SDK Tools > NDK (Side by side).')
 
