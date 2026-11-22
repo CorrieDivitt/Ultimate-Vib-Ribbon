@@ -40,9 +40,13 @@ In the headset: Library, then "Unknown sources" in its list of filters, then Vib
 - An Xbox or other Bluetooth gamepad paired with the headset works too.
 
 YOUR OWN MUSIC
-Copy MP3 or FLAC files into the music folder, then run the chmod line again:
+Put MP3 or FLAC files in the headset's Music folder: plug it into the PC, allow file
+access in the headset, and copy them in Windows' Explorer (Quest 3 > Internal shared
+storage > Music; folders inside it are fine). The first time you open the music picker
+in the game, the headset asks whether the game may read your music: allow it.
+(Without that permission, or with adb, the game's own folder works too:
      .\adb push "C:\path\to\music\." /sdcard/Android/data/io.github.corriedivitt.vibribbonvr/files/music/
-     .\adb shell chmod -R a+rwX /sdcard/Android/data/io.github.corriedivitt.vibribbonvr/files
+     .\adb shell chmod -R a+rwX /sdcard/Android/data/io.github.corriedivitt.vibribbonvr/files )
 
 UPDATING
 Install the new APK with step 2 again; your disc, music and save stay.

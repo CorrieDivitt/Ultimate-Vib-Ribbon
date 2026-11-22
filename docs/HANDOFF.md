@@ -786,6 +786,11 @@ Owner: the launcher fix worked; work through what is left on the tracker that ne
 - **Questions for the owner**, on the tracker as Q20-Q26: Q20 installer or zip; Q21 make the repository public with GitHub Releases; Q22 difficulty tuning and high scores at Easy/Hard; Q23 which 6.1 polish items (colour-blind preset, bigger settings text, high contrast, vibration strength, reduce flashing in the celebrations, left-handed Touch); Q24 when to send the revib note; Q25 let the Quest read its Music folder directly (storage permission); Q26 Android flat still wanted.
 - Not started (needs the owner or hardware): S.3 Steam Frame; running the test matrix.
 
+## 2an. The owner's answers (session 6, 14:20)
+
+- Q20: the Windows download stays a portable zip (D12). Q21: the repository goes public when the owner decides (D13). Q23: the 6.1 polish items move to a new tracker phase, After release (P.1-P.6; D14). Q24: send the revib note now (D15; updated draft in section 10, link left out while the repository is private; the owner posts it). Q25: yes, built (below). Q26: yes, Android flat is next (tracker 4.20). The owner is testing the difficulty levels.
+- **S.2, the Quest's Music folder:** manifest asks for READ_EXTERNAL_STORAGE and READ_MEDIA_AUDIO (targetSdk 32, so READ_EXTERNAL_STORAGE is the one requested). `ask_music_permission()` (SDL_RequestAndroidPermission) the first time the music picker opens; `g_music_permission` -1/0/1/2. Granted: `default_music_folder()` is `/storage/emulated/0/Music` (when it exists), and if the folder browser is showing the game's own music folder when the answer comes (and no music folder was saved), it moves there. Refused: the game's own `files/music` as before. QUEST.txt: copy music over USB in Windows' Explorer into the headset's Music folder. Untested here (no headset); syntax-checked as Android.
+
 ## 2o. Idea dropped: Vibri speaking English (session 3, 2026-11-20)
 
 Owner asked whether Vibri could say the menu items in English by restitching her syllables. Finding: only numbers are stitched (about 20 Japanese number syllables, sounds 64-79, plus the juu/hyaku/sen/man units 80-85, on a beat grid in `TitleScreens::say_number`); every menu word, comment and reaction is one whole clip (e.g. 112-114 the course names, 96 back, 129-132 options and on/off, 99/100 again/no). English cannot be built from those. New recordings, TTS or a voice model trained on her clips were offered; the owner declined all of them (no new lines, no other voice). Not to be revisited unless the owner raises it.
@@ -896,16 +901,16 @@ GitHub rate-limited several fetches. The repository landing page for revib and p
 - https://github.com/FractalEngineer/Medal-Of-Honor-PSX-Recomp and https://github.com/FractalEngineer/Medal-Of-Honor-Underground-PSX-Recomp
 - https://partner.steamgames.com/doc/steamhardware/steamframe
 
-## 10. Draft: courtesy note to revib's author (not sent; task 6.5)
+## 10. Courtesy note to revib's author (task 6.5)
 
-To be posted by the owner as an issue at github.com/pawix25/revib once the project is past the prototype stage.
+Owner (session 6): send it now. Posted by the owner as an issue at https://github.com/pawix25/revib/issues/new (title and body below). The repository is still private (D13), so the note leaves the link out and says it will follow at the release.
 
 > **Thank you, and a heads-up about a VR port project**
 >
-> Hi, I'm working on a free, non-commercial fan project: a native VR version of Vib-Ribbon for PCVR and Meta Quest 3. Repo: https://github.com/CorrieDivitt/Vib-Ribbon-VR
+> Hi, I'm working on a free, non-commercial fan project: a native version of Vib-Ribbon for PC VR, the Meta Quest 3 (standalone) and flat PC screens. It is in a private playtest now; the repository will be public on GitHub (CorrieDivitt/Vib-Ribbon-VR) when it is ready, and I'll post the link here then.
 >
-> I wanted to say thank you and tell you how your work is being used. We read revib (and open-ribbon's documentation) to understand how the game behaves, and write our own implementation from that understanding. No code from revib is copied into our repo, the repo contains no game data, and both projects are credited.
+> I wanted to say thank you and tell you how your work is being used. We read revib (and open-ribbon's documentation) to understand how the game behaves, and write our own implementation from that understanding. No code from revib is copied into our project, it contains no game data (it reads the player's own disc), and both projects are credited in the game and its notices.
 >
-> If you'd prefer to be credited differently, or anything about this use bothers you, please say. If we find mistakes or confirm open details, we're glad to report them back. Two from the disc: times in SYSTEM3.FSL are samples at 22,050 Hz, and fixed patterns store each road as a 32-bit value.
+> If you'd prefer to be credited differently, or anything about this use bothers you, please say. If we find mistakes or confirm open details, we're glad to report them back. Two from the disc: times in SYSTEM3.FSL are samples at 22,050 Hz, and fixed patterns store each road as a 32-bit value. And from comparing against the original in an emulator: on some songs the original doesn't place exactly the same course twice (where the music starts against the round's start, and how audio blocks fall into video frames, differ a little on every play).
 >
 > No reply needed if this is all fine with you. Thanks again for the careful work.

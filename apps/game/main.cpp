@@ -322,14 +322,43 @@ bool is_music_file(const std::filesystem::path& p) {
   return ext == ".mp3" || ext == ".flac";
 }
 
+#ifdef __ANDROID__
+// The headset's own Music folder (owner, S.2): with the storage permission the game reads
+// it directly (files copied over USB from Windows' Explorer, no adb). Asked for the first
+// time the music picker opens; -1 not asked, 0 asking, 1 granted, 2 refused.
+std::atomic<int> g_music_permission{-1};
+std::atomic<bool> g_music_permission_answered{false};
+const char* const kSharedMusic = "/storage/emulated/0/Music";
+
+void ask_music_permission() {
+  int expected = -1;
+  if (!g_music_permission.compare_exchange_strong(expected, 0)) return;
+  SDL_RequestAndroidPermission(
+      "android.permission.READ_EXTERNAL_STORAGE",
+      [](void*, const char*, bool granted) {
+        g_music_permission = granted ? 1 : 2;
+        g_music_permission_answered = true;
+        std::printf("Music folder permission: %s\n", granted ? "granted" : "refused (the game's own music folder only)");
+      },
+      nullptr);
+}
+
+// The game's own music folder beside the disc (adb push works there with no permission).
+std::string headset_music_folder() {
+  const std::filesystem::path music = std::filesystem::path(headset_folder()) / "music";
+  std::error_code ec;
+  std::filesystem::create_directories(music, ec);
+  return music.string();
+}
+#endif
+
 // Where the folder browser starts the first time: the system's music folder, else home.
 std::string default_music_folder() {
 #ifdef __ANDROID__
-  {  // the headset: a music folder beside the disc (adb push your files there)
-    const std::filesystem::path music = std::filesystem::path(headset_folder()) / "music";
+  {  // the headset: its own Music folder if the game may read it, else the game's own one
     std::error_code ec;
-    std::filesystem::create_directories(music, ec);
-    return music.string();
+    if (g_music_permission == 1 && std::filesystem::is_directory(kSharedMusic, ec)) return kSharedMusic;
+    return headset_music_folder();
   }
 #endif
   if (const char* music = SDL_GetUserFolder(SDL_FOLDER_MUSIC)) return music;
@@ -2889,6 +2918,9 @@ int run(int argc, char** argv) {
       // the folder browser first); for a whole folder, the folder browser there.
       auto open_picker = [&](bool for_folder) {
         picking_folder = for_folder;
+#ifdef __ANDROID__
+        ask_music_permission();  // (the first time: the headset's Music folder, S.2)
+#endif
         std::error_code ec;
         const std::string& saved = save.options.music_folder;
         const bool known = !saved.empty() && std::filesystem::is_directory(path_from_utf8(saved), ec);
@@ -3026,6 +3058,15 @@ int run(int argc, char** argv) {
         const double frame_dt = double(now_ns - last_ns) * 1e-9;
         if (settings_after_film && !in_kiosk) settings_after_film = false, toggle_settings = true;
         if (in_picker) toggle_settings = false;  // (never behind the picker)
+#ifdef __ANDROID__
+        // The storage permission just granted while the folder browser shows the game's own
+        // music folder for the first time: on to the headset's Music folder instead.
+        if (g_music_permission_answered.exchange(false) && in_picker && g_music_permission == 1 &&
+            picker.mode() == FilePicker::Mode::Folder && picker.path() == headset_music_folder() && save.options.music_folder.empty()) {
+          std::error_code ec;
+          if (std::filesystem::is_directory(kSharedMusic, ec)) show_folder(FilePicker::Mode::Folder, kSharedMusic);
+        }
+#endif
         if (toggle_settings && !in_kiosk) {
           toggle_settings = false;
           in_settings = !in_settings;

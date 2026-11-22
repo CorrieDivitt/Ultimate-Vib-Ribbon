@@ -14,6 +14,9 @@
 
     <!-- Rumble on a gamepad (the Vibration setting). -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Reading music from the headset's own Music folder (S.2), asked for when the music picker first opens. -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
 
     <!-- The Khronos OpenXR loader finds the headset's runtime through its broker. -->
     <uses-permission android:name="org.khronos.openxr.permission.OPENXR" />
