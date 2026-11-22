@@ -120,6 +120,8 @@ Goal: the full game in a headset.
 
 Staging direction for 4.2, to be prototyped rather than decided on paper: the ribbon as a world-locked diorama in front of the player; the original camera moves reinterpreted as motion of the diorama with a comfort setting; an optional classic mode that shows the original framing on a large virtual screen; passthrough on Quest 3 so the ribbon runs through your room.
 
+Outcome (sessions 2 to 5, 2026-11-22): every Phase 4 task done. The view stands beside Vibri (zoom, view angle), with the course around the player as an option; the classic screen shows the original framing on a virtual 4:3 screen; comfort options were dropped by the owner (nothing felt uncomfortable); passthrough went to the Quest build (4.15). Tested through Virtual Desktop; Quest Link and SteamVR not tried.
+
 Done when: the complete game is playable through Quest Link, SteamVR and Virtual Desktop at headset refresh rate.
 
 ### Phase 5. Standalone Quest 3
@@ -127,6 +129,8 @@ Done when: the complete game is playable through Quest Link, SteamVR and Virtual
 5.1 Android ARM64 build. 5.2 Disc image import on the headset. 5.3 Low-latency Android audio and calibration. 5.4 Performance and passthrough.
 
 Done when: the standalone build holds 90 Hz or better with timing equal to PCVR.
+
+Outcome (session 5, 2026-11-21): done. The APK builds with Android Studio and runs on the Quest 3 at 120 Hz with about 7 ms to spare; Sound calibration lands near 0 ms there.
 
 ### Phase 6. Polish and release
 
