@@ -356,7 +356,18 @@ struct Launcher {
     std::vector<const char*> argv;
     for (const std::string& a : args) argv.push_back(a.c_str());
     argv.push_back(nullptr);
-    SDL_Process* process = SDL_CreateProcess(argv.data(), false);
+    // As a process of its own, with no standard handles passed on: a launcher started
+    // from Explorer has none, and asking SDL to pass them on (SDL_CreateProcess's
+    // default) fails with "DuplicateHandle()" (seen on the owner's second PC). The game
+    // writes its own log beside save.txt when it has no console.
+    const SDL_PropertiesID props = SDL_CreateProperties();
+    SDL_SetPointerProperty(props, SDL_PROP_PROCESS_CREATE_ARGS_POINTER, const_cast<char**>(argv.data()));
+    SDL_SetNumberProperty(props, SDL_PROP_PROCESS_CREATE_STDIN_NUMBER, SDL_PROCESS_STDIO_NULL);
+    SDL_SetNumberProperty(props, SDL_PROP_PROCESS_CREATE_STDOUT_NUMBER, SDL_PROCESS_STDIO_NULL);
+    SDL_SetNumberProperty(props, SDL_PROP_PROCESS_CREATE_STDERR_NUMBER, SDL_PROCESS_STDIO_NULL);
+    SDL_SetBooleanProperty(props, SDL_PROP_PROCESS_CREATE_BACKGROUND_BOOLEAN, true);
+    SDL_Process* process = SDL_CreateProcessWithProperties(props);
+    SDL_DestroyProperties(props);
     if (!process) {
       message = std::string("The game could not be started: ") + SDL_GetError();
       return false;
