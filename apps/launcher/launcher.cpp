@@ -397,10 +397,9 @@ struct Launcher {
     if (card("VR headset", "In a PC headset. Start Virtual Desktop, Quest Link or SteamVR first.", o.launcher_vr, w)) o.launcher_vr = true;
 
     divider();
-    callout("Everything else is in the game",
-            "Press Start on a gamepad, or P or Tab on the keyboard, on any screen for the options menu: the camera, "
-            "colours, scroll speed, timing feedback, glow, calibration, the original look and more. In a song it pauses. "
-            "Exit is on the title's menu: B jumps to it.");
+    callout("New in-game options menu",
+            "Press Start on a gamepad, or P or Tab on the keyboard, on any screen for the new options menu. "
+            "The analog sticks control the camera on all screens.");
   }
 
   void display_tab() {
