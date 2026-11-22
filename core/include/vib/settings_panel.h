@@ -74,6 +74,19 @@ class SettingsPanel {
     ClassicSize,      // vr_classic_size: that screen's width, 1.5 to 8 m
     OriginalLook,     // an action: every look setting to the original's (kept to restore)
     RestoreLook,      // an action: the look settings from before Original look
+    // Task 4.16, the Ultimate PC version:
+    Camera,           // camera / vr_camera: play seen from the original's camera or beside Vibri
+    FieldOfView,      // fov: the monitor's view beside Vibri, 30 to 110 degrees
+    Display,          // a group (monitor): the window and its picture
+    WindowMode,       // window_mode: window, borderless, fullscreen
+    Resolution,       // fullscreen_w/h/hz: the desktop's or one the display offers (fullscreen)
+    Vsync,            // vsync
+    FrameLimit,       // frame_limit: off or a number of frames a second
+    PictureShape,     // picture_43: fill the window, or the original's 4:3 with bars
+  };
+  // A display mode the monitor offers, for the Resolution item.
+  struct DisplayMode {
+    int w = 0, h = 0, hz = 0;
   };
   enum class Action { None, Moved, Changed, Close, Recentre, QuitSong, LeaveTop, Calibrate, CalibratePicture };
 
@@ -103,6 +116,9 @@ class SettingsPanel {
   void set_refresh_rates(std::vector<int> rates) { refresh_rates_ = std::move(rates); }
   // Whether the headset can show the room: Background then has Passthrough after its colours.
   void set_passthrough_available(bool available) { passthrough_ = available; }
+  // The monitor's fullscreen modes (largest first), for the Resolution item; it always
+  // offers the desktop's own first.
+  void set_display_modes(std::vector<DisplayMode> modes) { display_modes_ = std::move(modes); }
   void home() { cursor_ = 0, first_ = 0; }
   Item current() const { return items_.empty() ? Item::Continue : items_[std::size_t(cursor_)]; }
 
@@ -205,6 +221,7 @@ class SettingsPanel {
   bool active_ = true;
   bool wraps_ = true;
   std::vector<int> refresh_rates_;
+  std::vector<DisplayMode> display_modes_;
   bool passthrough_ = false;
   std::optional<Options> look_backup_;  // (this run's, from Original look)
   int repeat_dir_ = 0;

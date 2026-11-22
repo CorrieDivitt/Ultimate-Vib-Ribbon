@@ -72,6 +72,23 @@ TEST(save_text_round_trips_and_tolerates_old_files) {
     CHECK(cb.options.vr_classic && cb.options.vr_classic_size == 4.5 && !SaveData().options.vr_classic && SaveData().options.vr_classic_size == 3.0);
     CHECK(SaveData::from_text("vr_classic_size 20\n").options.vr_classic_size == 8.0);
   }
+  {  // task 4.16: the monitor's view, wobble and window
+    SaveData m;
+    m.options.jitter_hold = 2, m.options.camera = 1, m.options.vr_camera = 0, m.options.zoom = 0.5, m.options.view_angle = -60;
+    m.options.fov = 75, m.options.ahead_seconds = kWholeSongSeconds, m.options.behind_seconds = 30, m.options.window_mode = 2;
+    m.options.fullscreen_w = 2560, m.options.fullscreen_h = 1440, m.options.fullscreen_hz = 144, m.options.vsync = false;
+    m.options.frame_limit = 144, m.options.picture_43 = true;
+    const Options b = SaveData::from_text(m.to_text()).options;
+    CHECK(b.jitter_hold == 2 && b.camera == 1 && b.vr_camera == 0 && b.zoom == 0.5 && b.view_angle == -60 && b.fov == 75);
+    CHECK(b.ahead_seconds == kWholeSongSeconds && b.behind_seconds == 30 && b.window_mode == 2 && b.fullscreen_w == 2560 &&
+          b.fullscreen_h == 1440 && b.fullscreen_hz == 144 && !b.vsync && b.frame_limit == 144 && b.picture_43);
+    const Options d0 = SaveData().options;  // the monitor starts as the original; the headset beside Vibri
+    CHECK(d0.jitter_hold == 0 && d0.camera == 0 && d0.vr_camera == 1 && d0.fov == 60 && d0.ahead_seconds == 8 && d0.behind_seconds == 2);
+    CHECK(d0.window_mode == 0 && d0.fullscreen_w == 0 && d0.vsync && d0.frame_limit == 0 && !d0.picture_43);
+    CHECK(SaveData::from_text("fov 500\nahead_seconds 1\njitter_hold 9\ncamera 4\nwindow_mode 7\n").options.fov == 110.0);
+    const Options bad = SaveData::from_text("ahead_seconds 1\njitter_hold 9\ncamera 4\nwindow_mode 7\nfullscreen_mode 1 2\n").options;
+    CHECK(bad.ahead_seconds == 8.0 && bad.jitter_hold == 0 && bad.camera == 0 && bad.window_mode == 0 && bad.fullscreen_w == 0);
+  }
   CHECK(back.options.glow == 3 && SaveData().options.glow == 0 && SaveData::from_text("glow 9\n").options.glow == 0);
   CHECK(back.options.picture_offset_ms == -45 && SaveData().options.picture_offset_ms == 0 &&
         SaveData::from_text("picture_offset_ms 900\n").options.picture_offset_ms == 300.0);
@@ -92,11 +109,15 @@ TEST(original_look_sets_the_look_and_leaves_the_rest) {
   Options o;
   o.glow = 3, o.colours[2] = 4, o.scroll_speed = 2.5, o.vr_wrap = true, o.timing_feedback = true, o.vr_line_width = 0.2;
   o.audio_offset_ms = 35, o.picture_offset_ms = -60, o.language = 3, o.vr_zoom = 2.0;
+  o.camera = 1, o.jitter_hold = 2, o.ahead_seconds = 60, o.behind_seconds = 30;
   const Options before = o;
   apply_original_look(o);
   CHECK(o.glow == 0 && o.colours[2] == 0 && o.scroll_speed == 1.0 && !o.vr_wrap && !o.timing_feedback && !o.smooth_animation);
   CHECK(o.line_width == 1.0 && o.vr_line_width == Options{}.vr_line_width && o.vr_jitter_hold == 1 && o.vr_ahead_seconds == 8.0 && o.vr_behind_seconds == 2.0);
   CHECK(o.audio_offset_ms == 35 && o.picture_offset_ms == -60 && o.language == 3 && o.vr_zoom == 2.0);  // (not the look)
+  CHECK(o.camera == 0 && o.jitter_hold == 0 && o.ahead_seconds == 8.0 && o.behind_seconds == 2.0 && o.picture_43);  // (the monitor's)
+  CHECK(o.vr_camera == 1);  // (the headset keeps its view beside Vibri)
   copy_look(before, o);
   CHECK(o.glow == 3 && o.colours[2] == 4 && o.scroll_speed == 2.5 && o.vr_wrap && o.timing_feedback && o.vr_line_width == 0.2);
+  CHECK(o.camera == 1 && o.jitter_hold == 2 && o.ahead_seconds == 60 && o.behind_seconds == 30 && !o.picture_43);
 }

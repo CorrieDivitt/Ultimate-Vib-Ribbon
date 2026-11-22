@@ -3,6 +3,7 @@
 #include "vib/colours.h"
 
 #include <algorithm>
+#include <iterator>
 #include <cmath>
 #include <cstdio>
 #include <utility>
@@ -12,7 +13,7 @@ namespace vib {
 namespace {
 
 constexpr double kTau = 6.28318530717958647692;
-constexpr int kItemCount = 56;
+constexpr int kItemCount = 64;
 constexpr int kLanguages = 5;  // German, English, Spanish, French, Italian (the PAL menus)
 
 // Our own words. Order as SettingsPanel::Item.
@@ -21,29 +22,34 @@ const char* const kLabels[kLanguages][kItemCount] = {
     {"Weiter", "Wackelgröße", "Wackeltakt", "Weiche Bewegung", "Linienstärke", "Zoom", "Blickwinkel", "Sicht nach vorn",
      "Sicht nach hinten", "Ansicht zentrieren", "Soundeffekte", "Vibration", "Tonversatz", "Lied beenden", "Fortsetzen", "Leistung", "Punkte als Zahl", "Gleiche Strecke", "Effektlautstärke", "Scrolltempo", "Timing-Anzeige", "FC-Jubel", "Strecke um dich", "Kreisgröße", "Grafik", "Modifikatoren", "Eigene Farben", "Zurück",
      "Linie", "Block", "Grube", "Schleife", "Welle", "Block + Grube", "Block + Schleife", "Block + Welle", "Grube + Schleife",
-     "Grube + Welle", "Schleife + Welle", "Vibri Engel", "Vibri Hase", "Vibri Frosch", "Vibri Wurm", "Hintergrund", "Menü", "Farben zurücksetzen", "Kalibrierung", "Ton kalibrieren", "Bildversatz", "Bild kalibrieren", "Leuchten", "Bildrate", "Klassischer Bildschirm", "Bildschirmgröße", "Originaler Look", "Meinen Look zurück"},
+     "Grube + Welle", "Schleife + Welle", "Vibri Engel", "Vibri Hase", "Vibri Frosch", "Vibri Wurm", "Hintergrund", "Menü", "Farben zurücksetzen", "Kalibrierung", "Ton kalibrieren", "Bildversatz", "Bild kalibrieren", "Leuchten", "Bildrate", "Klassischer Bildschirm", "Bildschirmgröße", "Originaler Look", "Meinen Look zurück",
+     "Kamera", "Sichtfeld", "Anzeige", "Fenstermodus", "Auflösung", "VSync", "Bildratenlimit", "Bildformat"},
     // English
     {"Continue", "Wobble size", "Wobble hold", "Smooth motion", "Line width", "Zoom", "View angle", "See ahead", "See behind",
      "Recenter view", "Sound effects", "Vibration", "Sound timing", "Quit song", "Resume", "Performance", "Score in numbers", "Consistent courses", "Effects volume", "Scroll speed", "Timing feedback", "FC celebration", "Course around you", "Circle size", "Visual", "Modifiers", "Custom colors", "Back",
      "Road line", "Block", "Pit", "Loop", "Wave", "Block + Pit", "Block + Loop", "Block + Wave", "Pit + Loop", "Pit + Wave",
-     "Loop + Wave", "Vibri angel", "Vibri rabbit", "Vibri frog", "Vibri worm", "Background", "Menu", "Reset colors", "Calibration", "Sound calibration", "Picture timing", "Picture calibration", "Glow", "Refresh rate", "Classic screen", "Screen size", "Original look", "Restore my look"},
+     "Loop + Wave", "Vibri angel", "Vibri rabbit", "Vibri frog", "Vibri worm", "Background", "Menu", "Reset colors", "Calibration", "Sound calibration", "Picture timing", "Picture calibration", "Glow", "Refresh rate", "Classic screen", "Screen size", "Original look", "Restore my look",
+     "Camera", "Field of view", "Display", "Window mode", "Resolution", "VSync", "Frame limit", "Picture shape"},
     // Spanish
     {"Continuar", "Tamaño del temblor", "Ritmo del temblor", "Movimiento suave", "Grosor de línea", "Zoom", "Ángulo de vista",
      "Ver adelante", "Ver atrás", "Centrar vista", "Efectos de sonido", "Vibración", "Desfase de sonido", "Salir de la canción", "Reanudar", "Rendimiento", "Puntos en números", "Recorridos fijos", "Volumen de efectos", "Velocidad de avance", "Precisión en ms", "Celebrar FC", "Recorrido alrededor", "Tamaño del círculo", "Imagen", "Modificadores", "Colores propios", "Volver",
      "Línea", "Bloque", "Foso", "Rizo", "Onda", "Bloque + Foso", "Bloque + Rizo", "Bloque + Onda", "Foso + Rizo", "Foso + Onda",
-     "Rizo + Onda", "Vibri ángel", "Vibri conejo", "Vibri rana", "Vibri gusano", "Fondo", "Menú", "Restablecer colores", "Calibración", "Calibrar sonido", "Desfase de imagen", "Calibrar imagen", "Resplandor", "Frecuencia", "Pantalla clásica", "Tamaño de pantalla", "Aspecto original", "Recuperar mi aspecto"},
+     "Rizo + Onda", "Vibri ángel", "Vibri conejo", "Vibri rana", "Vibri gusano", "Fondo", "Menú", "Restablecer colores", "Calibración", "Calibrar sonido", "Desfase de imagen", "Calibrar imagen", "Resplandor", "Frecuencia", "Pantalla clásica", "Tamaño de pantalla", "Aspecto original", "Recuperar mi aspecto",
+     "Cámara", "Campo de visión", "Pantalla", "Modo de ventana", "Resolución", "VSync", "Límite de fps", "Formato de imagen"},
     // French
     {"Continuer", "Taille du tremblement", "Rythme du tremblement", "Mouvement fluide", "Épaisseur des lignes", "Zoom",
      "Angle de vue", "Voir devant", "Voir derrière", "Recentrer la vue", "Effets sonores", "Vibration", "Décalage du son",
      "Quitter la chanson", "Reprise", "Performances", "Score en chiffres", "Parcours fixes", "Volume des effets", "Vitesse de défilement", "Précision en ms", "Fête du FC", "Parcours autour de toi", "Taille du cercle", "Visuel", "Modificateurs", "Couleurs perso", "Retour",
      "Ligne", "Bloc", "Fosse", "Boucle", "Vague", "Bloc + Fosse", "Bloc + Boucle", "Bloc + Vague", "Fosse + Boucle", "Fosse + Vague",
-     "Boucle + Vague", "Vibri ange", "Vibri lapin", "Vibri grenouille", "Vibri ver", "Fond", "Menu", "Réinitialiser couleurs", "Calibrage", "Calibrer le son", "Décalage de l'image", "Calibrer l'image", "Halo", "Fréquence", "Écran classique", "Taille de l'écran", "Aspect d'origine", "Rétablir mon aspect"},
+     "Boucle + Vague", "Vibri ange", "Vibri lapin", "Vibri grenouille", "Vibri ver", "Fond", "Menu", "Réinitialiser couleurs", "Calibrage", "Calibrer le son", "Décalage de l'image", "Calibrer l'image", "Halo", "Fréquence", "Écran classique", "Taille de l'écran", "Aspect d'origine", "Rétablir mon aspect",
+     "Caméra", "Champ de vision", "Affichage", "Mode fenêtre", "Résolution", "VSync", "Limite d'images", "Format d'image"},
     // Italian
     {"Continua", "Ampiezza del tremolio", "Ritmo del tremolio", "Movimento fluido", "Spessore delle linee", "Zoom",
      "Angolo di vista", "Vista avanti", "Vista indietro", "Ricentra la vista", "Effetti sonori", "Vibrazione", "Ritardo audio",
      "Esci dalla canzone", "Ripresa", "Prestazioni", "Punteggio in cifre", "Percorsi fissi", "Volume effetti", "Velocità di scorrimento", "Precisione in ms", "Festa FC", "Percorso intorno a te", "Dimensione del cerchio", "Grafica", "Modificatori", "Colori personalizzati", "Indietro",
      "Linea", "Blocco", "Fossa", "Giro", "Onda", "Blocco + Fossa", "Blocco + Giro", "Blocco + Onda", "Fossa + Giro", "Fossa + Onda",
-     "Giro + Onda", "Vibri angelo", "Vibri coniglio", "Vibri rana", "Vibri verme", "Sfondo", "Menu", "Ripristina colori", "Calibrazione", "Calibra audio", "Ritardo immagine", "Calibra immagine", "Bagliore", "Frequenza", "Schermo classico", "Dimensione schermo", "Aspetto originale", "Ripristina il mio aspetto"},
+     "Giro + Onda", "Vibri angelo", "Vibri coniglio", "Vibri rana", "Vibri verme", "Sfondo", "Menu", "Ripristina colori", "Calibrazione", "Calibra audio", "Ritardo immagine", "Calibra immagine", "Bagliore", "Frequenza", "Schermo classico", "Dimensione schermo", "Aspetto originale", "Ripristina il mio aspetto",
+     "Telecamera", "Campo visivo", "Schermo", "Modalità finestra", "Risoluzione", "VSync", "Limite fotogrammi", "Formato immagine"},
 };
 const char* const kMore[kLanguages] = {"Weitere Einstellungen (Start)", "More options (Start)", "Más ajustes (Start)", "Autres réglages (Start)",
                                        "Altre impostazioni (Start)"};
@@ -74,6 +80,17 @@ const char* const kCountIn[kLanguages] = {"Countdown", "Countdown", "Cuenta atr�
 const char* const kOn[kLanguages] = {"An", "On", "Sí", "Oui", "Sì"};
 const char* const kOff[kLanguages] = {"Aus", "Off", "No", "Non", "No"};
 const char* const kWholeSong[kLanguages] = {"Ganzes Lied", "Whole song", "Toda la canción", "Toute la chanson", "Tutta la canzone"};
+const char* const kCameraNames[kLanguages][2] = {
+    {"Original", "Neben Vibri"}, {"Original", "Beside Vibri"}, {"Original", "Junto a Vibri"},
+    {"D'origine", "Près de Vibri"}, {"Originale", "Accanto a Vibri"},
+};
+const char* const kWindowModes[kLanguages][3] = {
+    {"Fenster", "Randlos", "Vollbild"}, {"Window", "Borderless", "Fullscreen"}, {"Ventana", "Sin bordes", "Completa"},
+    {"Fenêtre", "Sans bordure", "Plein écran"}, {"Finestra", "Senza bordi", "Schermo intero"},
+};
+const char* const kDesktop[kLanguages] = {"Desktop", "Desktop", "Escritorio", "Bureau", "Desktop"};
+const char* const kFill[kLanguages] = {"Füllen", "Fill", "Llenar", "Remplir", "Riempi"};
+constexpr int kFrameLimits[] = {0, 30, 60, 90, 120, 144, 165, 240, 360};
 const char* const kDetailed[kLanguages] = {"Ausführlich", "Detailed", "Detallado", "Détaillé", "Dettagliato"};
 
 // A colour item's slot (vib/colours.h), or -1.
@@ -215,6 +232,7 @@ std::string SettingsPanel::label(Item item, bool vr) const {
     case Item::ColourBlockPit: case Item::ColourBlockLoop: case Item::ColourBlockWave: case Item::ColourPitLoop:
     case Item::ColourPitWave: case Item::ColourLoopWave: case Item::ColourAngel: case Item::ColourRabbit: case Item::ColourFrog:
     case Item::ColourWorm: case Item::ColourBackground: case Item::ColourMenu:
+    case Item::Camera: case Item::FieldOfView: case Item::PictureShape:
       text += " (" + value(item, original_options(), vr) + ")";  // the original game's value
       break;
     default: break;
@@ -228,7 +246,10 @@ std::string SettingsPanel::value(Item item, const Options& o, bool vr) const {
   char buf[32] = {};
   switch (item) {
     case Item::WobbleSize: std::snprintf(buf, sizeof buf, "%.1f", vr ? o.vr_jitter_scale : o.jitter_scale); break;
-    case Item::WobbleHold: std::snprintf(buf, sizeof buf, "%d", o.vr_jitter_hold); break;
+    case Item::WobbleHold:
+      if (!vr && o.jitter_hold <= 0) return "50 Hz";  // (the monitor: the original's own rate)
+      std::snprintf(buf, sizeof buf, "%d", vr ? o.vr_jitter_hold : o.jitter_hold);
+      break;
     case Item::Smooth: return on_off(o.smooth_animation);
     case Item::LineWidth:
       if (vr) {  // steps of 0.005: three places, without a trailing nought ("0.05", "0.055")
@@ -239,10 +260,23 @@ std::string SettingsPanel::value(Item item, const Options& o, bool vr) const {
       }
       std::snprintf(buf, sizeof buf, "%.3f", o.line_width);
       break;
-    case Item::Zoom: std::snprintf(buf, sizeof buf, "%.2f", o.vr_zoom); break;
-    case Item::ViewAngle: std::snprintf(buf, sizeof buf, "%.0f", o.vr_angle); break;
+    case Item::Zoom: std::snprintf(buf, sizeof buf, "%.2f", vr ? o.vr_zoom : o.zoom); break;
+    case Item::ViewAngle: std::snprintf(buf, sizeof buf, "%.0f", vr ? o.vr_angle : o.view_angle); break;
+    case Item::FieldOfView: std::snprintf(buf, sizeof buf, "%.0f", o.fov); break;
+    case Item::Camera: return to_font_text(kCameraNames[l][(vr ? o.vr_camera : o.camera) == 1 ? 1 : 0]);
+    case Item::WindowMode: return to_font_text(kWindowModes[l][std::clamp(o.window_mode, 0, 2)]);
+    case Item::Resolution:
+      if (o.fullscreen_w <= 0) return to_font_text(kDesktop[l]);
+      std::snprintf(buf, sizeof buf, "%dx%d %d Hz", o.fullscreen_w, o.fullscreen_h, o.fullscreen_hz);
+      break;
+    case Item::Vsync: return on_off(o.vsync);
+    case Item::FrameLimit:
+      if (o.frame_limit <= 0) return to_font_text(kOff[l]);
+      std::snprintf(buf, sizeof buf, "%d fps", o.frame_limit);
+      break;
+    case Item::PictureShape: return o.picture_43 ? std::string("4:3") : to_font_text(kFill[l]);
     case Item::SeeAhead: case Item::SeeBehind: {
-      const double v = item == Item::SeeAhead ? o.vr_ahead_seconds : o.vr_behind_seconds;
+      const double v = item == Item::SeeAhead ? (vr ? o.vr_ahead_seconds : o.ahead_seconds) : (vr ? o.vr_behind_seconds : o.behind_seconds);
       if (v >= kWholeSongSeconds) return to_font_text(kWholeSong[l]);
       std::snprintf(buf, sizeof buf, "%.0f s", v);
       break;
@@ -272,7 +306,7 @@ std::string SettingsPanel::value(Item item, const Options& o, bool vr) const {
     case Item::FcCelebration: return on_off(o.fc_celebration);
     case Item::WrapCourse: return on_off(o.vr_wrap);
     case Item::WrapSize: std::snprintf(buf, sizeof buf, "%.1f m", o.vr_wrap_radius); break;
-    case Item::Visual: case Item::Modifiers: case Item::CustomColours: case Item::Calibration: return ">";
+    case Item::Visual: case Item::Modifiers: case Item::CustomColours: case Item::Calibration: case Item::Display: return ">";
     case Item::ResetColours: return {};
     default:
       if (const int slot = colour_item_slot(item); slot >= 0) {
@@ -314,10 +348,11 @@ bool SettingsPanel::change(Item item, int d, Options& o, bool vr) {
   };
   switch (item) {
     case Item::WobbleSize: return step(vr ? o.vr_jitter_scale : o.jitter_scale, 0.1 * d, 0.0, 2.0);
-    case Item::WobbleHold: {
-      const int before = o.vr_jitter_hold;
-      o.vr_jitter_hold = std::clamp(o.vr_jitter_hold + d, 1, 3);
-      return o.vr_jitter_hold != before;
+    case Item::WobbleHold: {  // (the monitor's goes from 0, the original's 50 Hz)
+      int& hold = vr ? o.vr_jitter_hold : o.jitter_hold;
+      const int before = hold;
+      hold = std::clamp(hold + d, vr ? 1 : 0, 3);
+      return hold != before;
     }
     case Item::Smooth: o.smooth_animation = !o.smooth_animation; return true;
     case Item::LineWidth: {
@@ -325,13 +360,47 @@ bool SettingsPanel::change(Item item, int d, Options& o, bool vr) {
       return step(o.vr_line_width, kHeadsetLineStep * d, kHeadsetLineStep, 1.0);  // (owner: steps of 0.005)
     }
     case Item::Zoom: {
-      const double before = o.vr_zoom;
-      o.vr_zoom = std::clamp(o.vr_zoom * std::exp2(0.25 * d), 1.0 / 36.0, 4.0);
-      return o.vr_zoom != before;
+      double& zoom = vr ? o.vr_zoom : o.zoom;
+      const double before = zoom;
+      zoom = std::clamp(zoom * std::exp2(0.25 * d), 1.0 / 36.0, 4.0);
+      return zoom != before;
     }
-    case Item::ViewAngle: o.vr_angle = std::remainder(std::round(o.vr_angle / 15.0) * 15.0 + 15.0 * d, 360.0); return true;
-    case Item::SeeAhead: return step_seconds(o.vr_ahead_seconds, d, 8.0);
-    case Item::SeeBehind: return step_seconds(o.vr_behind_seconds, d, 2.0);  // (at least 2 s: about what the original keeps)
+    case Item::ViewAngle: {
+      double& angle = vr ? o.vr_angle : o.view_angle;
+      angle = std::remainder(std::round(angle / 15.0) * 15.0 + 15.0 * d, 360.0);
+      return true;
+    }
+    case Item::FieldOfView: return step(o.fov, 5.0 * d, 30.0, 110.0);
+    case Item::Camera: {
+      int& c = vr ? o.vr_camera : o.camera;
+      c = c == 1 ? 0 : 1;
+      return true;
+    }
+    case Item::WindowMode: o.window_mode = ((o.window_mode + d) % 3 + 3) % 3; return true;
+    case Item::Resolution: {  // the desktop's, then each mode offered, round either way
+      std::vector<DisplayMode> stops = {DisplayMode{}};
+      stops.insert(stops.end(), display_modes_.begin(), display_modes_.end());
+      if (stops.size() < 2) return false;
+      int at = 0;
+      for (std::size_t i = 0; i < stops.size(); ++i)
+        if (stops[i].w == o.fullscreen_w && stops[i].h == o.fullscreen_h && stops[i].hz == o.fullscreen_hz) at = int(i);
+      const int n = int(stops.size());
+      const DisplayMode& m = stops[std::size_t(((at + d) % n + n) % n)];
+      o.fullscreen_w = m.w, o.fullscreen_h = m.h, o.fullscreen_hz = m.hz;
+      return true;
+    }
+    case Item::Vsync: o.vsync = !o.vsync; return true;
+    case Item::FrameLimit: {
+      constexpr int n = int(std::size(kFrameLimits));
+      int at = 0;
+      for (int i = 0; i < n; ++i)
+        if (kFrameLimits[i] <= o.frame_limit) at = i;
+      o.frame_limit = kFrameLimits[((at + d) % n + n) % n];
+      return true;
+    }
+    case Item::PictureShape: o.picture_43 = !o.picture_43; return true;
+    case Item::SeeAhead: return step_seconds(vr ? o.vr_ahead_seconds : o.ahead_seconds, d, 8.0);
+    case Item::SeeBehind: return step_seconds(vr ? o.vr_behind_seconds : o.behind_seconds, d, 2.0);  // (at least 2 s: about what the original keeps)
     case Item::SoundEffects: o.sound_effects = !o.sound_effects; return true;
     case Item::Vibration: o.vibration = !o.vibration; return true;
     case Item::SoundTiming: return step(o.audio_offset_ms, 5.0 * d, -500.0, 500.0);
@@ -470,6 +539,7 @@ SettingsPanel::Action SettingsPanel::tick(const Input& in, double seconds, Optio
       case Item::Smooth: case Item::SoundEffects: case Item::Vibration: case Item::ResumeStyle: case Item::Performance: case Item::ScoreNumbers: case Item::FixedCourses: case Item::TimingFeedback: case Item::FcCelebration: case Item::WrapCourse:
       case Item::ClassicScreen:
       case Item::OriginalLook: case Item::RestoreLook:
+      case Item::Camera: case Item::WindowMode: case Item::Vsync: case Item::PictureShape:
         return change(item, 1, o, vr) ? Action::Changed : Action::None;
       case Item::ResetColours: case Item::ColourRoad: case Item::ColourBlock: case Item::ColourPit: case Item::ColourLoop:
       case Item::ColourWave: case Item::ColourBlockPit: case Item::ColourBlockLoop: case Item::ColourBlockWave:

@@ -81,6 +81,31 @@ struct Options {
   double picture_offset_ms = 0;
   // Ours: a soft halo round every line: 0 off (the original), 1 faint to 4 strong.
   int glow = 0;
+  // Ours, task 4.16 (the Ultimate PC version): the headset's enhancements on a monitor.
+  // How the lines wobble on the monitor: 0 at the original's 50 Hz (scaled by
+  // jitter_scale), 1-3 afresh every this many of the monitor's frames, as in a headset.
+  int jitter_hold = 0;
+  // Play's camera: 0 the original's, 1 beside Vibri (the headset's view; the score
+  // above her and the meter and numbers below). The monitor starts with the original's,
+  // a headset with ours.
+  int camera = 0;
+  int vr_camera = 1;
+  // On the monitor with the camera beside Vibri: how close (larger: closer), where
+  // round her (degrees, as vr_angle) and how wide the view is (degrees, vertical).
+  double zoom = 1.0;
+  double view_angle = 45.0;
+  double fov = 60.0;
+  // On the monitor: how far ahead the road is drawn and how long passed parts stay
+  // (as vr_ahead_seconds and vr_behind_seconds). 8 s and 2 s are the original's.
+  double ahead_seconds = 8.0;
+  double behind_seconds = 2.0;
+  // The monitor's window: 0 a window, 1 borderless over the whole screen, 2 fullscreen
+  // in the display mode below (0 x 0 at 0 Hz: the desktop's).
+  int window_mode = 0;
+  int fullscreen_w = 0, fullscreen_h = 0, fullscreen_hz = 0;
+  bool vsync = true;      // off: frames as fast as they come (no tearing where the driver offers it)
+  int frame_limit = 0;    // frames a second at most (0: none)
+  bool picture_43 = false;  // the original's 4:3 picture with bars at the sides, instead of the whole window
   float music_volume = 1.0f, effects_volume = 1.0f;
 };
 

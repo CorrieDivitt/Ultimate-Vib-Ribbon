@@ -54,6 +54,10 @@ Options original_options() {
   o.vr_behind_seconds = 2.0;  // the original erases passed parts about 4.25 lengths back: some 2 s
   o.audio_offset_ms = 0;
   o.perf_overlay = 0;
+  o.jitter_hold = 0;  // the monitor: the original's 50 Hz
+  o.camera = o.vr_camera = 0;
+  o.ahead_seconds = 8.0, o.behind_seconds = 2.0;
+  o.picture_43 = true;
   return o;
 }
 
@@ -68,6 +72,10 @@ void copy_look(const Options& from, Options& to) {
   to.scroll_speed = from.scroll_speed;
   to.score_numbers = from.score_numbers, to.timing_feedback = from.timing_feedback, to.fc_celebration = from.fc_celebration;
   to.vr_wrap = from.vr_wrap;
+  to.jitter_hold = from.jitter_hold;
+  to.camera = from.camera;  // (the monitor's; the headset keeps its view beside Vibri)
+  to.ahead_seconds = from.ahead_seconds, to.behind_seconds = from.behind_seconds;
+  to.picture_43 = from.picture_43;
 }
 
 void apply_original_look(Options& o) {
@@ -138,6 +146,24 @@ std::string SaveData::to_text() const {
   std::snprintf(buf, sizeof buf, "%.1f", options.picture_offset_ms);
   out << "picture_offset_ms " << buf << '\n';
   out << "glow " << options.glow << '\n';
+  out << "jitter_hold " << options.jitter_hold << '\n';
+  out << "camera " << options.camera << '\n';
+  out << "vr_camera " << options.vr_camera << '\n';
+  std::snprintf(buf, sizeof buf, "%.3f", options.zoom);
+  out << "zoom " << buf << '\n';
+  std::snprintf(buf, sizeof buf, "%.1f", options.view_angle);
+  out << "view_angle " << buf << '\n';
+  std::snprintf(buf, sizeof buf, "%.1f", options.fov);
+  out << "fov " << buf << '\n';
+  std::snprintf(buf, sizeof buf, "%.1f", options.ahead_seconds);
+  out << "ahead_seconds " << buf << '\n';
+  std::snprintf(buf, sizeof buf, "%.1f", options.behind_seconds);
+  out << "behind_seconds " << buf << '\n';
+  out << "window_mode " << options.window_mode << '\n';
+  out << "fullscreen_mode " << options.fullscreen_w << ' ' << options.fullscreen_h << ' ' << options.fullscreen_hz << '\n';
+  out << "vsync " << (options.vsync ? 1 : 0) << '\n';
+  out << "frame_limit " << options.frame_limit << '\n';
+  out << "picture_43 " << (options.picture_43 ? 1 : 0) << '\n';
   std::snprintf(buf, sizeof buf, "%.2f", double(options.music_volume));
   out << "music_volume " << buf << '\n';
   std::snprintf(buf, sizeof buf, "%.2f", double(options.effects_volume));
@@ -168,6 +194,12 @@ SaveData SaveData::from_text(const std::string& text) {
       int c = 0;
       for (std::size_t k = 0; k < std::size_t(kColourSlotCount) && fields >> c; ++k)
         d.options.colours[k] = std::uint8_t(std::clamp(c, 0, 8));
+      continue;
+    }
+    if (key == "fullscreen_mode") {  // width, height, refresh rate (0 0 0: the desktop's)
+      int w = 0, h = 0, hz = 0;
+      if (fields >> w >> h >> hz && w >= 0 && h >= 0 && hz >= 0 && w <= 16384 && h <= 16384 && hz <= 1000)
+        d.options.fullscreen_w = w, d.options.fullscreen_h = h, d.options.fullscreen_hz = hz;
       continue;
     }
     if (key == "music_folder") {  // a path: the rest of the line, spaces and all
@@ -209,6 +241,18 @@ SaveData SaveData::from_text(const std::string& text) {
     else if (key == "audio_offset_ms") d.options.audio_offset_ms = number;
     else if (key == "glow" && number >= 0 && number <= 4) d.options.glow = int(number);
     else if (key == "picture_offset_ms") d.options.picture_offset_ms = std::clamp(number, -300.0, 300.0);
+    else if (key == "jitter_hold" && number >= 0 && number <= 3) d.options.jitter_hold = int(number);
+    else if (key == "camera" && (number == 0 || number == 1)) d.options.camera = int(number);
+    else if (key == "vr_camera" && (number == 0 || number == 1)) d.options.vr_camera = int(number);
+    else if (key == "zoom" && number > 0) d.options.zoom = std::clamp(number, 1.0 / 36.0, 4.0);
+    else if (key == "view_angle") d.options.view_angle = std::remainder(number, 360.0);
+    else if (key == "fov" && number > 0) d.options.fov = std::clamp(number, 30.0, 110.0);
+    else if (key == "ahead_seconds" && number >= 0) d.options.ahead_seconds = std::max(8.0, number);
+    else if (key == "behind_seconds" && number >= 0) d.options.behind_seconds = std::max(2.0, number);
+    else if (key == "window_mode" && number >= 0 && number <= 2) d.options.window_mode = int(number);
+    else if (key == "vsync") d.options.vsync = parse_bool(value);
+    else if (key == "frame_limit" && number >= 0 && number <= 1000) d.options.frame_limit = int(number);
+    else if (key == "picture_43") d.options.picture_43 = parse_bool(value);
     else if (key == "music_volume" && number >= 0) d.options.music_volume = float(number);
     else if (key == "effects_volume" && number >= 0) d.options.effects_volume = float(number);
   }

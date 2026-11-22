@@ -4,6 +4,7 @@
 #include <vulkan/vulkan.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
@@ -94,9 +95,32 @@ class Renderer::Impl {
   }
 
   const char* gpu_name() const { return gpu_name_.c_str(); }
-  float aspect() const { return extent_.height ? float(extent_.width) / float(extent_.height) : 0.0f; }
-  int height() const { return int(extent_.height); }
+  // The picture inside the window: all of it, or the shape asked for, centred, with bars.
+  VkRect2D picture() const {
+    VkRect2D r{{0, 0}, extent_};
+    if (shape_ <= 0 || extent_.width == 0 || extent_.height == 0) return r;
+    const float window = float(extent_.width) / float(extent_.height);
+    if (window > shape_) {  // wider than the picture: bars at the sides
+      r.extent.width = std::max(1u, std::uint32_t(std::lround(float(extent_.height) * shape_)));
+      r.offset.x = std::int32_t((extent_.width - r.extent.width) / 2);
+    } else {  // taller: above and below
+      r.extent.height = std::max(1u, std::uint32_t(std::lround(float(extent_.width) / shape_)));
+      r.offset.y = std::int32_t((extent_.height - r.extent.height) / 2);
+    }
+    return r;
+  }
+  float aspect() const {
+    const VkRect2D p = picture();
+    return p.extent.height ? float(p.extent.width) / float(p.extent.height) : 0.0f;
+  }
+  int height() const { return int(picture().extent.height); }
   void request_resize() { resize_ = true; }
+  void set_vsync(bool on) {
+    if (on == vsync_) return;
+    vsync_ = on;
+    resize_ = true;  // (a new swapchain with the other present mode)
+  }
+  void set_shape(float aspect) { shape_ = aspect; }
 
   FrameTiming timing() const { return timing_; }
 
@@ -140,7 +164,8 @@ class Renderer::Impl {
       counts.push_back(n);
       used += n;
     }
-    const float aspect = float(extent_.width) / float(extent_.height);
+    const VkRect2D pic = picture();
+    const float aspect = float(pic.extent.width) / float(pic.extent.height);
 
     vkResetCommandBuffer(cmd_, 0);
     VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
@@ -155,8 +180,9 @@ class Renderer::Impl {
     rp.clearValueCount = 2;
     rp.pClearValues = clear;
     vkCmdBeginRenderPass(cmd_, &rp, VK_SUBPASS_CONTENTS_INLINE);
-    const VkViewport vp{0, 0, float(extent_.width), float(extent_.height), 0, 1};
-    const VkRect2D scissor{{0, 0}, extent_};
+    // (The bars, if any, keep the clear colour: the background.)
+    const VkViewport vp{float(pic.offset.x), float(pic.offset.y), float(pic.extent.width), float(pic.extent.height), 0, 1};
+    const VkRect2D scissor = pic;
     vkCmdSetViewport(cmd_, 0, 1, &vp);
     vkCmdSetScissor(cmd_, 0, 1, &scissor);
     const VkDeviceSize zero = 0;
@@ -166,8 +192,8 @@ class Renderer::Impl {
       if (!counts[i]) continue;
       PushConstants pc;
       pc.mvp = mul(perspective(layers[i].fov_y, aspect, 10.0f, 100000.0f), layers[i].view);
-      pc.viewport[0] = float(extent_.width);
-      pc.viewport[1] = float(extent_.height);
+      pc.viewport[0] = float(pic.extent.width);
+      pc.viewport[1] = float(pic.extent.height);
       const float glow = layers[i].glow;  // (a glow pass: wide, fading all the way out)
       pc.width = glow > 0 ? glow * std::max(line_width, 1.0f) : line_width;
       pc.feather = glow > 0 ? 0.5f * pc.width : 0.75f;
@@ -513,6 +539,20 @@ class Renderer::Impl {
     info.preTransform = caps.currentTransform;
     info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     info.presentMode = VK_PRESENT_MODE_FIFO_KHR;  // vsync; always available
+    if (!vsync_) {  // as fast as frames come: mailbox (no tearing) if offered, else immediate
+      std::uint32_t n = 0;
+      vkGetPhysicalDeviceSurfacePresentModesKHR(gpu_, surface_, &n, nullptr);
+      std::vector<VkPresentModeKHR> modes(n);
+      vkGetPhysicalDeviceSurfacePresentModesKHR(gpu_, surface_, &n, modes.data());
+      auto has = [&](VkPresentModeKHR m) { return std::find(modes.begin(), modes.end(), m) != modes.end(); };
+      if (has(VK_PRESENT_MODE_MAILBOX_KHR)) info.presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
+      else if (has(VK_PRESENT_MODE_IMMEDIATE_KHR)) info.presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
+    }
+    if (info.presentMode != present_mode_)
+      std::printf("Monitor: %s\n", info.presentMode == VK_PRESENT_MODE_FIFO_KHR      ? "vsync on"
+                                   : info.presentMode == VK_PRESENT_MODE_MAILBOX_KHR ? "vsync off (mailbox: no tearing)"
+                                                                                       : "vsync off (immediate)");
+    present_mode_ = info.presentMode;
     info.clipped = VK_TRUE;
     check(vkCreateSwapchainKHR(device_, &info, nullptr, &swapchain_), "vkCreateSwapchainKHR");
 
@@ -595,6 +635,9 @@ class Renderer::Impl {
   VkDeviceMemory depth_memory_ = VK_NULL_HANDLE;
   VkImageView depth_view_ = VK_NULL_HANDLE;
   bool resize_ = false;
+  bool vsync_ = true;
+  float shape_ = 0.0f;  // the picture's width / height; 0: the whole window
+  VkPresentModeKHR present_mode_ = VK_PRESENT_MODE_FIFO_KHR;
 };
 
 
@@ -612,5 +655,7 @@ void Renderer::draw(const std::vector<Layer>& layers, float line_width) {
   impl_->draw(layers, line_width);
 }
 FrameTiming Renderer::timing() const { return impl_->timing(); }
+void Renderer::set_vsync(bool on) { impl_->set_vsync(on); }
+void Renderer::set_picture_aspect(float aspect) { impl_->set_shape(aspect); }
 
 }  // namespace vibr

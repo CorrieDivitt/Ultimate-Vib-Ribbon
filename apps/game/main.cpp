@@ -25,6 +25,8 @@
 //   Wave   (Triangle/Cross)    Space, J, K            gamepad: top or bottom face button
 //   [ and ]: audio offset -/+ 5 ms     - and =: line width     Esc: quit
 //   L3 (left stick click) or F3: the performance overlay, off / one line / detailed
+//   F11 or Alt+Enter: a window or fullscreen (monitor; the settings' Display group has more)
+//   With Visual > Camera beside Vibri: right stick zoom, left stick round her (monitor too)
 //
 // High scores and options (sound effects, vibration, fixed courses, line width,
 // audio offset, volumes) live in save.txt in the per-user folder SDL picks, printed
@@ -35,6 +37,7 @@
 #include <SDL3/SDL_main.h>
 
 #include <algorithm>
+#include <array>
 #include <future>
 #include <atomic>
 #include <cctype>
@@ -449,6 +452,11 @@ struct Session {
   std::vector<std::string> perf_text;  // its rows, rewritten 4 times a second so they can be read
   std::uint64_t perf_text_ns = 0, perf_print_ns = 0;
   std::vector<vibr::LineInstance> perf_lines;
+  // The monitor's window as last set up (task 4.16): mode, fullscreen width, height, rate;
+  // the fullscreen mode F11 goes back to; when the frame limit lets the next frame start.
+  std::array<int, 4> applied_window{-1, -1, -1, -1};
+  int last_fullscreen = 1;
+  std::uint64_t frame_deadline_ns = 0;
 };
 
 // In a headset the evolution meter (the dots around Vibri that show the run of hits)
@@ -483,12 +491,49 @@ SceneView vr_play_view(float vibri_z, float zoom, double angle_degrees) {
   return v;
 }
 
+// Task 4.16 (the Ultimate PC version): the headset's enhancements chosen per display.
+// `opt.vr` is "drawn into a headset's room" (off on the classic screen); these say
+// which of our stagings are on, on whichever display is in use.
+//
+// Play seen from beside Vibri, with the score above her and the meter and numbers
+// below: in a headset unless its Camera is the original's (the course round the
+// player always stages it so); on a monitor when its Camera is beside Vibri. The
+// classic screen in a headset shows the original's camera, as a monitor did.
+bool beside_vibri(const Session& s) {
+  const Options& o = s.save.options;
+  if (s.opt.vr) return o.vr_camera == 1 || o.vr_wrap;
+  return !s.opt.headset && o.camera == 1;
+}
+// The road drawn past the original's horizon and behind Vibri (the far generator and
+// the kept trail): always in a headset; on a monitor once See ahead or See behind is
+// set past the original's 8 s and 2 s.
+bool far_road(const Session& s) {
+  const Options& o = s.save.options;
+  if (s.opt.vr) return true;
+  return !s.opt.headset && (o.ahead_seconds > 8.0 + 1e-6 || o.behind_seconds > 2.0 + 1e-6);
+}
+double see_ahead(const Session& s) { return s.opt.vr ? s.save.options.vr_ahead_seconds : s.save.options.ahead_seconds; }
+double see_behind(const Session& s) { return s.opt.vr ? s.save.options.vr_behind_seconds : s.save.options.behind_seconds; }
+// The zoom and view angle of the view beside Vibri, for the display in use.
+double& play_zoom(Session& s) { return s.opt.headset ? s.save.options.vr_zoom : s.save.options.zoom; }
+double& view_angle(Session& s) { return s.opt.headset ? s.save.options.vr_angle : s.save.options.view_angle; }
+
+// The view beside Vibri: the headset's (vr_play_view), or on a monitor the same place
+// with the monitor's own zoom, angle and field of view.
+SceneView beside_view(const Session& s, float vibri_z) {
+  const Options& o = s.save.options;
+  if (s.opt.vr) return vr_play_view(vibri_z, float(o.vr_zoom), o.vr_angle);
+  SceneView v = vr_play_view(vibri_z, float(o.zoom), o.view_angle);
+  v.fov_y = float(o.fov * 3.14159265358979 / 180.0);
+  return v;
+}
+
 // In a headset: a gamepad's right stick held up zooms in (the view closer to Vibri),
 // down zooms out, smoothly, twice as close or as far for each second at full tilt;
 // the left stick left or right takes the view round her, 90 degrees a second.
 // `zoom`: play's or the menus' own (each saved).
 void zoom_with_stick(Session& s, double seconds, double& zoom) {
-  if (!s.opt.vr) return;
+  if (!s.opt.vr && !beside_vibri(s)) return;  // (on a monitor only with the view beside Vibri)
   float y = 0, x = 0;
   for (const auto& [id, pad] : s.pads) {
     const float v = -float(SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_RIGHTY)) / 32767.0f;  // SDL: up is negative
@@ -503,13 +548,13 @@ void zoom_with_stick(Session& s, double seconds, double& zoom) {
   }
   if (std::abs(x) > 0.2f) {
     const double t = (std::abs(x) - 0.2) / 0.8 * (x > 0 ? 1.0 : -1.0);
-    double& a = s.save.options.vr_angle;
+    double& a = view_angle(s);
     a += 90.0 * t * std::min(seconds, 0.1);
     a = std::remainder(a, 360.0);  // kept within -180 to 180
     s.turning = true;
   } else if (s.turning) {
     s.turning = false;
-    std::printf("View angle %.0f degrees\n", s.save.options.vr_angle);
+    std::printf("View angle %.0f degrees\n", view_angle(s));
   }
   if (std::abs(y) > 0.2f) {
     const double t = (std::abs(y) - 0.2) / 0.8 * (y > 0 ? 1.0 : -1.0);
@@ -526,7 +571,7 @@ void zoom_with_stick(Session& s, double seconds, double& zoom) {
 // live, twice or half as big for each second at full tilt, 1 to 10 m. Saved with the
 // options.
 void zoom_or_circle_with_stick(Session& s, double seconds, double& zoom) {
-  if (!s.save.options.vr_wrap) {
+  if (!s.opt.vr || !s.save.options.vr_wrap) {
     zoom_with_stick(s, seconds, zoom);
     return;
   }
@@ -581,6 +626,19 @@ Vec3f scaled_jitter(Vec3f p, Vec3f jitter, double scale) {
   return {p.x + jitter.x * k, p.y + jitter.y * k, p.z + jitter.z * k};
 }
 
+// The lines' wobble for the display in use (task 4.16 brings the headset's to the
+// monitor): afresh every `hold` display frames, from each vertex, in a headset always
+// and on a monitor with Wobble hold set (1-3); otherwise the original's 50 Hz jitter,
+// scaled. `display_frame` counts the display's own frames.
+Vec3f wobble(const Session& s, Vec3f p, Vec3f jitter, std::uint32_t vertex, float shake, std::uint32_t display_frame) {
+  const Options& o = s.save.options;
+  if (s.opt.headset)
+    return headset_jitter(p, jitter, vertex, shake * float(o.vr_jitter_scale), display_frame / std::uint32_t(std::max(1, o.vr_jitter_hold)));
+  if (o.jitter_hold > 0)
+    return headset_jitter(p, jitter, vertex, shake * float(o.jitter_scale), display_frame / std::uint32_t(o.jitter_hold));
+  return scaled_jitter(p, jitter, o.jitter_scale);
+}
+
 // D-pad left or right in play: how far the lines wobble, a tenth of the original's
 // at a time, from 0 (not at all) to 2; saved for the display in use, with the click.
 void change_jitter_scale(Session& s, bool more) {
@@ -604,6 +662,72 @@ void change_line_width(Session& s, bool thicker) {
   std::printf("%sline width %.3f (saved)\n", s.opt.headset ? "headset " : "", s.line_width);
 }
 
+// The monitor's window as the options say (task 4.16): a window, borderless over the
+// whole screen (the desktop's own mode), or fullscreen in a display mode of its own (the
+// closest the display offers to the one chosen; the desktop's if none is chosen). Does
+// nothing when it is already so.
+void apply_window(Session& s) {
+  if (s.opt.headset) return;
+  const Options& o = s.save.options;
+  const std::array<int, 4> want{o.window_mode, o.fullscreen_w, o.fullscreen_h, o.fullscreen_hz};
+  if (want == s.applied_window) return;
+  const bool first = s.applied_window[0] < 0;
+  s.applied_window = want;
+  if (first && o.window_mode == 0) return;  // (it starts as a window)
+  SDL_Window* w = s.window;
+  if (o.window_mode == 0) {
+    SDL_SetWindowFullscreen(w, false);
+    std::printf("Window\n");
+  } else if (o.window_mode == 1) {
+    SDL_SetWindowFullscreenMode(w, nullptr);  // (borderless, the desktop's mode)
+    SDL_SetWindowFullscreen(w, true);
+    std::printf("Borderless fullscreen\n");
+  } else {
+    const SDL_DisplayID d = SDL_GetDisplayForWindow(w);
+    SDL_DisplayMode mode{};
+    bool found = o.fullscreen_w > 0 &&
+                 SDL_GetClosestFullscreenDisplayMode(d, o.fullscreen_w, o.fullscreen_h, float(o.fullscreen_hz), true, &mode);
+    if (!found)
+      if (const SDL_DisplayMode* desk = SDL_GetDesktopDisplayMode(d))
+        found = SDL_GetClosestFullscreenDisplayMode(d, desk->w, desk->h, desk->refresh_rate, true, &mode);
+    SDL_SetWindowFullscreenMode(w, found ? &mode : nullptr);
+    SDL_SetWindowFullscreen(w, true);
+    if (found) std::printf("Fullscreen %dx%d at %.0f Hz\n", mode.w, mode.h, double(mode.refresh_rate));
+    else std::printf("Fullscreen (borderless: the display offered no mode)\n");
+  }
+  SDL_SyncWindow(w);
+  s.renderer.request_resize();
+}
+
+// F11 or Alt+Enter on the monitor: between a window and the last fullscreen mode used
+// (borderless at first), saved. True when the key was taken.
+bool window_key(Session& s, const SDL_Event& e) {
+  if (s.opt.headset || e.type != SDL_EVENT_KEY_DOWN || e.key.repeat) return false;
+  const bool f11 = e.key.key == SDLK_F11, alt_enter = e.key.key == SDLK_RETURN && (e.key.mod & SDL_KMOD_ALT);
+  if (!f11 && !alt_enter) return false;
+  int& mode = s.save.options.window_mode;
+  if (mode != 0) s.last_fullscreen = mode, mode = 0;
+  else mode = s.last_fullscreen;
+  apply_window(s);
+  if (s.write_save) s.write_save();
+  return true;
+}
+
+// The monitor's fullscreen modes, largest and fastest first, once each (a mode seen at
+// several pixel densities counts once).
+std::vector<SettingsPanel::DisplayMode> monitor_modes(SDL_Window* window) {
+  std::vector<SettingsPanel::DisplayMode> out;
+  int count = 0;
+  SDL_DisplayMode** modes = SDL_GetFullscreenDisplayModes(SDL_GetDisplayForWindow(window), &count);
+  if (!modes) return out;
+  for (int i = 0; i < count; ++i) {
+    const SettingsPanel::DisplayMode m{modes[i]->w, modes[i]->h, int(std::lround(modes[i]->refresh_rate))};
+    if (std::none_of(out.begin(), out.end(), [&](const auto& x) { return x.w == m.w && x.h == m.h && x.hz == m.hz; })) out.push_back(m);
+  }
+  SDL_free(modes);
+  return out;
+}
+
 // Puts the saved options into effect after the settings panel changed one.
 void apply_settings(Session& s) {
   const Options& o = s.save.options;
@@ -616,6 +740,11 @@ void apply_settings(Session& s) {
   Clip::set_smooth(s.opt.smooth || o.smooth_animation || s.opt.headset);  // always smooth in a headset (the classic screen too: owner)
   s.audio.set_volumes(s.opt.music.value_or(o.music_volume), s.opt.sfx.value_or(o.effects_volume));
   if (s.opt.headset) s.renderer.set_refresh_rate(float(o.vr_refresh_hz));  // (asks only when it changed)
+  if (!s.opt.headset) {  // the monitor's window and picture (task 4.16)
+    apply_window(s);
+    s.renderer.set_vsync(o.vsync);
+    s.renderer.set_picture_aspect(o.picture_43 ? 4.0f / 3.0f : 0.0f);
+  }
 }
 
 // The settings in play's pause, and below the Options screen (which has the
@@ -625,11 +754,15 @@ void apply_settings(Session& s) {
 // song last); otherwise the menus' settings. The headset has more view settings.
 void setup_panel(SettingsPanel& p, bool vr, bool pause) {
   using I = SettingsPanel::Item;
+  // (Task 4.16: the monitor has the headset's view settings too, its own Wobble hold
+  // starting from the original's 50 Hz, and a Display group for its window.)
   if (vr)
-    p.set_group(I::Visual, {I::OriginalLook, I::RestoreLook, I::WobbleSize, I::WobbleHold, I::LineWidth, I::Glow, I::Zoom, I::ViewAngle,
-                            I::SeeAhead, I::SeeBehind, I::ClassicScreen, I::ClassicSize, I::RefreshRate, I::Performance});
+    p.set_group(I::Visual, {I::OriginalLook, I::RestoreLook, I::WobbleSize, I::WobbleHold, I::LineWidth, I::Glow, I::Camera, I::Zoom,
+                            I::ViewAngle, I::SeeAhead, I::SeeBehind, I::ClassicScreen, I::ClassicSize, I::RefreshRate, I::Performance});
   else
-    p.set_group(I::Visual, {I::OriginalLook, I::RestoreLook, I::WobbleSize, I::Smooth, I::LineWidth, I::Glow, I::Performance});
+    p.set_group(I::Visual, {I::OriginalLook, I::RestoreLook, I::WobbleSize, I::WobbleHold, I::Smooth, I::LineWidth, I::Glow, I::Camera,
+                            I::Zoom, I::ViewAngle, I::FieldOfView, I::SeeAhead, I::SeeBehind, I::Performance});
+  if (!vr) p.set_group(I::Display, {I::WindowMode, I::Resolution, I::Vsync, I::FrameLimit, I::PictureShape});
   if (vr)
     p.set_group(I::Modifiers, {I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::WrapCourse, I::WrapSize, I::ScoreNumbers, I::FixedCourses});
   else
@@ -643,6 +776,7 @@ void setup_panel(SettingsPanel& p, bool vr, bool pause) {
   std::vector<I> top;
   if (pause) top.push_back(I::Continue);
   top.insert(top.end(), {I::Visual, I::Modifiers, I::CustomColours, I::Calibration});
+  if (!vr) top.push_back(I::Display);
   if (vr) top.push_back(I::Recentre);
   top.insert(top.end(), {I::SoundEffects, I::EffectsVolume, I::Vibration, I::ResumeStyle});
   if (pause) top.push_back(I::QuitSong);
@@ -655,15 +789,8 @@ void to_instances(const Session& s, const std::vector<SceneLine>& in, std::uint3
   out.clear();
   const Options& o = s.save.options;
   for (const SceneLine& l : in) {
-    Vec3f a, b;
-    if (s.opt.headset) {
-      const auto frame = display_frame / std::uint32_t(o.vr_jitter_hold);
-      a = headset_jitter(l.a, l.jitter_a, l.vertex_a, l.shake_a * float(o.vr_jitter_scale), frame);
-      b = headset_jitter(l.b, l.jitter_b, l.vertex_b, l.shake_b * float(o.vr_jitter_scale), frame);
-    } else {
-      a = scaled_jitter(l.a, l.jitter_a, o.jitter_scale);
-      b = scaled_jitter(l.b, l.jitter_b, o.jitter_scale);
-    }
+    const Vec3f a = wobble(s, l.a, l.jitter_a, l.vertex_a, l.shake_a, display_frame);
+    const Vec3f b = wobble(s, l.b, l.jitter_b, l.vertex_b, l.shake_b, display_frame);
     const Rgb c = shown_colour(l.colour, l.part, o.colours);  // (custom colours; the rest inverted on a light background)
     out.push_back({{a.x, a.y, a.z}, {b.x, b.y, b.z}, {c.r / 255.0f, c.g / 255.0f, c.b / 255.0f, 1.0f}});
   }
@@ -752,10 +879,9 @@ void draw_frame(Session& s, std::vector<vibr::Layer>& layers, double update_ms, 
       }
     }
     const FrameStats::Summary sum = s.stats.summary(now);
-    int w = 4, h = 3;
-    if (!s.opt.headset) SDL_GetWindowSizeInPixels(s.window, &w, &h);  // (the classic screen is 4:3)
-    const Hud::Layer pl = s.perf->draw(s.perf_text, level >= 2 ? s.stats.intervals(now) : std::vector<double>{}, sum.target_ms, s.opt.vr,
-                                       float(w) / float(std::max(1, h)));
+    float aspect = 4.0f / 3.0f;  // (the classic screen is 4:3)
+    if (!s.opt.headset && s.renderer.picture_aspect() > 0) aspect = s.renderer.picture_aspect();  // (the monitor's picture, bars left out)
+    const Hud::Layer pl = s.perf->draw(s.perf_text, level >= 2 ? s.stats.intervals(now) : std::vector<double>{}, sum.target_ms, s.opt.vr, aspect);
     s.perf_lines.clear();
     for (const SceneLine& l : pl.lines) {
       const Rgb c = shown_colour(l.colour, l.part, s.save.options.colours);
@@ -803,6 +929,19 @@ void draw_frame(Session& s, std::vector<vibr::Layer>& layers, double update_ms, 
   FrameSample f;
   f.ns = SDL_GetTicksNS();
   f.interval_ms = t.interval_ms, f.period_ms = t.period_ms, f.wait_ms = t.wait_ms, f.submit_ms = t.submit_ms;
+  // The monitor's frame limit (task 4.16): after a frame is handed over, wait until the
+  // next may start, so the frame after is built just before it is shown. Its period is
+  // then the overlay's target.
+  if (const int limit = s.save.options.frame_limit; !s.opt.headset && limit > 0) {
+    const auto period = std::uint64_t(1e9 / limit);
+    const std::uint64_t now_ns = SDL_GetTicksNS();
+    if (s.frame_deadline_ns > now_ns) SDL_DelayPrecise(std::min(s.frame_deadline_ns - now_ns, period));
+    s.frame_deadline_ns = std::max(s.frame_deadline_ns, SDL_GetTicksNS()) + period;
+    const double limit_ms = 1000.0 / limit;
+    f.period_ms = s.save.options.vsync ? std::max(f.period_ms, limit_ms) : limit_ms;
+  } else if (!s.opt.headset && !s.save.options.vsync) {
+    f.period_ms = 0;  // (no target: as fast as it goes)
+  }
   f.update_ms = update_ms, f.build_ms = build_ms + build_more, f.lines = lines;
   s.stats.add(f);
 }
@@ -839,8 +978,9 @@ struct PlayPreview {
     scroll = ease_scroll(scroll, o.scroll_speed, dt);
     // (Its endless road shows at most 2 minutes each way, enough to reach the horizon;
     // on the monitor as far as the original's horizon as drawn, whatever the scroll.)
-    const double ahead = s.opt.vr ? std::min(o.vr_ahead_seconds, 120.0) * kSpeed : 14.0 / scroll;
-    const double behind = s.opt.vr ? std::min(o.vr_behind_seconds, 120.0) * kSpeed : 3.0 / scroll;
+    const bool far = far_road(s);
+    const double ahead = far ? std::min(see_ahead(s), 120.0) * kSpeed : 14.0 / scroll;
+    const double behind = far ? std::min(see_behind(s), 120.0) * kSpeed : 3.0 / scroll;
     Scene::Frame f;
     f.seconds = dt;
     f.jitter_seed = jitter_seed;
@@ -857,8 +997,8 @@ struct PlayPreview {
       f.road.push_back({road, Fixed::from((x - now) * scroll + 1.25), false, false});  // (Vibri stands 1.25 along)
     }
     s.scene.draw(f, lines, view);
-    if (s.opt.vr) {
-      view = vr_play_view(s.scene.vibri_z(), float(o.vr_zoom), o.vr_angle);
+    if (beside_vibri(s)) {
+      view = beside_view(s, s.scene.vibri_z());
       evo_behind_road(lines, s.scene.evo_first());
     }
     if (s.opt.vr && o.vr_wrap) {
@@ -1169,6 +1309,7 @@ bool run_calibration(Session& s, SettingsPanel& panel, bool picture) {
     std::vector<std::uint64_t> presses;
     SDL_Event ev;
     while (SDL_PollEvent(&ev)) {
+      if (window_key(s, ev)) continue;  // (F11 or Alt+Enter: window or fullscreen)
       switch (ev.type) {
         case SDL_EVENT_QUIT:
           std::printf("Calibration: the game is closing\n");
@@ -1400,8 +1541,8 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   if (s.demo) game.seed_demo(seed);
   // In a headset the whole line is in view: passed parts stay on it for 8 s, and
   // every part built so far (8 s ahead) shows ahead.
-  if (s.opt.vr) game.keep_passed(static_cast<std::int32_t>(std::min(s.save.options.vr_behind_seconds, kWholeSongSeconds) * kSampleRate));
-  if (s.opt.vr) game.set_trail_min_speed(kTrailMinSpeed);
+  if (far_road(s)) game.keep_passed(static_cast<std::int32_t>(std::min(see_behind(s), kWholeSongSeconds) * kSampleRate));
+  game.set_trail_min_speed(kTrailMinSpeed);  // (only the far road's trail behind her uses it)
   // The scroll speed (display only), eased towards the setting so a change in the
   // pause or between songs stretches or squeezes the road smoothly.
   // (The idle demo shows the original's look: 1x.)
@@ -1432,7 +1573,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   start(far);
   std::size_t far_block = 0;
   // (Read every frame: the pause's settings can change it mid-song.)
-  auto far_extra = [&s] { return static_cast<std::int32_t>(std::clamp(s.save.options.vr_ahead_seconds - 8.0, 0.0, kWholeSongSeconds) * kSampleRate); };
+  auto far_extra = [&s] { return far_road(s) ? static_cast<std::int32_t>(std::clamp(see_ahead(s) - 8.0, 0.0, kWholeSongSeconds) * kSampleRate) : 0; };
   bool far_warned = false;
   s.scene.reset(true, false);
   s.hud.start_round(track_index, !s.song && !s.music && !s.demo);  // the "Round 1/2" sign belongs to the two-song courses
@@ -1574,6 +1715,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     presses.clear();
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
+      if (window_key(s, e)) continue;  // (F11 or Alt+Enter: window or fullscreen)
       switch (e.type) {
         case SDL_EVENT_QUIT: return Result::Quit;
         case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
@@ -1672,7 +1814,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
 
     const std::uint64_t now_ns = SDL_GetTicksNS();
     const double dt = double(now_ns - last_ns) * 1e-9;
-    zoom_or_circle_with_stick(s, dt, s.save.options.vr_zoom);
+    zoom_or_circle_with_stick(s, dt, play_zoom(s));
     if (s.opt.headset && !s.demo) {  // Touch: the right stick flicked right or left, the scroll speed (as a gamepad's R2 and L2)
       const vibr::Display::ControllerSticks c = s.renderer.controller_sticks();
       if (!s.stick_flicked && std::abs(c.right_x) > 0.7f && std::abs(c.right_x) > 2.0f * std::abs(c.right_y)) {
@@ -1793,7 +1935,9 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     const auto picture_ahead = static_cast<std::int32_t>((s.save.options.picture_offset_ms + s.renderer.display_lead_ms()) * kSampleRate / 1000.0);
     const std::int32_t view_at = frozen ? std::min(raw, pause_at) : heard + picture_ahead;
     if (frozen || celebrating) presses.clear();
-    if (s.opt.vr) game.keep_passed(static_cast<std::int32_t>(std::min(s.save.options.vr_behind_seconds, kWholeSongSeconds) * kSampleRate));
+    // (In a headset always; on a monitor with See behind past the original's 2 s. A
+    // trail kept is not dropped when the setting goes back: it simply ages out.)
+    if (far_road(s)) game.keep_passed(static_cast<std::int32_t>(std::min(see_behind(s), kWholeSongSeconds) * kSampleRate));
 
     if (!frozen) analyse_up_to(heard);
 
@@ -1832,8 +1976,9 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     f.seconds = still_frame ? 0.0 : dt;
     f.jitter_seed = next_random(static_cast<std::uint32_t>(double(now_ns - start_ns) * 1e-9 * kOriginalRefresh) * 2654435761u);
     f.speed = scroll_shown == 1.0 ? game.speed() : Fixed::from(game.speed().to_double() * scroll_shown);  // Vibri runs as fast as the road comes
-    f.road = frozen || picture_ahead != 0 ? game.road_at(view_at, s.opt.vr) : game.road(s.opt.vr);
-    if (s.opt.vr && far_extra() > 0 && !speed_level) {  // (a speed course's beat changes as the player scores)
+    const bool far_on = far_road(s);
+    f.road = frozen || picture_ahead != 0 ? game.road_at(view_at, far_on) : game.road(far_on);
+    if (far_on && far_extra() > 0 && !speed_level) {  // (a speed course's beat changes as the player scores)
       // At most about 2 ms of analysis a frame: with the whole song asked for, the far
       // course fills in over the first second or so instead of in one long frame.
       const std::uint64_t far_budget_end = SDL_GetTicksNS() + 2'000'000;
@@ -1871,8 +2016,9 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     s.scene.draw(f, scene_lines, view);
     const bool wrapped = s.opt.vr && s.save.options.vr_wrap;
     const float vz = s.scene.vibri_z();
-    if (s.opt.vr) {
-      view = vr_play_view(vz, float(s.save.options.vr_zoom), s.save.options.vr_angle);
+    const bool staged = beside_vibri(s);  // (the view beside Vibri, and the HUD with her)
+    if (staged) {
+      view = beside_view(s, vz);
       evo_behind_road(scene_lines, s.scene.evo_first());
     }
     if (wrapped) {
@@ -1897,15 +2043,9 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     auto convert = [&](const std::vector<SceneLine>& in, std::vector<vibr::LineInstance>& dst) {
       dst.clear();
       for (const SceneLine& l : in) {
-        Vec3f a = l.a, b = l.b;
-        if (s.opt.headset) {  // jittered afresh every headset frame (the classic screen too)
-          const float k = float(s.save.options.vr_jitter_scale);
-          a = headset_jitter(l.a, l.jitter_a, l.vertex_a, l.shake_a * k, display_frame / std::uint32_t(s.save.options.vr_jitter_hold));
-          b = headset_jitter(l.b, l.jitter_b, l.vertex_b, l.shake_b * k, display_frame / std::uint32_t(s.save.options.vr_jitter_hold));
-        } else {
-          a = scaled_jitter(l.a, l.jitter_a, s.save.options.jitter_scale);
-          b = scaled_jitter(l.b, l.jitter_b, s.save.options.jitter_scale);
-        }
+        // (Jittered afresh every headset frame, the classic screen too; on a monitor as its Wobble hold says.)
+        const Vec3f a = wobble(s, l.a, l.jitter_a, l.vertex_a, l.shake_a, display_frame);
+        const Vec3f b = wobble(s, l.b, l.jitter_b, l.vertex_b, l.shake_b, display_frame);
         const Rgb c = shown_colour(l.colour, l.part, s.save.options.colours);  // (custom colours; the rest inverted on a light background)
         dst.push_back({{a.x, a.y, a.z}, {b.x, b.y, b.z}, {c.r / 255.0f, c.g / 255.0f, c.b / 255.0f, 1.0f}});
       }
@@ -1931,7 +2071,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     s.hud.draw(h, hud_layers);
     hud_lines.resize(hud_layers.size());
     for (std::size_t i = 0; i < hud_layers.size(); ++i) {
-      if (s.opt.vr && hud_layers[i].time) {
+      if (staged && hud_layers[i].time) {
         // In a headset the original's time meter sits below Vibri (task 4.9).
         std::vector<SceneLine> bar;
         meter_below_vibri(hud_layers[i], s.scene.vibri_z(), hud_eye, bar);
@@ -1940,7 +2080,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
         layers.push_back({&hud_lines[i], matrix(view), view.fov_y});
         continue;
       }
-      if (s.opt.vr && hud_layers[i].score) {
+      if (staged && hud_layers[i].score) {
         // In a headset the score floats above Vibri in the world (task 4.8), not in
         // front of the player: at a fixed height, turned to face the view.
         std::vector<SceneLine> above;
@@ -1950,7 +2090,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
         layers.push_back({&hud_lines[i], matrix(view), view.fov_y});
         continue;
       }
-      if (s.opt.vr && hud_layers[i].speed) {
+      if (staged && s.opt.vr && hud_layers[i].speed) {
         // In a headset the speed dial sits higher above Vibri (owner's request): raised
         // in its own camera's space by 800, about 80% of its height (its lines span
         // y -1,333 to -307 there; y is down).
@@ -1964,7 +2104,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     // meter under Vibri; on the monitor near the bottom, just above the meter.
     if (s.save.options.score_numbers && s.panel && !s.demo) {
       const int shown = std::min(game.score(), Hud::kMaxScore);
-      if (s.opt.vr) {
+      if (staged) {
         std::vector<SceneLine> placed;
         number_below_vibri(s.panel->text_lines(std::to_string(shown), 1.2f, h.jitter_seed, 4), s.scene.vibri_z(), hud_eye, placed);
         to_ring(placed);
@@ -1985,7 +2125,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
       const float bright = float(std::min(1.0, timing_note / 0.2));
       const std::string text = SettingsPanel::offset_text(timing_ms);
       timing_lines.clear();
-      if (s.opt.vr) {
+      if (staged) {
         std::vector<SceneLine> placed;
         number_below_vibri(s.panel->text_lines(text, kTimingScale, h.jitter_seed, 4), s.scene.vibri_z(), hud_eye, placed, kTimingBelowRoad);
         to_ring(placed);
@@ -2001,7 +2141,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     }
     if (celebrating && s.panel) {  // "Full Combo!", over everything but the pause
       fc_lines.clear();
-      if (s.opt.vr) {
+      if (staged) {
         std::vector<SceneLine> placed;
         number_below_vibri(whole_course ? s.panel->full_course_combo(fc_time, h.jitter_seed) : s.panel->full_combo(fc_time, h.jitter_seed),
                            s.scene.vibri_z(), hud_eye, placed, whole_course ? kFullCourseComboAboveRoad : kFullComboAboveRoad);
@@ -2016,7 +2156,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     }
     if (scroll_note > 0 && s.panel && !paused) {  // the scroll speed, just changed
       scroll_note_lines.clear();
-      if (s.opt.vr) {
+      if (staged) {
         std::vector<SceneLine> placed;
         number_below_vibri(s.panel->text_lines(s.panel->scroll_line(s.save.options), 1.0f, h.jitter_seed, 4), s.scene.vibri_z(), hud_eye, placed, kScrollNoteBelowRoad);
         to_ring(placed);
@@ -2221,12 +2361,19 @@ int run(int argc, char** argv) {
       for (const float r : renderer.refresh_rates()) rates.push_back(int(std::lround(r)));
       panel.set_refresh_rates(std::move(rates));
       panel.set_passthrough_available(renderer.passthrough_available());
+      if (!opt.headset) panel.set_display_modes(monitor_modes(window));
     }
     s.panel = &panel;
     PerfOverlay perf(pak, language, words ? &*words : nullptr);
     s.perf = &perf;
     if (save.options.perf_overlay > 0) std::printf("Performance overlay on (L3 or F3 steps it: off, one line, detailed)\n");
     s.write_save = write_save;
+    if (!opt.headset) {  // the monitor's window and picture as saved (task 4.16)
+      if (save.options.window_mode != 0) s.last_fullscreen = save.options.window_mode;
+      apply_window(s);
+      renderer.set_vsync(save.options.vsync);
+      renderer.set_picture_aspect(save.options.picture_43 ? 4.0f / 3.0f : 0.0f);
+    }
     std::uint32_t seed = opt.seed;
     int last_rank = 0, last_score = 0, lost_song = 0, points_before_lost = 0;
     bool last_lost = false, last_left = false, last_cleared = false;  // game over; left with Start or Esc; cleared
@@ -2396,6 +2543,7 @@ int run(int argc, char** argv) {
         while (!ready()) {
           SDL_Event ev;
           while (SDL_PollEvent(&ev)) {
+            if (window_key(s, ev)) continue;
             if (ev.type == SDL_EVENT_QUIT) {
               quit_requested = true;
               return false;
@@ -2489,6 +2637,7 @@ int run(int argc, char** argv) {
       while (running) {
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
+          if (window_key(s, e)) continue;  // (F11 or Alt+Enter: window or fullscreen)
           auto press = [&](int which, bool down) {
             bool* p[6] = {&pressed.up, &pressed.down, &pressed.left, &pressed.right, &pressed.confirm, &pressed.cancel};
             bool* h[4] = {&held.up, &held.down, &held.left, &held.right};
@@ -2611,8 +2760,8 @@ int run(int argc, char** argv) {
         }
         toggle_settings = false;
         // (In the settings the right stick zooms play's view, which the preview shows.)
-        if (in_settings) zoom_or_circle_with_stick(s, frame_dt, s.save.options.vr_zoom);
-        else zoom_with_stick(s, frame_dt, s.save.options.vr_menu_zoom);
+        if (in_settings) zoom_or_circle_with_stick(s, frame_dt, play_zoom(s));
+        else if (opt.vr) zoom_with_stick(s, frame_dt, s.save.options.vr_menu_zoom);
         behind = std::min(behind + double(now_ns - last_ns) * 1e-9, 0.1);
         last_ns = now_ns;
         while (behind >= 1.0 / TitleScreens::kFrameRate) {
@@ -3178,14 +3327,9 @@ int run(int argc, char** argv) {
               a = mix(l.a, l.jitter_a, p.a, p.jitter_a);
               b = mix(l.b, l.jitter_b, p.b, p.jitter_b);
             }
-            if (opt.headset) {  // jittered afresh every headset frame (the blend kept this frame's jitter in a and b)
-              const float wobble = float(save.options.vr_jitter_scale);
-              a = headset_jitter(a, l.jitter_a, l.vertex_a, l.shake_a * wobble, menu_display_frame / std::uint32_t(save.options.vr_jitter_hold));
-              b = headset_jitter(b, l.jitter_b, l.vertex_b, l.shake_b * wobble, menu_display_frame / std::uint32_t(save.options.vr_jitter_hold));
-            } else {
-              a = scaled_jitter(a, l.jitter_a, save.options.jitter_scale);
-              b = scaled_jitter(b, l.jitter_b, save.options.jitter_scale);
-            }
+            // (Afresh every headset frame, or as the monitor's Wobble hold says; the blend kept this frame's jitter in a and b.)
+            a = wobble(s, a, l.jitter_a, l.vertex_a, l.shake_a, menu_display_frame);
+            b = wobble(s, b, l.jitter_b, l.vertex_b, l.shake_b, menu_display_frame);
             // (The original's menu screens' lines are menu items for custom colours, Vibri
             // apart; the kiosk film keeps its own.)
             const std::uint8_t part = l.part == line_part::kNone && !in_kiosk ? line_part::kMenu : l.part;

@@ -131,6 +131,14 @@ class Display {
   // A headset's own controllers: buzz both for `seconds` at `amplitude` (0-1); 0 stops.
   virtual void rumble(float /*seconds*/, float /*amplitude*/) {}
   virtual void set_passthrough(bool) {}
+  // A monitor (task 4.16): wait for the display's refresh (on) or show frames as they
+  // come (off: mailbox where the driver offers it, so no tearing; else immediate).
+  virtual void set_vsync(bool) {}
+  // A monitor: the picture's shape, width / height (4/3: the original's, with bars at
+  // the sides or above and below); 0 fills the window.
+  virtual void set_picture_aspect(float) {}
+  // The picture's width / height as drawn (0 unknown, e.g. minimised).
+  virtual float picture_aspect() const { return 0.0f; }
   // The colour behind the lines, as shown on a monitor (0-1 each; the original's black).
   void set_background(float r, float g, float b) { background_[0] = r, background_[1] = g, background_[2] = b; }
 
@@ -148,8 +156,11 @@ class Renderer : public Display {
   const char* gpu_name() const override;
   void request_resize() override;
   // Width / height of the drawable, or 0 while minimised.
-  float aspect() const;
-  int height() const override;  // pixels
+  float aspect() const;  // (the picture's: see set_picture_aspect)
+  int height() const override;  // pixels of the picture
+  void set_vsync(bool on) override;
+  void set_picture_aspect(float aspect) override;
+  float picture_aspect() const override { return aspect(); }
   void draw(const std::vector<LineInstance>& lines, const Mat4& view, float fov_y, float line_width);
   void draw(const std::vector<Layer>& layers, float line_width) override;
   FrameTiming timing() const override;

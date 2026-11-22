@@ -1197,8 +1197,16 @@ TEST(disc_sces02873_settings_labels_with_defaults_fit_beside_their_values) {
                               I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses, I::EffectsVolume, I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::WrapCourse, I::WrapSize, I::Visual, I::Modifiers, I::CustomColours, I::Back,
                               I::ColourRoad, I::ColourBlock, I::ColourPit, I::ColourLoop, I::ColourWave, I::ColourBlockPit, I::ColourBlockLoop,
                               I::ColourBlockWave, I::ColourPitLoop, I::ColourPitWave, I::ColourLoopWave, I::ColourAngel, I::ColourRabbit,
-                              I::ColourFrog, I::ColourWorm, I::ColourBackground, I::ColourMenu, I::ResetColours, I::Calibration, I::SoundCalibration, I::PictureTiming, I::PictureCalibration, I::Glow, I::RefreshRate, I::ClassicScreen, I::ClassicSize, I::OriginalLook, I::RestoreLook, I::Continue};
+                              I::ColourFrog, I::ColourWorm, I::ColourBackground, I::ColourMenu, I::ResetColours, I::Calibration, I::SoundCalibration, I::PictureTiming, I::PictureCalibration, I::Glow, I::RefreshRate, I::ClassicScreen, I::ClassicSize, I::OriginalLook, I::RestoreLook, I::Continue,
+                              I::Camera, I::FieldOfView, I::Display, I::WindowMode, I::Resolution, I::Vsync, I::FrameLimit, I::PictureShape};
   Options longest;
+  longest.camera = longest.vr_camera = 1;
+  longest.window_mode = 2;
+  longest.fullscreen_w = 3840, longest.fullscreen_h = 2160, longest.fullscreen_hz = 240;
+  longest.frame_limit = 360;
+  longest.jitter_hold = 3;
+  longest.ahead_seconds = longest.behind_seconds = kWholeSongSeconds;
+  longest.view_angle = -165;
   longest.scroll_speed = 9.75;
   longest.vr_ahead_seconds = longest.vr_behind_seconds = kWholeSongSeconds;
   longest.resume_countdown = true;
@@ -1217,6 +1225,98 @@ TEST(disc_sces02873_settings_labels_with_defaults_fit_beside_their_values) {
           CHECK(needed <= 2900.0f);
           CHECK(p.label(item, vr).find('?') == std::string::npos);
         }
+  }
+}
+
+// Task 4.16: the monitor's view, wobble and display settings in the panel.
+TEST(disc_sces02873_monitor_settings_step_and_show) {
+  const std::string cue = test_cue();
+  if (cue.empty()) SKIP("set VIB_TEST_CUE to your SCES-02873 .cue to run");
+  DiscImage disc = DiscImage::open(path_from_utf8(cue));
+  Iso9660 iso(disc);
+  const GameText words = GameText::from_exe(iso.read("MAIN_G.EXE"));
+  using I = SettingsPanel::Item;
+  using A = SettingsPanel::Action;
+  const Pak game(iso.read("GAME/02_FILES.PAK"));
+  SettingsPanel p(game, 1, &words);
+  p.set_items({I::WobbleHold, I::Camera, I::Zoom, I::ViewAngle, I::FieldOfView, I::SeeAhead, I::SeeBehind, I::WindowMode, I::Resolution,
+               I::Vsync, I::FrameLimit, I::PictureShape});
+  p.set_display_modes({{2560, 1440, 144}, {1920, 1080, 60}});
+  Options o;
+  SettingsPanel::Input down, left, right, confirm;
+  down.down = left.left = right.right = confirm.confirm = true;
+  auto go_to = [&](I item) {
+    p.home();
+    while (p.current() != item) p.tick(down, 0.02, o, false);
+  };
+  // Wobble hold on the monitor: the original's 50 Hz, then every 1 to 3 frames; the headset's stays 1 to 3.
+  CHECK(p.value(I::WobbleHold, o, false) == "50 Hz" && p.label(I::WobbleHold, false) == "Wobble hold (50 Hz)");
+  go_to(I::WobbleHold);
+  CHECK(p.tick(right, 0.02, o, false) == A::Changed && o.jitter_hold == 1 && o.vr_jitter_hold == 3);
+  p.tick(right, 0.5, o, false), p.tick(right, 0.5, o, false);
+  CHECK(o.jitter_hold == 3 && p.tick(right, 0.5, o, false) == A::None);  // (stops at 3)
+  // Camera: each display its own; the brackets show the original's.
+  CHECK(p.label(I::Camera, false) == "Camera (Original)" && p.label(I::Camera, true) == "Camera (Original)");
+  CHECK(p.value(I::Camera, o, false) == "Original" && p.value(I::Camera, o, true) == "Beside Vibri");
+  go_to(I::Camera);
+  CHECK(p.tick(confirm, 0.02, o, false) == A::Changed && o.camera == 1 && o.vr_camera == 1);
+  CHECK(p.tick(confirm, 0.02, o, true) == A::Changed && o.vr_camera == 0 && o.camera == 1);
+  // Zoom, angle, see ahead and behind: the monitor's own fields.
+  go_to(I::Zoom);
+  p.tick(right, 0.02, o, false);
+  CHECK(o.zoom > 1.0 && o.vr_zoom == 1.0);
+  go_to(I::ViewAngle);
+  p.tick(left, 0.02, o, false);
+  CHECK(o.view_angle == 30.0 && o.vr_angle == 45.0);
+  go_to(I::FieldOfView);
+  CHECK(p.label(I::FieldOfView, false) == "Field of view (60)");
+  p.tick(right, 0.02, o, false);
+  CHECK(o.fov == 65.0);
+  go_to(I::SeeAhead);
+  CHECK(p.label(I::SeeAhead, false) == "See ahead (8 s)" && p.value(I::SeeAhead, o, false) == "8 s");
+  p.tick(right, 0.02, o, false);
+  CHECK(o.ahead_seconds == 10.0 && o.vr_ahead_seconds == 30.0);
+  go_to(I::SeeBehind);
+  CHECK(p.tick(left, 0.02, o, false) == A::None && o.behind_seconds == 2.0);  // (2 s at least)
+  // Window mode round; resolution: the desktop's, then each mode offered, round.
+  go_to(I::WindowMode);
+  CHECK(p.value(I::WindowMode, o, false) == "Window");
+  p.tick(confirm, 0.02, o, false);
+  CHECK(o.window_mode == 1 && p.value(I::WindowMode, o, false) == "Borderless");
+  p.tick(left, 0.02, o, false), p.tick(left, 0.5, o, false);
+  CHECK(o.window_mode == 2 && p.value(I::WindowMode, o, false) == "Fullscreen");
+  go_to(I::Resolution);
+  CHECK(p.value(I::Resolution, o, false) == "Desktop");
+  p.tick(right, 0.02, o, false);
+  CHECK(o.fullscreen_w == 2560 && o.fullscreen_hz == 144 && p.value(I::Resolution, o, false) == "2560x1440 144 Hz");
+  p.tick(right, 0.5, o, false), p.tick(right, 0.5, o, false);
+  CHECK(o.fullscreen_w == 0 && o.fullscreen_hz == 0);  // round to the desktop's
+  go_to(I::Vsync);
+  CHECK(p.tick(confirm, 0.02, o, false) == A::Changed && !o.vsync && p.value(I::Vsync, o, false) == "Off");
+  go_to(I::FrameLimit);
+  CHECK(p.value(I::FrameLimit, o, false) == "Off");
+  p.tick(right, 0.02, o, false);
+  CHECK(o.frame_limit == 30 && p.value(I::FrameLimit, o, false) == "30 fps");
+  p.tick(left, 0.5, o, false), p.tick(left, 0.5, o, false);
+  CHECK(o.frame_limit == 360);  // (round the other way)
+  go_to(I::PictureShape);
+  CHECK(p.label(I::PictureShape, false) == "Picture shape (4:3)" && p.value(I::PictureShape, o, false) == "Fill");
+  p.tick(confirm, 0.02, o, false);
+  CHECK(o.picture_43 && p.value(I::PictureShape, o, false) == "4:3");
+  // Every new label and value is in the font, in every language.
+  for (int language = 0; language < 5; ++language) {
+    const Pak g(iso.read("GAME/" + language_prefix(language) + "FILES.PAK"));
+    SettingsPanel q(g, language, &words);
+    Options v;
+    for (const int cam : {0, 1})
+      for (const int mode : {0, 1, 2}) {
+        v.camera = v.vr_camera = cam, v.window_mode = mode, v.picture_43 = mode == 1;
+        for (const I item : {I::Camera, I::FieldOfView, I::Display, I::WindowMode, I::Resolution, I::Vsync, I::FrameLimit, I::PictureShape})
+          for (const bool vr : {false, true}) {
+            CHECK(q.label(item, vr).find('?') == std::string::npos);
+            CHECK(q.value(item, v, vr).find('?') == std::string::npos);
+          }
+      }
   }
 }
 
