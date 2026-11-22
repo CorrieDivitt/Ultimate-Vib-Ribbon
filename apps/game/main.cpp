@@ -34,6 +34,9 @@
 // at start. Offset and width changes made while playing are saved there. Options on
 // the command line apply to that run only.
 
+#ifndef VIB_VERSION
+#define VIB_VERSION "dev"  // (CMake gives the version and commit, task 6.7)
+#endif
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 
@@ -2688,6 +2691,7 @@ int run(int argc, char** argv) {
       if (t.find("\ncamera ") == std::string::npos) save.options.camera = 0;
 #endif
     }
+    std::printf("Vib-Ribbon %s\n", VIB_VERSION);
     std::printf("Save file: %s\n", save_path.c_str());
   }
   auto write_save = [&]() {

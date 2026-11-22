@@ -36,3 +36,8 @@ __pycache__/
 
 # The Windows download, built by tools/package/build-windows.ps1
 /dist/
+
+# Release signing (task 6.8): the key and its passwords stay with the owner, never here
+keystore.properties
+*.jks
+*.keystore

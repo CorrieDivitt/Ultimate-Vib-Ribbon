@@ -73,8 +73,8 @@ android {
         applicationId = 'io.github.corriedivitt.vibribbonvr'
         minSdk = 29
         targetSdk = 32
-        versionCode = 1
-        versionName = '0.1'
+        versionCode = 100       // 1.0.0 (task 6.7): major * 100 + minor * 10 + patch
+        versionName = '1.0.0'
         ndk { abiFilters 'arm64-v8a' }  // Quest 3 (and the Steam Frame's Android side later); 64-bit phones
         externalNativeBuild {
             cmake {
@@ -100,6 +100,24 @@ android {
         }
     }
 
+    // Release signing (task 6.8): the owner's key, outside the repository. android/keystore.properties
+    // (not committed) names it: storeFile, storePassword, keyAlias, keyPassword. Without it a
+    // release build is signed with the debug key and says so (fine for testing, not to hand out:
+    // an APK signed with another key cannot update it).
+    def keyFile = rootProject.file('keystore.properties')
+    def releaseKey = new Properties()
+    if (keyFile.exists()) keyFile.withInputStream { releaseKey.load(it) }
+    signingConfigs {
+        if (releaseKey.getProperty('storeFile')) {
+            owner {
+                storeFile = file(releaseKey.getProperty('storeFile'))
+                storePassword = releaseKey.getProperty('storePassword')
+                keyAlias = releaseKey.getProperty('keyAlias')
+                keyPassword = releaseKey.getProperty('keyPassword')
+            }
+        }
+    }
+
     buildTypes {
         debug {
             // Optimised native code even in the debug APK: the headset needs the speed.
@@ -107,7 +125,13 @@ android {
         }
         release {
             minifyEnabled = false
-            signingConfig = signingConfigs.debug  // (sideloaded, not a store release)
+            externalNativeBuild { cmake { arguments '-DCMAKE_BUILD_TYPE=Release' } }
+            if (signingConfigs.findByName('owner')) {
+                signingConfig = signingConfigs.owner
+            } else {
+                signingConfig = signingConfigs.debug
+                logger.warn('Vib-Ribbon: no android/keystore.properties, so the release APK is signed with the DEBUG key (do not hand it out)')
+            }
         }
     }
 

@@ -1,4 +1,14 @@
 # vibplay: the game on a monitor, from your own disc.
+
+# The version printed at the start of the log: the project's and the commit (task 6.7).
+execute_process(COMMAND git rev-parse --short HEAD WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+                OUTPUT_VARIABLE vib_game_commit OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+set(vib_game_version "${PROJECT_VERSION}")
+if(vib_game_commit)
+  string(APPEND vib_game_version " (${vib_game_commit})")
+endif()
+add_compile_definitions("VIB_VERSION=\"${vib_game_version}\"")
+
 if(ANDROID)
   # On the headset the game is libmain.so; SDL's activity calls its main().
   add_library(vibplay SHARED main.cpp audio.cpp)

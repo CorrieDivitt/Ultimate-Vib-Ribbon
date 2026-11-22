@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(VibRibbonVR VERSION 0.0.1 LANGUAGES CXX)
+project(VibRibbonVR VERSION 1.0.0 LANGUAGES CXX)
 
 # One codebase for every target: Windows x64 (PCVR), Android ARM64 (Quest 3),
 # and later Linux ARM64 (Steam Frame stretch goal). Keep vibcore free of any
