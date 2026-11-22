@@ -31,51 +31,47 @@ def newestInstalled = { String folder, String atLeast ->
 
 def ndkVer = findProperty('vibNdkVersion') ?: newestInstalled('ndk', '26')
 def cmakeVer = findProperty('vibCmakeVersion') ?: newestInstalled('cmake', '3.24')
-def buildToolsVer = findProperty('vibBuildTools') ?: newestInstalled('build-tools', '35')
+def buildToolsVer = findProperty('vibBuildTools') ?: newestInstalled('build-tools', '36')
 if (!cmakeVer)
     throw new GradleException('Needs CMake 3.24 or newer in the Android SDK: Android Studio > SDK Manager > SDK Tools > CMake (tick "Show Package Details" and pick the newest).')
 if (!ndkVer)
     throw new GradleException('Needs an Android NDK in the Android SDK: Android Studio > SDK Manager > SDK Tools > NDK (Side by side).')
 
 // ---- SDL's Java side (its activity, audio, controllers), from the same SDL release
-// the native build uses (apps/common/CMakeLists.txt), downloaded once into build/.
+// the native build uses (apps/common/CMakeLists.txt). Downloaded once, while the
+// build is being set up, into build/sdl-java.
 
 def sdlTag = 'release-3.2.26'
-def sdlJava = new File(buildDir, 'sdl-java')
-def fetchSdlJava = tasks.register('fetchSdlJava') {
-    inputs.property('tag', sdlTag)
-    outputs.dir(sdlJava)
-    doLast {
-        def zip = new File(buildDir, "SDL-${sdlTag}.zip")
-        if (!zip.exists()) {
-            zip.parentFile.mkdirs()
-            new URL("https://github.com/libsdl-org/SDL/archive/refs/tags/${sdlTag}.zip").withInputStream { i ->
-                zip.withOutputStream { it << i }
-            }
-        }
-        project.delete(sdlJava)
-        project.copy {
-            from(zipTree(zip)) { include "SDL-${sdlTag}/android-project/app/src/main/java/**" }
-            into sdlJava
-            eachFile { f -> f.path = f.path.substring(f.path.indexOf('/java/') + '/java/'.length()) }
-            includeEmptyDirs = false
+def sdlJava = layout.buildDirectory.dir('sdl-java-' + sdlTag).get().asFile
+if (!new File(sdlJava, 'org/libsdl/app/SDLActivity.java').exists()) {
+    def zip = layout.buildDirectory.file("SDL-${sdlTag}.zip").get().asFile
+    if (!zip.exists()) {
+        zip.parentFile.mkdirs()
+        logger.lifecycle("Downloading SDL ${sdlTag} (its Java side) from GitHub")
+        URI.create("https://github.com/libsdl-org/SDL/archive/refs/tags/${sdlTag}.zip").toURL().withInputStream { i ->
+            zip.withOutputStream { it << i }
         }
     }
+    copy {
+        from(zipTree(zip)) { include "SDL-${sdlTag}/android-project/app/src/main/java/**" }
+        into sdlJava
+        eachFile { f -> f.path = f.path.substring(f.path.indexOf('/java/') + '/java/'.length()) }
+        includeEmptyDirs = false
+    }
 }
-tasks.named('preBuild') { dependsOn fetchSdlJava }
 
 android {
-    namespace 'io.github.corriedivitt.vibribbonvr'
-    compileSdk 35
-    if (buildToolsVer) buildToolsVersion buildToolsVer
-    ndkVersion ndkVer
+    namespace = 'io.github.corriedivitt.vibribbonvr'
+    compileSdk = 35
+    if (buildToolsVer) buildToolsVersion = buildToolsVer
+    ndkVersion = ndkVer
 
     defaultConfig {
-        applicationId 'io.github.corriedivitt.vibribbonvr'
-        minSdk 29
-        targetSdk 32
-        versionCode 1
-        versionName '0.1'
+        applicationId = 'io.github.corriedivitt.vibribbonvr'
+        minSdk = 29
+        targetSdk = 32
+        versionCode = 1
+        versionName = '0.1'
         ndk { abiFilters 'arm64-v8a' }  // Quest 3 (and the Steam Frame's Android side later)
         externalNativeBuild {
             cmake {
@@ -91,24 +87,24 @@ android {
             externalNativeBuild { cmake { arguments '-DCMAKE_BUILD_TYPE=RelWithDebInfo' } }
         }
         release {
-            minifyEnabled false
-            signingConfig signingConfigs.debug  // (sideloaded, not a store release)
+            minifyEnabled = false
+            signingConfig = signingConfigs.debug  // (sideloaded, not a store release)
         }
     }
 
     externalNativeBuild {
         cmake {
-            path file('../../CMakeLists.txt')
-            version cmakeVer
+            path = file('../../CMakeLists.txt')
+            version = cmakeVer
         }
     }
 
     sourceSets {
-        main { java.srcDirs += sdlJava }
+        main { java.srcDir(sdlJava) }
     }
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
     }
 }
