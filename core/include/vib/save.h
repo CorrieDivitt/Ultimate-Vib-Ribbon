@@ -116,6 +116,9 @@ struct Options {
   // The Windows launcher's own choices (task 4.16 I): play in the headset, and close the
   // launcher when the game starts.
   bool launcher_vr = false;
+  // Ours (task 4.17): 0 easier, 1 the original's courses, 2 harder (CourseGenerator::set_difficulty).
+  // High scores are kept for the original's difficulty only.
+  int difficulty = 1;
   bool launcher_close = true;
   float music_volume = 1.0f, effects_volume = 1.0f;
 };

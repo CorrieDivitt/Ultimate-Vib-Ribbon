@@ -141,6 +141,41 @@ TEST(disc_sces02873_first_song_course) {
   }
 }
 
+// Task 4.17: the difficulty setting. Normal is the original's course to the sample;
+// easier places fewer obstacles and no pairs, harder more; every song.
+TEST(disc_sces02873_difficulty_changes_only_how_many_obstacles) {
+  const std::string cue = test_cue();
+  if (cue.empty()) SKIP("set VIB_TEST_CUE to your SCES-02873 .cue to run");
+  DiscImage disc = DiscImage::open(path_from_utf8(cue));
+  Iso9660 iso(disc);
+  const Pak game(iso.read("GAME/02_FILES.PAK"));
+  const CourseScript script = parse_course_script(game.view("SCRIPT/SYSTEM3.FSL"));
+  for (int song = 1; song <= 6; ++song) {
+    const std::vector<Block> blocks = make_blocks(disc.read_audio_track(song + 1));
+    auto parts = [&](int difficulty, bool set) {
+      CourseGenerator gen(script);
+      if (set) gen.set_difficulty(difficulty);
+      gen.start_round(song, 0);
+      for (std::size_t b = 0; b < blocks.size(); ++b) gen.process(static_cast<std::int32_t>(b * kBlockSize), blocks[b]);
+      std::vector<CourseEvent> out;
+      for (const auto& e : gen.events())
+        if (e.type == CourseEvent::Type::Part) out.push_back(e);
+      return out;
+    };
+    const auto original = parts(1, false), normal = parts(CourseGenerator::kNormal, true);
+    const auto easy = parts(CourseGenerator::kEasy, true), hard = parts(CourseGenerator::kHard, true);
+    bool same = original.size() == normal.size();
+    for (std::size_t i = 0; same && i < normal.size(); ++i)
+      same = original[i].time == normal[i].time && original[i].value == normal[i].value && original[i].length == normal[i].length;
+    CHECK(same);
+    std::printf("    song %d obstacles: easy %zu, normal %zu, hard %zu\n", song, easy.size(), normal.size(), hard.size());
+    CHECK(easy.size() < normal.size() && hard.size() > normal.size());
+    CHECK(std::none_of(easy.begin(), easy.end(), [](const CourseEvent& e) { return e.value >= 4; }));
+    // (Obstacles keep the original's lengths: their speeds do not change.)
+    CHECK(std::all_of(easy.begin(), easy.end(), [](const CourseEvent& e) { return e.length > 0; }));
+  }
+}
+
 TEST(disc_sces02873_scene_draws) {
   const std::string cue = test_cue();
   if (cue.empty()) SKIP("set VIB_TEST_CUE to your SCES-02873 .cue to run");
@@ -1225,7 +1260,7 @@ TEST(disc_sces02873_settings_labels_with_defaults_fit_beside_their_values) {
                               I::ColourRoad, I::ColourBlock, I::ColourPit, I::ColourLoop, I::ColourWave, I::ColourBlockPit, I::ColourBlockLoop,
                               I::ColourBlockWave, I::ColourPitLoop, I::ColourPitWave, I::ColourLoopWave, I::ColourAngel, I::ColourRabbit,
                               I::ColourFrog, I::ColourWorm, I::ColourBackground, I::ColourMenu, I::ResetColours, I::Calibration, I::SoundCalibration, I::PictureTiming, I::PictureCalibration, I::Glow, I::RefreshRate, I::ClassicScreen, I::ClassicSize, I::OriginalLook, I::RestoreLook, I::Continue,
-                              I::Camera, I::FieldOfView, I::Display, I::WindowMode, I::Resolution, I::Vsync, I::FrameLimit, I::PictureShape, I::LowLatency, I::ChangeDisc};
+                              I::Camera, I::FieldOfView, I::Display, I::WindowMode, I::Resolution, I::Vsync, I::FrameLimit, I::PictureShape, I::LowLatency, I::ChangeDisc, I::Difficulty};
   Options longest;
   longest.camera = longest.vr_camera = 1;
   longest.window_mode = 2;
@@ -1352,6 +1387,11 @@ TEST(disc_sces02873_monitor_settings_step_and_show) {
     CHECK(p.draw_keys(5).lines.size() > 100);
   }
   CHECK(p.label(I::LowLatency, false) == "Low latency" && p.value(I::LowLatency, o, false) == "Off");
+  CHECK(p.label(I::Difficulty, false) == "Difficulty (Normal)" && p.value(I::Difficulty, o, false) == "Normal");
+  p.set_items({I::Difficulty});
+  CHECK(p.tick(left, 0.02, o, false) == A::Changed && o.difficulty == 0 && p.value(I::Difficulty, o, false) == "Easy");
+  CHECK(p.tick(left, 0.5, o, false) == A::None && o.difficulty == 0);  // (stops at Easy)
+  o.difficulty = 1;
   p.set_items({I::ChangeDisc});
   CHECK(p.label(I::ChangeDisc, false) == "Change disc" && p.value(I::ChangeDisc, o, false).empty());
   CHECK(p.tick(confirm, 0.02, o, false) == A::ChangeDisc && p.click(0, false).confirm);
@@ -1364,7 +1404,7 @@ TEST(disc_sces02873_monitor_settings_step_and_show) {
     for (const int cam : {0, 1})
       for (const int mode : {0, 1, 2}) {
         v.camera = v.vr_camera = cam, v.window_mode = mode, v.picture_43 = mode == 1;
-        for (const I item : {I::Camera, I::FieldOfView, I::Display, I::WindowMode, I::Resolution, I::Vsync, I::FrameLimit, I::PictureShape, I::LowLatency, I::ChangeDisc})
+        for (const I item : {I::Camera, I::FieldOfView, I::Display, I::WindowMode, I::Resolution, I::Vsync, I::FrameLimit, I::PictureShape, I::LowLatency, I::ChangeDisc, I::Difficulty})
           for (const bool vr : {false, true}) {
             CHECK(q.label(item, vr).find('?') == std::string::npos);
             CHECK(q.value(item, v, vr).find('?') == std::string::npos);

@@ -332,6 +332,10 @@ CourseGenerator::Cue CourseGenerator::next_cue(std::int32_t time) {
   if (fixed_cue_period_ > 0) {  // a speed course: one beat, and three for the select period
     cue.period = fixed_cue_period_;
     cue.select_period = fixed_cue_period_ * 3;
+  } else if (difficulty_ == kEasy) {  // (ours: longer windows, fewer obstacles)
+    cue.select_period = cue.select_period / 2 * 3;
+  } else if (difficulty_ == kHard) {  // (shorter windows, more)
+    cue.select_period = cue.select_period / 10 * 7;
   }
   cue.period = std::max(1, cue.period);
   cue.select_period = std::max(1, cue.select_period);
@@ -340,11 +344,21 @@ CourseGenerator::Cue CourseGenerator::next_cue(std::int32_t time) {
   return cue;
 }
 
+std::int32_t CourseGenerator::spacing() const {
+  if (difficulty_ == kNormal || fixed_cue_period_ > 0) return 2 * pending_length_;  // (the original's)
+  return difficulty_ == kEasy ? 3 * pending_length_ : pending_length_ + pending_length_ / 2;
+}
+
 void CourseGenerator::place() {
   CourseEvent ev;
   ev.type = CourseEvent::Type::Part;
   ev.time = pending_->time;
   ev.value = pending_->cue.selector->next();
+  if (difficulty_ == kEasy && fixed_cue_period_ == 0 && ev.value >= 4 && ev.value <= 9) {
+    // A pair comes as one of its two obstacles, the first and the second in turn.
+    static constexpr int kFirst[6] = {0, 0, 0, 1, 1, 2}, kSecond[6] = {1, 2, 3, 2, 3, 3};
+    ev.value = (events_.size() & 1) ? kSecond[ev.value - 4] : kFirst[ev.value - 4];
+  }
   ev.length = pending_->cue.period;
   ev.scale = pending_scale_;
   events_.push_back(ev);
@@ -362,7 +376,7 @@ void CourseGenerator::take_candidate() {
 void CourseGenerator::end_window(std::int32_t time) {
   if (candidate_) {
     if (pending_) {
-      if (candidate_->time - pending_->time > 2 * pending_length_) {
+      if (candidate_->time - pending_->time > spacing()) {
         place();  // far enough apart: the earlier one stands
         take_candidate();
       } else if (ratio_above(candidate_->level, candidate_->background, static_cast<std::int32_t>(3u * std::uint32_t(pending_->level)) / 2,
@@ -375,7 +389,7 @@ void CourseGenerator::end_window(std::int32_t time) {
       take_candidate();
     }
   }
-  if (pending_ && time - pending_->time > 2 * pending_length_) place();
+  if (pending_ && time - pending_->time > spacing()) place();
 }
 
 void CourseGenerator::process(std::int32_t time, const Block& block) {

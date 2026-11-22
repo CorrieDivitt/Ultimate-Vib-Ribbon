@@ -912,9 +912,9 @@ void setup_panel(SettingsPanel& p, bool vr, bool pause) {
                             I::Zoom, I::ViewAngle, I::FieldOfView, I::SeeAhead, I::SeeBehind, I::Performance});
   if (!vr) p.set_group(I::Display, {I::WindowMode, I::Resolution, I::Vsync, I::FrameLimit, I::LowLatency, I::PictureShape});
   if (vr)
-    p.set_group(I::Modifiers, {I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::WrapCourse, I::WrapSize, I::ScoreNumbers, I::FixedCourses});
+    p.set_group(I::Modifiers, {I::Difficulty, I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::WrapCourse, I::WrapSize, I::ScoreNumbers, I::FixedCourses});
   else
-    p.set_group(I::Modifiers, {I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::ScoreNumbers, I::FixedCourses});
+    p.set_group(I::Modifiers, {I::Difficulty, I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::ScoreNumbers, I::FixedCourses});
   // (owner, session 5: the manual Sound timing and Picture timing live here too, each under its tool)
   p.set_group(I::Calibration, {I::SoundCalibration, I::SoundTiming, I::PictureCalibration, I::PictureTiming});
   p.set_group(I::CustomColours, {I::ColourRoad, I::ColourBlock, I::ColourPit, I::ColourLoop, I::ColourWave, I::ColourBlockPit,
@@ -1680,6 +1680,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
 
   CourseGenerator gen(s.script);
   gen.set_timing(timing);
+  gen.set_difficulty(s.save.options.difficulty);  // (task 4.17; read at the song's start)
   // Starts a generator on this song: the game's own round, or the player's track on its "disc".
   auto start = [&](CourseGenerator& g) {
     if (s.music) {
@@ -1730,6 +1731,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
   // so its parts become play's own as play reaches them.
   CourseGenerator far(s.script);
   far.set_timing(timing);
+  far.set_difficulty(gen.difficulty());  // (the same course as play's)
   start(far);
   std::size_t far_block = 0;
   // (Read every frame: the pause's settings can change it mid-song.)
@@ -2679,7 +2681,9 @@ int run(int argc, char** argv) {
       last_rank = 0;
       last_score = points;
       // High scores belong to whole courses, as in the original (one song is practice).
-      if (finished && !song) {
+      if (finished && !song && s.save.options.difficulty != 1) {
+        std::printf("High scores are kept at Normal difficulty only\n");
+      } else if (finished && !song) {
         static const char* places[] = {"", "1st", "2nd", "3rd"};
         static const char* names[] = {"Bronze", "Silver", "Gold"};
         last_rank = save.record(course, points);
@@ -3457,7 +3461,8 @@ int run(int argc, char** argv) {
               // One track: each track cleared is a result of its own (its score and bonus);
               // all tracks: the whole run once its last track is cleared.
               if (r == Result::Clear && (own_course == Course::OneTrack || (own_course == Course::AllTracks && k + 1 == names.size()))) {
-                own_rank = save.record(own_course, points);
+                // (High scores at Normal difficulty only, task 4.17; speed courses keep their own rule.)
+                own_rank = save.options.difficulty == 1 ? save.record(own_course, points) : 0;
                 write_save();
                 own_cleared = true;
                 std::printf("%s: %d%s\n", own_course == Course::OneTrack ? "Track score" : "All tracks total", points,

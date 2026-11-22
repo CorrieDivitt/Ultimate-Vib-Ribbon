@@ -85,6 +85,7 @@ class SettingsPanel {
     PictureShape,     // picture_43: fill the window, or the original's 4:3 with bars
     LowLatency,       // low_latency: fewer frames waiting in line (monitor)
     ChangeDisc,       // an action: pick another disc image (the game starts again with it)
+    Difficulty,       // difficulty: easier, the original's, harder courses (from the next song)
   };
   // A display mode the monitor offers, for the Resolution item.
   struct DisplayMode {

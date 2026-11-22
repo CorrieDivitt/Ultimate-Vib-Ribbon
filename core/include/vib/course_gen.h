@@ -120,6 +120,14 @@ class CourseGenerator {
   // speed list says; the script still chooses the obstacles. 0 goes back to the script.
   // Gameplay gives the period every update (Gameplay::fixed_period()).
   void set_fixed_cue(std::int32_t period) { fixed_cue_period_ = period; }
+  // Ours (task 4.17): how many obstacles the analysis lets through. 1 is the original's
+  // exactly. 0, easier: selection windows half as long again, a part only 3 lengths after
+  // the one before (the original: 2), and pairs come as one of their two obstacles.
+  // 2, harder: windows 7/10 as long and parts 1.5 lengths apart. Obstacles keep their
+  // speeds; speed courses keep the original's rule. Set before the first block.
+  enum Difficulty { kEasy = 0, kNormal = 1, kHard = 2 };
+  void set_difficulty(int difficulty) { difficulty_ = difficulty < kEasy ? kEasy : difficulty > kHard ? kHard : difficulty; }
+  int difficulty() const { return difficulty_; }
 
   // Feeds the next block, whose first sample is at stream position `time`.
   void process(std::int32_t time, const Block& block);
@@ -163,6 +171,8 @@ class CourseGenerator {
   int blocks_since_cue_ = 0;
   std::int64_t frame_period_ = 0, frame_phase_ = 0, last_frame_ = -1;
   std::int32_t fixed_cue_period_ = 0;
+  int difficulty_ = kNormal;
+  std::int32_t spacing() const;  // how far after a placed part the next may be
   Cue current_cue_;
 
   // script position
