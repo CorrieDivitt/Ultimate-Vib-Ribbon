@@ -941,6 +941,21 @@ TEST(disc_sces02873_settings_panel) {
       ca.audio_offset_ms = 70, ca.picture_offset_ms = -15;  // (the Calibration rows show what they set)
       CHECK(p.value(I::SoundCalibration, ca, true) == "70 ms" && p.value(I::PictureCalibration, ca, true) == "-15 ms");
       ca.audio_offset_ms = 0, ca.picture_offset_ms = 0;
+      // Refresh rate: Auto, then each rate the headset offers, round either way.
+      {
+        Options rr;
+        CHECK(p.label(I::RefreshRate) == "Refresh rate" && p.value(I::RefreshRate, rr, true) == "Auto");
+        p.set_items({I::RefreshRate});
+        SettingsPanel::Input next_rate;
+        next_rate.right = true;
+        CHECK(p.tick(next_rate, 0.0, rr, true) == A::None);  // (no rates offered: nothing to choose)
+        p.set_refresh_rates({72, 90, 120});
+        for (const int want : {72, 90, 120, 0}) CHECK(p.tick(next_rate, 1.0, rr, true) == A::Changed && rr.vr_refresh_hz == want);
+        CHECK(p.value(I::RefreshRate, rr, true) == "Auto");
+        rr.vr_refresh_hz = 90;
+        CHECK(p.value(I::RefreshRate, rr, true) == "90 Hz");
+        p.set_refresh_rates({});
+      }
       // Glow: off (the original) to strong, five levels, stopping at the ends.
       CHECK(p.label(I::Glow) == "Glow (Off)" && p.value(I::Glow, ca, true) == "Off");
       p.set_items({I::Glow});
@@ -1153,7 +1168,7 @@ TEST(disc_sces02873_settings_labels_with_defaults_fit_beside_their_values) {
                               I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses, I::EffectsVolume, I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::WrapCourse, I::WrapSize, I::Visual, I::Modifiers, I::CustomColours, I::Back,
                               I::ColourRoad, I::ColourBlock, I::ColourPit, I::ColourLoop, I::ColourWave, I::ColourBlockPit, I::ColourBlockLoop,
                               I::ColourBlockWave, I::ColourPitLoop, I::ColourPitWave, I::ColourLoopWave, I::ColourAngel, I::ColourRabbit,
-                              I::ColourFrog, I::ColourWorm, I::ColourBackground, I::ColourMenu, I::ResetColours, I::Calibration, I::SoundCalibration, I::PictureTiming, I::PictureCalibration, I::Glow, I::Continue};
+                              I::ColourFrog, I::ColourWorm, I::ColourBackground, I::ColourMenu, I::ResetColours, I::Calibration, I::SoundCalibration, I::PictureTiming, I::PictureCalibration, I::Glow, I::RefreshRate, I::Continue};
   Options longest;
   longest.scroll_speed = 9.75;
   longest.vr_ahead_seconds = longest.vr_behind_seconds = kWholeSongSeconds;

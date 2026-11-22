@@ -105,6 +105,22 @@ class Display {
   virtual void set_zoom(float) {}
   // The last draw()'s timing.
   virtual FrameTiming timing() const { return {}; }
+  // A headset: the refresh rates it lets the game choose (empty: none), and asking
+  // for one (0: the highest up to 120 Hz). Takes effect a frame or so later.
+  virtual std::vector<float> refresh_rates() const { return {}; }
+  virtual void set_refresh_rate(float) {}
+  // A headset's own controllers (Quest Touch) send different gamepad buttons in play
+  // and in the menus (session 5, owner): the game says which it is in, every frame.
+  enum class InputMode { Menus, Play };
+  virtual void set_input_mode(InputMode) {}
+  // The headset controllers' sticks, -1 to 1 (up and right positive). In the menus the
+  // left stick moves the cursor, so it reads 0 here; `held` is the cursor's held
+  // direction from it (up, down, left, right) for the menus' repeat.
+  struct ControllerSticks {
+    float left_x = 0, left_y = 0, right_x = 0, right_y = 0;
+    bool held[4] = {};
+  };
+  virtual ControllerSticks controller_sticks() const { return {}; }
   // The colour behind the lines, as shown on a monitor (0-1 each; the original's black).
   void set_background(float r, float g, float b) { background_[0] = r, background_[1] = g, background_[2] = b; }
 

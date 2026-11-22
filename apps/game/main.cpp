@@ -425,6 +425,7 @@ struct Session {
   int course_songs = 1;
   bool course_clean = false;
   bool zooming = false, turning = false;                  // the sticks are moving the view (headset)
+  bool stick_flicked = false;  // the headset controllers' right stick pushed sideways (scroll speed), until it comes back
   bool demo = false;  // the title's demo: the game plays itself (missing now and then), any button ends it
   // The player's own music, played as a one-track audio CD: its course follows the
   // original's audio-CD rules (the medley script, placed by the disc's key).
@@ -487,6 +488,11 @@ void zoom_with_stick(Session& s, double seconds, double& zoom) {
     if (std::abs(v) > std::abs(y)) y = v;
     const float h = float(SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFTX)) / 32767.0f;
     if (std::abs(h) > std::abs(x)) x = h;
+  }
+  {  // the headset's own controllers (Touch): the same sticks (the right one zooms only when pushed more up or down than sideways)
+    const vibr::Display::ControllerSticks c = s.renderer.controller_sticks();
+    if (std::abs(c.right_y) >= std::abs(c.right_x) && std::abs(c.right_y) > std::abs(y)) y = c.right_y;
+    if (std::abs(c.left_x) > std::abs(x)) x = c.left_x;
   }
   if (std::abs(x) > 0.2f) {
     const double t = (std::abs(x) - 0.2) / 0.8 * (x > 0 ? 1.0 : -1.0);
@@ -598,6 +604,7 @@ void apply_settings(Session& s) {
   s.audio.adjust_offset(o.audio_offset_ms - s.audio.offset_ms());
   Clip::set_smooth(s.opt.smooth || o.smooth_animation || s.opt.vr);  // always smooth in a headset
   s.audio.set_volumes(s.opt.music.value_or(o.music_volume), s.opt.sfx.value_or(o.effects_volume));
+  if (s.opt.vr) s.renderer.set_refresh_rate(float(o.vr_refresh_hz));  // (asks only when it changed)
 }
 
 // The settings in play's pause, and below the Options screen (which has the
@@ -608,14 +615,15 @@ void apply_settings(Session& s) {
 void setup_panel(SettingsPanel& p, bool vr, bool pause) {
   using I = SettingsPanel::Item;
   if (vr)
-    p.set_group(I::Visual, {I::WobbleSize, I::WobbleHold, I::LineWidth, I::Glow, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind, I::Performance});
+    p.set_group(I::Visual, {I::WobbleSize, I::WobbleHold, I::LineWidth, I::Glow, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind, I::RefreshRate, I::Performance});
   else
     p.set_group(I::Visual, {I::WobbleSize, I::Smooth, I::LineWidth, I::Glow, I::Performance});
   if (vr)
     p.set_group(I::Modifiers, {I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::WrapCourse, I::WrapSize, I::ScoreNumbers, I::FixedCourses});
   else
     p.set_group(I::Modifiers, {I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::ScoreNumbers, I::FixedCourses});
-  p.set_group(I::Calibration, {I::SoundCalibration, I::PictureCalibration});
+  // (owner, session 5: the manual Sound timing and Picture timing live here too, each under its tool)
+  p.set_group(I::Calibration, {I::SoundCalibration, I::SoundTiming, I::PictureCalibration, I::PictureTiming});
   p.set_group(I::CustomColours, {I::ColourRoad, I::ColourBlock, I::ColourPit, I::ColourLoop, I::ColourWave, I::ColourBlockPit,
                                   I::ColourBlockLoop, I::ColourBlockWave, I::ColourPitLoop, I::ColourPitWave, I::ColourLoopWave,
                                   I::ColourAngel, I::ColourRabbit, I::ColourFrog, I::ColourWorm, I::ColourBackground, I::ColourMenu,
@@ -624,7 +632,7 @@ void setup_panel(SettingsPanel& p, bool vr, bool pause) {
   if (pause) top.push_back(I::Continue);
   top.insert(top.end(), {I::Visual, I::Modifiers, I::CustomColours, I::Calibration});
   if (vr) top.push_back(I::Recentre);
-  top.insert(top.end(), {I::SoundEffects, I::EffectsVolume, I::Vibration, I::SoundTiming, I::PictureTiming, I::ResumeStyle});
+  top.insert(top.end(), {I::SoundEffects, I::EffectsVolume, I::Vibration, I::ResumeStyle});
   if (pause) top.push_back(I::QuitSong);
   p.set_items(std::move(top));
 }
@@ -794,6 +802,11 @@ void held_directions(Session& s, SettingsPanel::Input& in) {
     in.held_up = in.held_up || SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_DPAD_UP);
     in.held_down = in.held_down || SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_DPAD_DOWN);
   }
+  const vibr::Display::ControllerSticks c = s.renderer.controller_sticks();  // (Touch: the left stick in the menus)
+  in.held_up = in.held_up || c.held[0];
+  in.held_down = in.held_down || c.held[1];
+  in.held_left = in.held_left || c.held[2];
+  in.held_right = in.held_right || c.held[3];
 }
 
 // The panel's clicks: a quiet one for a move, the full one for a change.
@@ -1197,6 +1210,10 @@ bool run_calibration(Session& s, SettingsPanel& panel, bool picture) {
 }
 
 Result play_song(Session& s, int song, int track_index, int& points, std::uint32_t seed) {
+  struct MenusAfter {  // whichever way the song ends, the Touch buttons go back to the menus'
+    vibr::Display& d;
+    ~MenusAfter() { d.set_input_mode(vibr::Display::InputMode::Menus); }
+  } menus_after{s.renderer};
   // Timing: like the original, a little different on every play, unless consistent
   // mode is on (--fixed, or the Consistent courses setting, read at each song's start).
   const bool fixed = s.opt.fixed || s.save.options.fixed_courses;
@@ -1527,6 +1544,17 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     const std::uint64_t now_ns = SDL_GetTicksNS();
     const double dt = double(now_ns - last_ns) * 1e-9;
     zoom_or_circle_with_stick(s, dt, s.save.options.vr_zoom);
+    if (s.opt.vr && !s.demo) {  // Touch: the right stick flicked right or left, the scroll speed (as a gamepad's R2 and L2)
+      const vibr::Display::ControllerSticks c = s.renderer.controller_sticks();
+      if (!s.stick_flicked && std::abs(c.right_x) > 0.7f && std::abs(c.right_x) > 2.0f * std::abs(c.right_y)) {
+        s.stick_flicked = true;
+        scroll_changed(c.right_x > 0 ? 1 : -1);
+      } else if (std::abs(c.right_x) < 0.4f) {
+        s.stick_flicked = false;
+      }
+    }
+    // Touch buttons: play's in play, the menus' in the pause.
+    s.renderer.set_input_mode(paused || celebrating ? vibr::Display::InputMode::Menus : vibr::Display::InputMode::Play);
     last_ns = now_ns;
     scroll_shown = ease_scroll(scroll_shown, scroll_wanted(), dt);
     scroll_note = std::max(0.0, scroll_note - dt);
@@ -2054,6 +2082,11 @@ int run(int argc, char** argv) {
       std::printf("The game's words could not be read (%s); they and the settings' words are left out.\n", e.what());
     }
     SettingsPanel panel(pak, language, words ? &*words : nullptr);
+    {
+      std::vector<int> rates;
+      for (const float r : renderer.refresh_rates()) rates.push_back(int(std::lround(r)));
+      panel.set_refresh_rates(std::move(rates));
+    }
     s.panel = &panel;
     PerfOverlay perf(pak, language, words ? &*words : nullptr);
     s.perf = &perf;

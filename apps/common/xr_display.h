@@ -4,13 +4,14 @@
 // Every layer the game draws is seen from where its own camera stands, placed at
 // the headset's starting position and scaled to metres, so the player looks
 // around each scene in stereo. Controller buttons arrive as gamepad button events
-// (SDL), which the game already understands:
-//   left trigger = block, right trigger = loop, X or Y = pit, A = wave and confirm,
-//   B = back, menu button = start, left thumbstick = the d-pad in the menus.
-// For testing: the right thumbstick clicked (R3) recentres the view; held up or
-// down it zooms in or out (how close the view stands to Vibri in play). A gamepad's
-// right stick does the same, read by the game.
-
+// (SDL), which the game already understands, mapped by the mode the game is in
+// (set_input_mode; owner's layout, session 5):
+//   play:  left trigger block, right trigger loop, X / Y / left grip pit,
+//          A / B / right grip wave, menu button start (pause), stick clicks L3 / R3;
+//          the sticks are read by the game (left x: view angle, right y: zoom or
+//          circle size, right x flicked: scroll speed).
+//   menus: left stick the d-pad, A or right trigger confirm, B or left trigger back,
+//          menu button start (settings), stick clicks L3 / R3; right stick y zooms.
 #include <memory>
 
 #include "line_renderer.h"
@@ -36,6 +37,10 @@ class XrDisplay : public Display {
   float zoom() const override;
   void set_zoom(float z) override;
   FrameTiming timing() const override;
+  std::vector<float> refresh_rates() const override;
+  void set_refresh_rate(float hz) override;
+  void set_input_mode(InputMode mode) override;
+  ControllerSticks controller_sticks() const override;
 
   const char* runtime_name() const;
   void set_scale(float metres_per_unit);

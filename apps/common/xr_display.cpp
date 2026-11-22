@@ -169,6 +169,10 @@ class XrDisplay::Impl {
   }
 
   const char* gpu_name() const { return gpu_name_.c_str(); }
+  const std::vector<float>& rates() const { return rates_; }
+  void ask_refresh_rate(float hz) {
+    if (refresh_rates_) choose_refresh_rate(hz);
+  }
   const char* runtime_name() const { return runtime_name_.c_str(); }
   int height() const { return eyes_[0].height; }
   void recentre() { recentre_ = true; }
@@ -246,11 +250,13 @@ class XrDisplay::Impl {
     std::vector<VkImageView> views;
     std::vector<VkFramebuffer> framebuffers;
   };
-  // A controller button and the gamepad button it stands for.
+  // A controller input and the gamepad button it stands for in play and in the menus
+  // (INVALID: none). `sent`: the button its press sent, released with it.
   struct Button {
     XrAction action = XR_NULL_HANDLE;
-    SDL_GamepadButton pad;
+    SDL_GamepadButton play, menus;
     bool down = false;
+    SDL_GamepadButton sent = SDL_GAMEPAD_BUTTON_INVALID;
   };
 
   void xr_check(XrResult r, const char* what) {
@@ -464,6 +470,7 @@ class XrDisplay::Impl {
     if (XR_FAILED(enumerate(session_, 0, &n, nullptr)) || n == 0) return;
     std::vector<float> rates(n);
     if (XR_FAILED(enumerate(session_, n, &n, rates.data()))) return;
+    rates_ = rates;
     // By default the highest up to 120 Hz: the Quest 3's own display tops out at 120,
     // though its runtime lists rates up to 207 (session 5). A rate asked for by name
     // (save.txt vr_refresh_hz) may be any the headset offers.
@@ -479,6 +486,8 @@ class XrDisplay::Impl {
     for (const float r : rates) offered += (offered.empty() ? "" : ", ") + std::to_string(int(std::lround(r)));
     float before = 0;
     current(session_, &before);
+    if (pick == asked_) return;  // (already asked for)
+    asked_ = pick;
     const XrResult r = request(session_, pick);
     std::printf("Headset refresh rate: asked for %.0f Hz (was %.0f; offers %s Hz)%s\n", double(pick), double(before), offered.c_str(),
                 XR_FAILED(r) ? "; the request was refused" : "");
@@ -708,30 +717,42 @@ class XrDisplay::Impl {
       xr_check(xrCreateAction(actions_, &info, &a), name);
       return a;
     };
-    buttons_ = {Button{action("block", "Block", XR_ACTION_TYPE_BOOLEAN_INPUT), SDL_GAMEPAD_BUTTON_LEFT_SHOULDER},
-                Button{action("loop", "Loop", XR_ACTION_TYPE_BOOLEAN_INPUT), SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER},
-                Button{action("pit", "Pit", XR_ACTION_TYPE_BOOLEAN_INPUT), SDL_GAMEPAD_BUTTON_DPAD_DOWN},
-                Button{action("wave", "Wave and confirm", XR_ACTION_TYPE_BOOLEAN_INPUT), SDL_GAMEPAD_BUTTON_SOUTH},
-                Button{action("back", "Back", XR_ACTION_TYPE_BOOLEAN_INPUT), SDL_GAMEPAD_BUTTON_EAST},
-                Button{action("start", "Start", XR_ACTION_TYPE_BOOLEAN_INPUT), SDL_GAMEPAD_BUTTON_START}};
-    stick_ = action("menu_stick", "Menu direction", XR_ACTION_TYPE_VECTOR2F_INPUT);
-    recentre_action_ = action("recentre", "Recentre the view", XR_ACTION_TYPE_BOOLEAN_INPUT);
-    zoom_stick_ = action("zoom", "Zoom (testing)", XR_ACTION_TYPE_FLOAT_INPUT);
-
+    using P = SDL_GamepadButton;
+    const P none = SDL_GAMEPAD_BUTTON_INVALID;
+    auto button = [&](const char* name, const char* label, P play, P menus) {
+      return Button{action(name, label, XR_ACTION_TYPE_BOOLEAN_INPUT), play, menus};
+    };
+    buttons_ = {
+        button("left_trigger", "Block / back", SDL_GAMEPAD_BUTTON_LEFT_SHOULDER, SDL_GAMEPAD_BUTTON_EAST),       // 0
+        button("right_trigger", "Loop / confirm", SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, SDL_GAMEPAD_BUTTON_SOUTH),  // 1
+        button("left_grip", "Pit", SDL_GAMEPAD_BUTTON_DPAD_DOWN, none),                                         // 2
+        button("right_grip", "Wave", SDL_GAMEPAD_BUTTON_SOUTH, none),                                           // 3
+        button("x", "Pit", SDL_GAMEPAD_BUTTON_DPAD_DOWN, none),                                                 // 4
+        button("y", "Pit", SDL_GAMEPAD_BUTTON_DPAD_UP, none),                                                   // 5
+        button("a", "Wave / confirm", SDL_GAMEPAD_BUTTON_SOUTH, SDL_GAMEPAD_BUTTON_SOUTH),                      // 6
+        button("b", "Wave / back", SDL_GAMEPAD_BUTTON_NORTH, SDL_GAMEPAD_BUTTON_EAST),                          // 7
+        button("menu", "Start", SDL_GAMEPAD_BUTTON_START, SDL_GAMEPAD_BUTTON_START),                            // 8
+        button("left_stick_click", "Performance overlay", SDL_GAMEPAD_BUTTON_LEFT_STICK, SDL_GAMEPAD_BUTTON_LEFT_STICK),  // 9
+        button("right_stick_click", "Recenter", SDL_GAMEPAD_BUTTON_RIGHT_STICK, SDL_GAMEPAD_BUTTON_RIGHT_STICK),          // 10
+    };
+    left_stick_ = action("left_stick", "Left stick", XR_ACTION_TYPE_VECTOR2F_INPUT);
+    right_stick_ = action("right_stick", "Right stick", XR_ACTION_TYPE_VECTOR2F_INPUT);
 
     // Touch controllers (Quest), and the plainest controller any runtime offers.
     std::vector<XrActionSuggestedBinding> touch = {
         {buttons_[0].action, path("/user/hand/left/input/trigger/value")},
         {buttons_[1].action, path("/user/hand/right/input/trigger/value")},
-        {buttons_[2].action, path("/user/hand/left/input/x/click")},
-        {buttons_[2].action, path("/user/hand/left/input/y/click")},
-        {buttons_[3].action, path("/user/hand/right/input/a/click")},
-        {buttons_[4].action, path("/user/hand/right/input/b/click")},
-        {buttons_[5].action, path("/user/hand/left/input/menu/click")},
-        {stick_, path("/user/hand/left/input/thumbstick")},
-        {recentre_action_, path("/user/hand/right/input/thumbstick/click")},
-        {zoom_stick_, path("/user/hand/right/input/thumbstick/y")},
-
+        {buttons_[2].action, path("/user/hand/left/input/squeeze/value")},
+        {buttons_[3].action, path("/user/hand/right/input/squeeze/value")},
+        {buttons_[4].action, path("/user/hand/left/input/x/click")},
+        {buttons_[5].action, path("/user/hand/left/input/y/click")},
+        {buttons_[6].action, path("/user/hand/right/input/a/click")},
+        {buttons_[7].action, path("/user/hand/right/input/b/click")},
+        {buttons_[8].action, path("/user/hand/left/input/menu/click")},
+        {buttons_[9].action, path("/user/hand/left/input/thumbstick/click")},
+        {buttons_[10].action, path("/user/hand/right/input/thumbstick/click")},
+        {left_stick_, path("/user/hand/left/input/thumbstick")},
+        {right_stick_, path("/user/hand/right/input/thumbstick")},
     };
     XrInteractionProfileSuggestedBinding sb{XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING};
     sb.interactionProfile = path("/interaction_profiles/oculus/touch_controller");
@@ -739,8 +760,8 @@ class XrDisplay::Impl {
     sb.countSuggestedBindings = std::uint32_t(touch.size());
     xr_check(xrSuggestInteractionProfileBindings(instance_, &sb), "xrSuggestInteractionProfileBindings (Touch)");
     std::vector<XrActionSuggestedBinding> simple = {
-        {buttons_[3].action, path("/user/hand/right/input/select/click")},
-        {buttons_[5].action, path("/user/hand/left/input/menu/click")},
+        {buttons_[6].action, path("/user/hand/right/input/select/click")},
+        {buttons_[8].action, path("/user/hand/left/input/menu/click")},
     };
     sb.interactionProfile = path("/interaction_profiles/khr/simple_controller");
     sb.suggestedBindings = simple.data();
@@ -777,52 +798,48 @@ class XrDisplay::Impl {
       XrActionStateBoolean st{XR_TYPE_ACTION_STATE_BOOLEAN};
       if (XR_FAILED(xrGetActionStateBoolean(session_, &gi, &st))) continue;
       const bool down = st.isActive && st.currentState;
-      if (down != b.down) push_button(b.pad, down);
+      if (down && !b.down) {  // pressed: the button it stands for in this mode
+        b.sent = mode_ == InputMode::Play ? b.play : b.menus;
+        if (b.sent != SDL_GAMEPAD_BUTTON_INVALID) push_button(b.sent, true);
+      } else if (!down && b.down) {  // let go: release what its press sent (even if the mode changed since)
+        if (b.sent != SDL_GAMEPAD_BUTTON_INVALID) push_button(b.sent, false);
+        b.sent = SDL_GAMEPAD_BUTTON_INVALID;
+      }
       b.down = down;
     }
-    // R3: recentre.
-    {
-      XrActionStateGetInfo ri{XR_TYPE_ACTION_STATE_GET_INFO};
-      ri.action = recentre_action_;
-      XrActionStateBoolean rs{XR_TYPE_ACTION_STATE_BOOLEAN};
-      if (XR_SUCCEEDED(xrGetActionStateBoolean(session_, &ri, &rs)) && rs.isActive && rs.changedSinceLastSync && rs.currentState)
-        recentre_ = true;
-    }
-    // The right stick held up or down: zoom in or out, smoothly (twice as close
-    // or as far for each second at full tilt), handled here rather than through
-    // the game's events.
-    {
-      const std::uint64_t now = SDL_GetTicksNS();
-      const float seconds = zoom_ns_ ? float(double(now - zoom_ns_) * 1e-9) : 0.0f;
-      zoom_ns_ = now;
-      // The Touch right stick's y (a gamepad's right stick is read by the game).
-      XrActionStateGetInfo zi{XR_TYPE_ACTION_STATE_GET_INFO};
-      zi.action = zoom_stick_;
-      XrActionStateFloat zs{XR_TYPE_ACTION_STATE_FLOAT};
-      const float y = XR_SUCCEEDED(xrGetActionStateFloat(session_, &zi, &zs)) && zs.isActive ? zs.currentState : 0.0f;
-      if (std::abs(y) > 0.2f) {
-        const float t = (std::abs(y) - 0.2f) / 0.8f * (y > 0 ? 1.0f : -1.0f);
-        zoom_ = std::clamp(zoom_ * std::exp2(t * std::min(seconds, 0.1f)), kZoomOut, kZoomIn);
-        zooming_ = true;
-      } else if (zooming_) {
-        zooming_ = false;
-        std::printf("Zoom %.2f\n", double(zoom_));
-      }
-    }
-    // The stick as the d-pad, with a little hysteresis.
-    XrActionStateGetInfo gi{XR_TYPE_ACTION_STATE_GET_INFO};
-    gi.action = stick_;
-    XrActionStateVector2f st{XR_TYPE_ACTION_STATE_VECTOR2F};
-    if (XR_FAILED(xrGetActionStateVector2f(session_, &gi, &st)) || !st.isActive) st.currentState = {0, 0};
-    const float values[4] = {st.currentState.y, -st.currentState.y, -st.currentState.x, st.currentState.x};
+    auto stick = [&](XrAction a) {
+      XrActionStateGetInfo gi{XR_TYPE_ACTION_STATE_GET_INFO};
+      gi.action = a;
+      XrActionStateVector2f st{XR_TYPE_ACTION_STATE_VECTOR2F};
+      if (XR_FAILED(xrGetActionStateVector2f(session_, &gi, &st)) || !st.isActive) return XrVector2f{0, 0};
+      return st.currentState;
+    };
+    left_ = stick(left_stick_);
+    right_ = stick(right_stick_);
+    // In the menus the left stick is the d-pad, with a little hysteresis; in play it
+    // sends nothing (the game reads it for the view angle).
+    const bool nav = mode_ == InputMode::Menus;
+    const float values[4] = {left_.y, -left_.y, -left_.x, left_.x};
     const SDL_GamepadButton dirs[4] = {SDL_GAMEPAD_BUTTON_DPAD_UP, SDL_GAMEPAD_BUTTON_DPAD_DOWN, SDL_GAMEPAD_BUTTON_DPAD_LEFT,
                                        SDL_GAMEPAD_BUTTON_DPAD_RIGHT};
     for (int i = 0; i < 4; ++i) {
-      const bool down = stick_down_[i] ? values[i] > 0.4f : values[i] > 0.7f;
+      const bool down = nav && (stick_down_[i] ? values[i] > 0.4f : values[i] > 0.7f);
       if (down != stick_down_[i]) push_button(dirs[i], down);
       stick_down_[i] = down;
     }
   }
+
+ public:
+  void set_mode(InputMode m) { mode_ = m; }
+  ControllerSticks sticks() const {
+    ControllerSticks c;
+    if (mode_ == InputMode::Play) c.left_x = left_.x, c.left_y = left_.y;
+    c.right_x = right_.x, c.right_y = right_.y;
+    for (int i = 0; i < 4; ++i) c.held[i] = stick_down_[i];
+    return c;
+  }
+
+ private:
 
   void poll_events() {
     XrEventDataBuffer ev{XR_TYPE_EVENT_DATA_BUFFER};
@@ -988,14 +1005,15 @@ class XrDisplay::Impl {
   bool recentre_ = true;
   std::uint64_t recentre_at_ns_ = 0;
   bool presence_ = false, refresh_rates_ = false;
-  XrAction recentre_action_ = XR_NULL_HANDLE, zoom_stick_ = XR_NULL_HANDLE;
-  float zoom_ = 1.0f;
-  bool zooming_ = false;
-  std::uint64_t zoom_ns_ = 0;
+  std::vector<float> rates_;  // offered (XR_FB_display_refresh_rate)
+  float asked_ = 0;           // the rate last asked for
+  float zoom_ = 1.0f;  // (Display::zoom: unused by the game, which keeps its own)
   XrActionSet actions_ = XR_NULL_HANDLE;
   std::vector<Button> buttons_;
-  XrAction stick_ = XR_NULL_HANDLE;
+  XrAction left_stick_ = XR_NULL_HANDLE, right_stick_ = XR_NULL_HANDLE;
+  XrVector2f left_{0, 0}, right_{0, 0};
   bool stick_down_[4] = {};
+  InputMode mode_ = InputMode::Menus;
   bool running_ = false, focused_ = false, tearing_down_ = false;
   std::string runtime_name_, gpu_name_;
 
@@ -1029,6 +1047,10 @@ void XrDisplay::draw(const std::vector<Layer>& layers, float line_width) {
 void XrDisplay::recentre() { impl_->recentre(); }
 float XrDisplay::zoom() const { return impl_->zoom(); }
 void XrDisplay::set_zoom(float z) { impl_->set_zoom(z); }
+std::vector<float> XrDisplay::refresh_rates() const { return impl_->rates(); }
+void XrDisplay::set_refresh_rate(float hz) { impl_->ask_refresh_rate(hz); }
+void XrDisplay::set_input_mode(InputMode mode) { impl_->set_mode(mode); }
+Display::ControllerSticks XrDisplay::controller_sticks() const { return impl_->sticks(); }
 FrameTiming XrDisplay::timing() const { return impl_->timing(); }
 const char* XrDisplay::runtime_name() const { return impl_->runtime_name(); }
 void XrDisplay::set_scale(float metres_per_unit) { impl_->set_scale(metres_per_unit); }

@@ -68,6 +68,7 @@ class SettingsPanel {
     PictureTiming,    // picture_offset_ms: the picture drawn ahead of the sound, -300 to 300 ms
     PictureCalibration, // an action: silent flashes to set Picture timing by
     Glow,             // glow: off, faint, soft, medium, strong
+    RefreshRate,      // vr_refresh_hz: Auto (the highest up to 120 Hz) or one the headset offers
   };
   enum class Action { None, Moved, Changed, Close, Recentre, QuitSong, LeaveTop, Calibrate, CalibratePicture };
 
@@ -92,6 +93,9 @@ class SettingsPanel {
   // At the top (from the Options screen, where up from the first leaves the panel)
   // or not (in play, where the cursor wraps).
   void set_wraps(bool wraps) { wraps_ = wraps; }
+  // The refresh rates the headset offers (whole Hz), for the Refresh rate item; with
+  // none it only shows Auto.
+  void set_refresh_rates(std::vector<int> rates) { refresh_rates_ = std::move(rates); }
   void home() { cursor_ = 0, first_ = 0; }
   Item current() const { return items_.empty() ? Item::Continue : items_[std::size_t(cursor_)]; }
 
@@ -193,6 +197,7 @@ class SettingsPanel {
   float top_ = 0.8f, size_ = 1.0f, label_x_ = -1600.0f, value_right_ = 1600.0f;
   bool active_ = true;
   bool wraps_ = true;
+  std::vector<int> refresh_rates_;
   int repeat_dir_ = 0;
   double repeat_timer_ = 0;
   int scroll_dir_ = 0;  // up or down held: -1 or 1 (the list scrolls while held)
