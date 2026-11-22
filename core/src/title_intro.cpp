@@ -284,14 +284,17 @@ void TitleIntro::add_exit_item(const TmdModel& font, const GameText& text, int l
   const auto index = std::uint8_t(model.objects.size());
   model.objects.push_back(std::move(label));
   // Where it rests: below "back" (y 1440 to 1660) by the gap the original leaves between
-  // "demo" and "back" (126), its middle half its height lower again.
-  const std::int16_t rest = std::int16_t(1660 + 126 + (y1 - y0) / 2);
+  // "demo" and "back" (126), its middle half its height lower again, and then 420 lower
+  // still (owner, session 6: it lay over the title's copyright line): just under that
+  // line. Measured through the title's camera, in half-heights below the middle: the
+  // copyright reaches 0.82, "exit" spans 0.84 to 0.95 (about 0.83 to 0.97 when chosen).
+  const std::int16_t rest = std::int16_t(1660 + 126 + (y1 - y0) / 2 + 420);
   auto key_for = [&](bool selected) {
     ModelKey k;
     k.object = index;
     k.has_position = true;
     k.position = {0, rest, 0};
-    if (selected) k.has_scale = true, k.scale = {6553, 5734, 5734};  // (as "back" when it is chosen)
+    if (selected) k.has_scale = true, k.scale = {5120, 5120, 5120};  // (1.25: less than "back" grows, so it stays clear of the copyright)
     return k;
   };
   // The select clip: the word at rest in the original's three poses, then a fourth pose
