@@ -13,6 +13,8 @@ The goals are timing that is responsive and consistent, and visuals that do just
 | Vib-Ribbon | Windows on a monitor (the launcher offers both Windows versions) | Release |
 | Vib-Ribbon for Android | Android phones and tablets, flat, touch controls or a gamepad | **Experimental: feedback welcome** |
 
+**Experimental features:** the Difficulty setting (Options > Modifiers > Difficulty: Easy, Normal, Hard, Extreme) is experimental, and feedback is welcome. Normal is the original game's courses exactly; the other levels are our own changes to how the courses are made from the music and may still change. High scores are kept at Normal only.
+
 ## You need your own disc
 
 This repository contains no game code, data, music or BIOS, and never will. The tools read a disc image you made from your own copy: the European release **SCES-02873**, as a CUE sheet with raw 2352-byte BIN tracks (all eight). Other releases may be added later.
