@@ -725,12 +725,12 @@ class XrDisplay::Impl {
     buttons_ = {
         button("left_trigger", "Block / back", SDL_GAMEPAD_BUTTON_LEFT_SHOULDER, SDL_GAMEPAD_BUTTON_EAST),       // 0
         button("right_trigger", "Loop / confirm", SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, SDL_GAMEPAD_BUTTON_SOUTH),  // 1
-        button("left_grip", "Pit", SDL_GAMEPAD_BUTTON_DPAD_DOWN, none),                                         // 2
-        button("right_grip", "Wave", SDL_GAMEPAD_BUTTON_SOUTH, none),                                           // 3
-        button("x", "Pit", SDL_GAMEPAD_BUTTON_DPAD_DOWN, none),                                                 // 4
-        button("y", "Pit", SDL_GAMEPAD_BUTTON_DPAD_UP, none),                                                   // 5
-        button("a", "Wave / confirm", SDL_GAMEPAD_BUTTON_SOUTH, SDL_GAMEPAD_BUTTON_SOUTH),                      // 6
-        button("b", "Wave / back", SDL_GAMEPAD_BUTTON_NORTH, SDL_GAMEPAD_BUTTON_EAST),                          // 7
+        button("left_grip", "Pit (left grip)", SDL_GAMEPAD_BUTTON_DPAD_DOWN, none),                                         // 2
+        button("right_grip", "Wave (right grip)", SDL_GAMEPAD_BUTTON_SOUTH, none),                                           // 3
+        button("x", "Pit (X)", SDL_GAMEPAD_BUTTON_DPAD_DOWN, none),                                                 // 4
+        button("y", "Pit (Y)", SDL_GAMEPAD_BUTTON_DPAD_UP, none),                                                   // 5
+        button("a", "Wave / confirm (A)", SDL_GAMEPAD_BUTTON_SOUTH, SDL_GAMEPAD_BUTTON_SOUTH),                      // 6
+        button("b", "Wave / back (B)", SDL_GAMEPAD_BUTTON_NORTH, SDL_GAMEPAD_BUTTON_EAST),                          // 7
         button("menu", "Start", SDL_GAMEPAD_BUTTON_START, SDL_GAMEPAD_BUTTON_START),                            // 8
         button("left_stick_click", "Performance overlay", SDL_GAMEPAD_BUTTON_LEFT_STICK, SDL_GAMEPAD_BUTTON_LEFT_STICK),  // 9
         button("right_stick_click", "Recenter", SDL_GAMEPAD_BUTTON_RIGHT_STICK, SDL_GAMEPAD_BUTTON_RIGHT_STICK),          // 10
@@ -739,6 +739,7 @@ class XrDisplay::Impl {
     right_stick_ = action("right_stick", "Right stick", XR_ACTION_TYPE_VECTOR2F_INPUT);
 
     // Touch controllers (Quest), and the plainest controller any runtime offers.
+    // (Every action's display name must differ from the others', or OpenXR refuses it.)
     std::vector<XrActionSuggestedBinding> touch = {
         {buttons_[0].action, path("/user/hand/left/input/trigger/value")},
         {buttons_[1].action, path("/user/hand/right/input/trigger/value")},
