@@ -55,3 +55,42 @@ jobs:
         with:
           name: vib-ribbon-vr-quest-apk
           path: android/app/build/outputs/apk/debug/*.apk
+
+  # The Windows download (task 4.16 I): Vib-Ribbon.exe (monitor) and Vib-Ribbon VR.exe
+  # (headset) with the C++ runtime linked in, a README and the licence, zipped and kept
+  # as a download from each run.
+  windows-package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+      - uses: seanmiddleditch/gha-setup-ninja@v5
+      - name: Install Vulkan SDK
+        uses: jakoch/install-vulkan-sdk-action@v1
+        with:
+          vulkan_version: 1.4.309.0
+          install_runtime: true
+          cache: true
+          stripdown: true
+      - name: Configure
+        run: cmake --preset package -DVIB_WARNINGS_AS_ERRORS=ON
+      - name: Build
+        run: cmake --build --preset package
+      - name: Assemble the download
+        shell: pwsh
+        run: |
+          $out = "Vib-Ribbon-VR"
+          New-Item -ItemType Directory $out | Out-Null
+          Copy-Item "build/package/apps/game/Vib-Ribbon.exe", "build/package/apps/game/Vib-Ribbon VR.exe" $out
+          Copy-Item docs/package/README.txt, LICENSE $out
+          # Only Windows' own DLLs and the GPU driver's Vulkan loader may be needed.
+          foreach ($exe in "Vib-Ribbon.exe", "Vib-Ribbon VR.exe") {
+            $deps = dumpbin /dependents "$out/$exe" | Select-String '\.dll' | ForEach-Object { $_.ToString().Trim() }
+            Write-Host "$exe needs: $($deps -join ', ')"
+            if ($deps -match '(?i)vcruntime|msvcp|sdl3|openxr') { throw "$exe needs a DLL that is not shipped" }
+          }
+          Get-ChildItem $out | Format-Table Name, Length
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vib-ribbon-vr-windows
+          path: Vib-Ribbon-VR

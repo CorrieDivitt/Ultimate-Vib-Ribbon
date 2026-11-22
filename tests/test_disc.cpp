@@ -1198,7 +1198,7 @@ TEST(disc_sces02873_settings_labels_with_defaults_fit_beside_their_values) {
                               I::ColourRoad, I::ColourBlock, I::ColourPit, I::ColourLoop, I::ColourWave, I::ColourBlockPit, I::ColourBlockLoop,
                               I::ColourBlockWave, I::ColourPitLoop, I::ColourPitWave, I::ColourLoopWave, I::ColourAngel, I::ColourRabbit,
                               I::ColourFrog, I::ColourWorm, I::ColourBackground, I::ColourMenu, I::ResetColours, I::Calibration, I::SoundCalibration, I::PictureTiming, I::PictureCalibration, I::Glow, I::RefreshRate, I::ClassicScreen, I::ClassicSize, I::OriginalLook, I::RestoreLook, I::Continue,
-                              I::Camera, I::FieldOfView, I::Display, I::WindowMode, I::Resolution, I::Vsync, I::FrameLimit, I::PictureShape, I::LowLatency};
+                              I::Camera, I::FieldOfView, I::Display, I::WindowMode, I::Resolution, I::Vsync, I::FrameLimit, I::PictureShape, I::LowLatency, I::ChangeDisc};
   Options longest;
   longest.camera = longest.vr_camera = 1;
   longest.window_mode = 2;
@@ -1324,6 +1324,9 @@ TEST(disc_sces02873_monitor_settings_step_and_show) {
     CHECK(p.draw_keys(5).lines.size() > 100);
   }
   CHECK(p.label(I::LowLatency, false) == "Low latency" && p.value(I::LowLatency, o, false) == "Off");
+  p.set_items({I::ChangeDisc});
+  CHECK(p.label(I::ChangeDisc, false) == "Change disc" && p.value(I::ChangeDisc, o, false).empty());
+  CHECK(p.tick(confirm, 0.02, o, false) == A::ChangeDisc && p.click(0, false).confirm);
   // Every new label and value is in the font, in every language.
   for (int language = 0; language < 5; ++language) {
     const Pak g(iso.read("GAME/" + language_prefix(language) + "FILES.PAK"));
@@ -1333,7 +1336,7 @@ TEST(disc_sces02873_monitor_settings_step_and_show) {
     for (const int cam : {0, 1})
       for (const int mode : {0, 1, 2}) {
         v.camera = v.vr_camera = cam, v.window_mode = mode, v.picture_43 = mode == 1;
-        for (const I item : {I::Camera, I::FieldOfView, I::Display, I::WindowMode, I::Resolution, I::Vsync, I::FrameLimit, I::PictureShape, I::LowLatency})
+        for (const I item : {I::Camera, I::FieldOfView, I::Display, I::WindowMode, I::Resolution, I::Vsync, I::FrameLimit, I::PictureShape, I::LowLatency, I::ChangeDisc})
           for (const bool vr : {false, true}) {
             CHECK(q.label(item, vr).find('?') == std::string::npos);
             CHECK(q.value(item, v, vr).find('?') == std::string::npos);

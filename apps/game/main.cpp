@@ -926,6 +926,9 @@ void setup_panel(SettingsPanel& p, bool vr, bool pause) {
   top.insert(top.end(), {I::Visual, I::Modifiers, I::CustomColours, I::Calibration});
   if (!vr) top.push_back(I::Display);
   if (vr) top.push_back(I::Recentre);
+#ifndef __ANDROID__
+  if (!pause) top.push_back(I::ChangeDisc);  // (task 4.16 I: the game starts again with the other disc)
+#endif
   top.insert(top.end(), {I::SoundEffects, I::EffectsVolume, I::Vibration, I::ResumeStyle});
   if (pause) top.push_back(I::QuitSong);
   p.set_items(std::move(top));
@@ -2410,8 +2413,40 @@ constexpr int kRestart = -100;
 bool g_restart_at_title = false;
 int g_demo_count = 0;  // which demo comes next, kept across a change of language
 
+// The packaged headset program ("Vib-Ribbon VR.exe", task 4.16 I) is this program built
+// with VIB_DEFAULT_VR: it starts in the headset without --vr.
+#ifdef VIB_DEFAULT_VR
+constexpr bool kDefaultVr = true;
+#else
+constexpr bool kDefaultVr = false;
+#endif
+bool g_disc_changed = false;  // Change disc in the settings: the next run() takes the saved disc
+
+// The player picks their disc image (.cue) in the system's own file dialog (task 4.16
+// I). Waits for the answer, keeping the window's events moving; empty if cancelled.
+std::string pick_disc(SDL_Window* window, const std::string& start_at) {
+  struct Answer {
+    std::atomic<bool> done{false};
+    std::string path;
+  } answer;
+  static const SDL_DialogFileFilter filters[] = {{"Disc image (.cue)", "cue"}};
+  SDL_ShowOpenFileDialog(
+      [](void* data, const char* const* files, int) {
+        auto* a = static_cast<Answer*>(data);
+        if (files && files[0]) a->path = files[0];
+        a->done = true;
+      },
+      &answer, window, filters, 1, start_at.empty() ? nullptr : start_at.c_str(), false);
+  while (!answer.done) {
+    SDL_PumpEvents();
+    SDL_Delay(10);
+  }
+  return answer.path;
+}
+
 int run(int argc, char** argv) {
   Args opt;
+  opt.vr = kDefaultVr;
   for (int i = 1; i < argc; ++i) {
     const std::string a = argv[i];
     auto value = [&]() -> const char* {
@@ -2425,6 +2460,7 @@ int run(int argc, char** argv) {
     else if (a == "--fixed") opt.fixed = true;
     else if (a == "--smooth") opt.smooth = true;
     else if (a == "--vr") opt.vr = true;
+    else if (a == "--flat") opt.vr = false;  // (the monitor, from the headset program)
     else if (a == "--music") opt.music_file = value();
     else if (a == "--vr-scale") opt.vr_scale = std::clamp(float(std::atof(value())), 0.0001f, 0.1f);
     else if (a == "--last") opt.last_seconds = std::max(1.0, std::atof(value()));
@@ -2444,22 +2480,10 @@ int run(int argc, char** argv) {
   SDL_SetHint(SDL_HINT_ANDROID_BLOCK_ON_PAUSE, "0");
 #endif
   opt.headset = opt.vr;
-  if (opt.cue.empty()) {
-    std::fputs("usage: vibplay <disc.cue> [bronze|silver|gold | --song 1-6] [--fixed] [--smooth] [--seed N]\n"
-               "               [--music file.mp3|file.flac] [--vr] [--vr-scale metres] [--last seconds] [--offset ms] [--sfx 0-1] [--music 0-1] [--width x]\n",
-               stderr);
-    return 2;
-  }
   if (!opt.seed_given) opt.seed = static_cast<std::uint32_t>(std::chrono::steady_clock::now().time_since_epoch().count());
 
-  DiscImage disc = DiscImage::open(path_from_utf8(opt.cue));
-  Iso9660 iso(disc);
-  if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD)) throw std::runtime_error(std::string("SDL_Init: ") + SDL_GetError());
-  // In a headset the window only takes the keyboard (keep it in front) and shows nothing.
-  SDL_Window* window = opt.vr ? SDL_CreateWindow("Vib-Ribbon VR: look in the headset (keep this window in front for the keyboard)", 640, 120, 0)
-                              : SDL_CreateWindow("Vib-Ribbon", 1200, 900, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
-  if (!window) throw std::runtime_error(std::string("SDL_CreateWindow: ") + SDL_GetError());
   // Saved high scores and options, in the per-user folder SDL picks for the platform.
+  // Read first: they say where the disc is when none is named (task 4.16 I).
   std::string save_path;
 #ifdef __ANDROID__
   save_path = headset_folder() + "/save.txt";  // (beside the disc: adb pull can fetch it)
@@ -2479,6 +2503,66 @@ int run(int argc, char** argv) {
     }
     std::printf("Save file: %s\n", save_path.c_str());
   }
+  auto write_save = [&]() {
+    if (save_path.empty()) return;
+    std::ofstream out(path_from_utf8(save_path), std::ios::binary);
+    out << save.to_text();
+  };
+
+  if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD)) throw std::runtime_error(std::string("SDL_Init: ") + SDL_GetError());
+  // The disc: named on the command line, else the one picked before (save.txt's
+  // disc_path), else the player picks it now in a file dialog; remembered.
+  if (g_disc_changed) opt.cue = save.options.disc_path, g_disc_changed = false;
+  const bool cue_named = !opt.cue.empty();
+  if (opt.cue.empty()) opt.cue = save.options.disc_path;
+  std::optional<DiscImage> opened_disc;
+  for (bool asked = false;;) {
+    if (!opt.cue.empty()) {
+      try {
+        opened_disc.emplace(DiscImage::open(path_from_utf8(opt.cue)));
+        break;
+      } catch (const std::exception& e) {
+        if (cue_named) throw;  // (named on the command line: say why, as before)
+        std::printf("The disc image %s could not be read: %s\n", opt.cue.c_str(), e.what());
+#ifndef __ANDROID__
+        if (asked) SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, "Vib-Ribbon", (std::string("That disc image could not be read:\n") + e.what()).c_str(), nullptr);
+#endif
+      }
+    }
+#ifdef __ANDROID__
+    (void)asked;
+    throw std::runtime_error("no disc image on the headset");
+#else
+    if (!asked)
+      SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, "Vib-Ribbon",
+                               "Choose your Vib-Ribbon disc image: the .cue file of your own copy of the PAL disc (SCES-02873), with its .bin files beside it.\n\n"
+                               "It is remembered; Change disc in the settings picks another.",
+                               nullptr);
+    asked = true;
+    std::string start_at;
+    if (!save.options.disc_path.empty()) {  // (the folder of the disc picked before)
+      const std::u8string folder = path_from_utf8(save.options.disc_path).parent_path().u8string();
+      start_at.assign(reinterpret_cast<const char*>(folder.data()), folder.size());
+    }
+    opt.cue = pick_disc(nullptr, start_at);
+    if (opt.cue.empty()) {
+      std::printf("No disc image chosen: closing.\n");
+      SDL_Quit();
+      return 2;
+    }
+#endif
+  }
+  if (save.options.disc_path != opt.cue && !cue_named) {
+    save.options.disc_path = opt.cue;
+    write_save();
+  }
+  std::printf("Disc: %s\n", opt.cue.c_str());
+  DiscImage& disc = *opened_disc;
+  Iso9660 iso(disc);
+  // In a headset the window only takes the keyboard (keep it in front) and shows nothing.
+  SDL_Window* window = opt.vr ? SDL_CreateWindow("Vib-Ribbon VR: look in the headset (keep this window in front for the keyboard)", 640, 120, 0)
+                              : SDL_CreateWindow("Vib-Ribbon", 1200, 900, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
+  if (!window) throw std::runtime_error(std::string("SDL_CreateWindow: ") + SDL_GetError());
   // The language's own archive: GAME/<its bit>_FILES.PAK (04 German, 02 English,
   // 08 Spanish, 10 French, 20 Italian), as the original names them.
   const int language = save.options.language < 0 ? GameText::kEnglish : save.options.language;
@@ -2486,11 +2570,6 @@ int run(int argc, char** argv) {
   const CourseScript script = parse_course_script(pak.view("SCRIPT/SYSTEM3.FSL"));
   Scene scene(pak);
   Hud hud(pak, language);
-  auto write_save = [&]() {
-    if (save_path.empty()) return;
-    std::ofstream out(path_from_utf8(save_path), std::ios::binary);
-    out << save.to_text();
-  };
 
   int code = 0;
   bool restart = false;
@@ -3043,6 +3122,24 @@ int run(int argc, char** argv) {
               last_ns = SDL_GetTicksNS();
               behind = 0;
             }
+            if (act == SettingsPanel::Action::ChangeDisc) {  // (task 4.16 I) another disc image: start again with it
+              std::string folder;
+              if (!opt.cue.empty()) {
+                const std::u8string f = path_from_utf8(opt.cue).parent_path().u8string();
+                folder.assign(reinterpret_cast<const char*>(f.data()), f.size());
+              }
+              const std::string picked = pick_disc(window, folder);
+              last_ns = SDL_GetTicksNS();
+              behind = 0;
+              if (!picked.empty() && picked != opt.cue) {
+                save.options.disc_path = picked;
+                write_save();
+                g_disc_changed = true;
+                restart = true;
+                running = false;
+                break;
+              }
+            }
             if (act == SettingsPanel::Action::Close) toggle_settings = true;
             idle_ticks = 0;
             music.update();
@@ -3564,9 +3661,20 @@ int run(int argc, char** argv) {
 
 }  // namespace
 
+#ifdef _WIN32
+void log_to_file_without_console(const char* path_utf8);  // (windows_log.cpp)
+#endif
+
 int main(int argc, char** argv) {
 #ifdef __ANDROID__
   log_to_logcat();
+#endif
+#ifdef _WIN32
+  // Started without a console (the packaged programs): the log goes beside save.txt.
+  if (char* pref = SDL_GetPrefPath("VibRibbonVR", "VibRibbonVR")) {
+    log_to_file_without_console((std::string(pref) + (kDefaultVr ? "log-vr.txt" : "log.txt")).c_str());
+    SDL_free(pref);
+  }
 #endif
   try {
     int code;

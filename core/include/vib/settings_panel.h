@@ -84,12 +84,13 @@ class SettingsPanel {
     FrameLimit,       // frame_limit: off or a number of frames a second
     PictureShape,     // picture_43: fill the window, or the original's 4:3 with bars
     LowLatency,       // low_latency: fewer frames waiting in line (monitor)
+    ChangeDisc,       // an action: pick another disc image (the game starts again with it)
   };
   // A display mode the monitor offers, for the Resolution item.
   struct DisplayMode {
     int w = 0, h = 0, hz = 0;
   };
-  enum class Action { None, Moved, Changed, Close, Recentre, QuitSong, LeaveTop, Calibrate, CalibratePicture };
+  enum class Action { None, Moved, Changed, Close, Recentre, QuitSong, LeaveTop, Calibrate, CalibratePicture, ChangeDisc };
 
   struct Input {
     bool up = false, down = false, left = false, right = false, confirm = false, cancel = false;

@@ -13,7 +13,7 @@ namespace vib {
 namespace {
 
 constexpr double kTau = 6.28318530717958647692;
-constexpr int kItemCount = 65;
+constexpr int kItemCount = 66;
 constexpr int kLanguages = 5;  // German, English, Spanish, French, Italian (the PAL menus)
 
 // Our own words. Order as SettingsPanel::Item.
@@ -23,33 +23,33 @@ const char* const kLabels[kLanguages][kItemCount] = {
      "Sicht nach hinten", "Ansicht zentrieren", "Soundeffekte", "Vibration", "Tonversatz", "Lied beenden", "Fortsetzen", "Leistung", "Punkte als Zahl", "Gleiche Strecke", "Effektlautstärke", "Scrolltempo", "Timing-Anzeige", "FC-Jubel", "Strecke um dich", "Kreisgröße", "Grafik", "Modifikatoren", "Eigene Farben", "Zurück",
      "Linie", "Block", "Grube", "Schleife", "Welle", "Block + Grube", "Block + Schleife", "Block + Welle", "Grube + Schleife",
      "Grube + Welle", "Schleife + Welle", "Vibri Engel", "Vibri Hase", "Vibri Frosch", "Vibri Wurm", "Hintergrund", "Menü", "Farben zurücksetzen", "Kalibrierung", "Ton kalibrieren", "Bildversatz", "Bild kalibrieren", "Leuchten", "Bildrate", "Klassischer Bildschirm", "Bildschirmgröße", "Originaler Look", "Meinen Look zurück",
-     "Kamera", "Sichtfeld", "Anzeige", "Fenstermodus", "Auflösung", "VSync", "Bildratenlimit", "Bildformat", "Geringe Latenz"},
+     "Kamera", "Sichtfeld", "Anzeige", "Fenstermodus", "Auflösung", "VSync", "Bildratenlimit", "Bildformat", "Geringe Latenz", "Disc wechseln"},
     // English
     {"Continue", "Wobble size", "Wobble hold", "Smooth motion", "Line width", "Zoom", "View angle", "See ahead", "See behind",
      "Recenter view", "Sound effects", "Vibration", "Sound timing", "Quit song", "Resume", "Performance", "Score in numbers", "Consistent courses", "Effects volume", "Scroll speed", "Timing feedback", "FC celebration", "Course around you", "Circle size", "Visual", "Modifiers", "Custom colors", "Back",
      "Road line", "Block", "Pit", "Loop", "Wave", "Block + Pit", "Block + Loop", "Block + Wave", "Pit + Loop", "Pit + Wave",
      "Loop + Wave", "Vibri angel", "Vibri rabbit", "Vibri frog", "Vibri worm", "Background", "Menu", "Reset colors", "Calibration", "Sound calibration", "Picture timing", "Picture calibration", "Glow", "Refresh rate", "Classic screen", "Screen size", "Original look", "Restore my look",
-     "Camera", "Field of view", "Display", "Window mode", "Resolution", "VSync", "Frame limit", "Picture shape", "Low latency"},
+     "Camera", "Field of view", "Display", "Window mode", "Resolution", "VSync", "Frame limit", "Picture shape", "Low latency", "Change disc"},
     // Spanish
     {"Continuar", "Tamaño del temblor", "Ritmo del temblor", "Movimiento suave", "Grosor de línea", "Zoom", "Ángulo de vista",
      "Ver adelante", "Ver atrás", "Centrar vista", "Efectos de sonido", "Vibración", "Desfase de sonido", "Salir de la canción", "Reanudar", "Rendimiento", "Puntos en números", "Recorridos fijos", "Volumen de efectos", "Velocidad de avance", "Precisión en ms", "Celebrar FC", "Recorrido alrededor", "Tamaño del círculo", "Imagen", "Modificadores", "Colores propios", "Volver",
      "Línea", "Bloque", "Foso", "Rizo", "Onda", "Bloque + Foso", "Bloque + Rizo", "Bloque + Onda", "Foso + Rizo", "Foso + Onda",
      "Rizo + Onda", "Vibri ángel", "Vibri conejo", "Vibri rana", "Vibri gusano", "Fondo", "Menú", "Restablecer colores", "Calibración", "Calibrar sonido", "Desfase de imagen", "Calibrar imagen", "Resplandor", "Frecuencia", "Pantalla clásica", "Tamaño de pantalla", "Aspecto original", "Recuperar mi aspecto",
-     "Cámara", "Campo de visión", "Pantalla", "Modo de ventana", "Resolución", "VSync", "Límite de fps", "Formato de imagen", "Baja latencia"},
+     "Cámara", "Campo de visión", "Pantalla", "Modo de ventana", "Resolución", "VSync", "Límite de fps", "Formato de imagen", "Baja latencia", "Cambiar disco"},
     // French
     {"Continuer", "Taille du tremblement", "Rythme du tremblement", "Mouvement fluide", "Épaisseur des lignes", "Zoom",
      "Angle de vue", "Voir devant", "Voir derrière", "Recentrer la vue", "Effets sonores", "Vibration", "Décalage du son",
      "Quitter la chanson", "Reprise", "Performances", "Score en chiffres", "Parcours fixes", "Volume des effets", "Vitesse de défilement", "Précision en ms", "Fête du FC", "Parcours autour de toi", "Taille du cercle", "Visuel", "Modificateurs", "Couleurs perso", "Retour",
      "Ligne", "Bloc", "Fosse", "Boucle", "Vague", "Bloc + Fosse", "Bloc + Boucle", "Bloc + Vague", "Fosse + Boucle", "Fosse + Vague",
      "Boucle + Vague", "Vibri ange", "Vibri lapin", "Vibri grenouille", "Vibri ver", "Fond", "Menu", "Réinitialiser couleurs", "Calibrage", "Calibrer le son", "Décalage de l'image", "Calibrer l'image", "Halo", "Fréquence", "Écran classique", "Taille de l'écran", "Aspect d'origine", "Rétablir mon aspect",
-     "Caméra", "Champ de vision", "Affichage", "Mode fenêtre", "Résolution", "VSync", "Limite d'images", "Format d'image", "Faible latence"},
+     "Caméra", "Champ de vision", "Affichage", "Mode fenêtre", "Résolution", "VSync", "Limite d'images", "Format d'image", "Faible latence", "Changer de disque"},
     // Italian
     {"Continua", "Ampiezza del tremolio", "Ritmo del tremolio", "Movimento fluido", "Spessore delle linee", "Zoom",
      "Angolo di vista", "Vista avanti", "Vista indietro", "Ricentra la vista", "Effetti sonori", "Vibrazione", "Ritardo audio",
      "Esci dalla canzone", "Ripresa", "Prestazioni", "Punteggio in cifre", "Percorsi fissi", "Volume effetti", "Velocità di scorrimento", "Precisione in ms", "Festa FC", "Percorso intorno a te", "Dimensione del cerchio", "Grafica", "Modificatori", "Colori personalizzati", "Indietro",
      "Linea", "Blocco", "Fossa", "Giro", "Onda", "Blocco + Fossa", "Blocco + Giro", "Blocco + Onda", "Fossa + Giro", "Fossa + Onda",
      "Giro + Onda", "Vibri angelo", "Vibri coniglio", "Vibri rana", "Vibri verme", "Sfondo", "Menu", "Ripristina colori", "Calibrazione", "Calibra audio", "Ritardo immagine", "Calibra immagine", "Bagliore", "Frequenza", "Schermo classico", "Dimensione schermo", "Aspetto originale", "Ripristina il mio aspetto",
-     "Telecamera", "Campo visivo", "Schermo", "Modalità finestra", "Risoluzione", "VSync", "Limite fotogrammi", "Formato immagine", "Bassa latenza"},
+     "Telecamera", "Campo visivo", "Schermo", "Modalità finestra", "Risoluzione", "VSync", "Limite fotogrammi", "Formato immagine", "Bassa latenza", "Cambia disco"},
 };
 const char* const kMore[kLanguages] = {"Weitere Einstellungen (Start)", "More options (Start)", "Más ajustes (Start)", "Autres réglages (Start)",
                                        "Altre impostazioni (Start)"};
@@ -545,6 +545,7 @@ SettingsPanel::Action SettingsPanel::tick(const Input& in, double seconds, Optio
       case Item::QuitSong: return Action::QuitSong;
       case Item::SoundCalibration: return Action::Calibrate;
       case Item::PictureCalibration: return Action::CalibratePicture;
+      case Item::ChangeDisc: return Action::ChangeDisc;
       case Item::Smooth: case Item::SoundEffects: case Item::Vibration: case Item::ResumeStyle: case Item::Performance: case Item::ScoreNumbers: case Item::FixedCourses: case Item::TimingFeedback: case Item::FcCelebration: case Item::WrapCourse:
       case Item::ClassicScreen:
       case Item::OriginalLook: case Item::RestoreLook:
@@ -965,7 +966,7 @@ SettingsPanel::Input SettingsPanel::click(int row, bool right_button) {
   bool confirms = is_group(item) || item == Item::Back;
   switch (item) {
     case Item::Continue: case Item::Recentre: case Item::QuitSong: case Item::SoundCalibration: case Item::PictureCalibration:
-    case Item::Smooth: case Item::SoundEffects: case Item::Vibration: case Item::ResumeStyle: case Item::ScoreNumbers:
+    case Item::ChangeDisc: case Item::Smooth: case Item::SoundEffects: case Item::Vibration: case Item::ResumeStyle: case Item::ScoreNumbers:
     case Item::FixedCourses: case Item::TimingFeedback: case Item::FcCelebration: case Item::WrapCourse: case Item::ClassicScreen:
     case Item::OriginalLook: case Item::RestoreLook: case Item::Camera: case Item::WindowMode: case Item::Vsync:
     case Item::PictureShape: case Item::LowLatency: case Item::ResetColours:

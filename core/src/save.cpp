@@ -121,6 +121,7 @@ std::string SaveData::to_text() const {
   std::snprintf(buf, sizeof buf, "%.2f", options.vr_classic_size);
   out << "vr_classic_size " << buf << '\n';
   if (!options.music_folder.empty()) out << "music_folder " << options.music_folder << '\n';  // (the rest of the line)
+  if (!options.disc_path.empty()) out << "disc_path " << options.disc_path << '\n';           // (the same)
   std::snprintf(buf, sizeof buf, "%.3f", options.line_width);
   out << "line_width " << buf << '\n';
   std::snprintf(buf, sizeof buf, "%.3f", options.vr_line_width);
@@ -207,11 +208,11 @@ SaveData SaveData::from_text(const std::string& text) {
         d.options.fullscreen_w = w, d.options.fullscreen_h = h, d.options.fullscreen_hz = hz;
       continue;
     }
-    if (key == "music_folder") {  // a path: the rest of the line, spaces and all
+    if (key == "music_folder" || key == "disc_path") {  // a path: the rest of the line, spaces and all
       std::string rest;
       std::getline(fields, rest);
       const std::size_t start = rest.find_first_not_of(" \t");
-      if (start != std::string::npos) d.options.music_folder = rest.substr(start);
+      if (start != std::string::npos) (key == "disc_path" ? d.options.disc_path : d.options.music_folder) = rest.substr(start);
       continue;
     }
     fields >> value;

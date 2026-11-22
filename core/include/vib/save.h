@@ -74,6 +74,7 @@ struct Options {
   // original's white lines on black.
   std::array<std::uint8_t, kColourSlotCount> colours{};
   std::string music_folder;       // ours: the player's music folder (UTF-8), picked the first time; empty until then
+  std::string disc_path;          // ours (task 4.16 I): the player's disc image (.cue, UTF-8), picked the first time; empty until then
   double vr_angle = 45.0;       // and where around her, degrees: 0 behind, 90 to her right, -90 to her left
   double audio_offset_ms = 0;  // added to the estimated output latency
   // Ours: the picture drawn this far ahead of what is heard (ms; negative: behind), to
