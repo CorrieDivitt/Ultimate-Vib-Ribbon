@@ -1,5 +1,5 @@
 # Builds the release downloads (task 6.11) on this PC into dist\release-<version>\:
-#   Vib-Ribbon-VR-Windows-<version>.zip             launcher, both programs, README, notices, licence
+#   Ultimate-Vib-Ribbon-Windows-<version>.zip       monitor and PC VR: launcher, both programs, README, notices, licence
 #   Vib-Ribbon-VR-Quest-<version>.zip               the Quest APK, QUEST.txt, notices, licence
 #   Vib-Ribbon-Android-<version>-experimental.zip   the phone APK, ANDROID.txt, notices, licence
 #   SHA256SUMS.txt                                  checksums of the three, for the release page
@@ -23,11 +23,11 @@ if ($LASTEXITCODE) { throw "configure failed" }
 cmake --build --preset package
 if ($LASTEXITCODE) { throw "build failed" }
 $built = "build\package"
-$win = "$out\Vib-Ribbon-VR"
+$win = "$out\Ultimate-Vib-Ribbon"
 New-Item -ItemType Directory $win | Out-Null
 Copy-Item "$built\apps\launcher\Vib-Ribbon Launcher.exe", "$built\apps\game\Vib-Ribbon.exe", "$built\apps\game\Vib-Ribbon VR.exe" $win
 Copy-Item docs\package\README.txt, docs\notices\THIRD_PARTY_NOTICES.txt, LICENSE $win
-Compress-Archive -Path $win -DestinationPath "$out\Vib-Ribbon-VR-Windows-$version.zip"
+Compress-Archive -Path $win -DestinationPath "$out\Ultimate-Vib-Ribbon-Windows-$version.zip"
 
 # Android: the Quest and the phone, release builds signed with your key
 if (-not $env:JAVA_HOME) { $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr" }

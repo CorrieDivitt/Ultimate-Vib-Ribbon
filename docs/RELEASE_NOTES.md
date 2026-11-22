@@ -6,9 +6,9 @@ Drafts for the release page, kept up to date as work is locked in.
 
 Downloads:
 
-- **Windows** (portable zip): `Vib-Ribbon Launcher.exe` starts either the VR version (PCVR through OpenXR: SteamVR or Meta Quest Link) or the flat monitor version, with display settings and the controls shown.
-- **Meta Quest 3** (APK to sideload): the standalone VR version.
-- **Android phones and tablets** (APK), **experimental, feedback welcome**: the flat version with on-screen buttons (obstacle shapes or the PlayStation buttons) or a gamepad, sideways only. The disc image is imported in the game by picking the folder that holds it. It has been tried on few devices so far: please report what phone or tablet you used and what worked or did not.
+- **Windows, monitor and PC VR** (`Ultimate-Vib-Ribbon-Windows-1.0.0.zip`, portable): `Vib-Ribbon Launcher.exe` starts either the VR version (PCVR through OpenXR: SteamVR or Meta Quest Link) or the flat monitor version, with display settings and the controls shown.
+- **Meta Quest 3** (`Vib-Ribbon-VR-Quest-1.0.0.zip`: the APK to sideload, with QUEST.txt): the standalone VR version.
+- **Android phones and tablets** (`Vib-Ribbon-Android-1.0.0-experimental.zip`: the APK, with ANDROID.txt), **experimental, feedback welcome**: the flat version with on-screen buttons (obstacle shapes or the PlayStation buttons) or a gamepad, sideways only. The disc image is imported in the game by picking the folder that holds it. It has been tried on few devices so far: please report what phone or tablet you used and what worked or did not.
 
 All versions need your own copy of the PAL disc (SCES-02873) as a disc image (a .cue and its .bin files); nothing of the game is included.
 

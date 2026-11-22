@@ -95,7 +95,7 @@ jobs:
       - name: Assemble the download
         shell: pwsh
         run: |
-          $out = "Vib-Ribbon-VR"
+          $out = "Ultimate-Vib-Ribbon"
           New-Item -ItemType Directory $out | Out-Null
           Copy-Item "build/package/apps/launcher/Vib-Ribbon Launcher.exe", "build/package/apps/game/Vib-Ribbon.exe", "build/package/apps/game/Vib-Ribbon VR.exe" $out
           Copy-Item docs/package/README.txt, docs/notices/THIRD_PARTY_NOTICES.txt, LICENSE $out
@@ -108,5 +108,5 @@ jobs:
           Get-ChildItem $out | Format-Table Name, Length
       - uses: actions/upload-artifact@v4
         with:
-          name: vib-ribbon-vr-windows
-          path: Vib-Ribbon-VR
+          name: ultimate-vib-ribbon-windows
+          path: Ultimate-Vib-Ribbon

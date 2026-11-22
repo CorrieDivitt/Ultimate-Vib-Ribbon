@@ -1,4 +1,5 @@
-Vib-Ribbon VR (fan project, free, not affiliated with Sony or NanaOn-Sha)
+Ultimate Vib-Ribbon for Windows: on your monitor or in a PC VR headset
+(fan project, free, not affiliated with Sony or NanaOn-Sha)
 https://github.com/CorrieDivitt/Ultimate-Vib-Ribbon
 
 This download has no game in it. It plays your own copy of the PAL disc
