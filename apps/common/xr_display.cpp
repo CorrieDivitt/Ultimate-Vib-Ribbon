@@ -5,7 +5,15 @@
 
 #ifdef __ANDROID__
 #include <jni.h>  // (before openxr_platform.h, which names JavaVM and jobject)
+#include <time.h>
 #define XR_USE_PLATFORM_ANDROID
+#define XR_USE_TIMESPEC  // XR_KHR_convert_timespec_time: the runtime's clock against CLOCK_MONOTONIC
+#elif defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>  // XR_KHR_win32_convert_performance_counter_time
+#define XR_USE_PLATFORM_WIN32
 #endif
 #define XR_USE_GRAPHICS_API_VULKAN
 #include <openxr/openxr.h>
@@ -173,6 +181,24 @@ class XrDisplay::Impl {
 
   const char* gpu_name() const { return gpu_name_.c_str(); }
   const std::vector<float>& rates() const { return rates_; }
+  double display_lead_ms() const { return lead_ms_; }
+  // Both controllers buzz (0 seconds: stop), where the profile has haptics.
+  void rumble(float seconds, float amplitude) {
+    if (!session_ || !haptic_left_) return;
+    for (XrAction a : {haptic_left_, haptic_right_}) {
+      XrHapticActionInfo hi{XR_TYPE_HAPTIC_ACTION_INFO};
+      hi.action = a;
+      if (seconds <= 0) {
+        xrStopHapticFeedback(session_, &hi);
+        continue;
+      }
+      XrHapticVibration v{XR_TYPE_HAPTIC_VIBRATION};
+      v.duration = XrDuration(double(seconds) * 1e9);
+      v.frequency = XR_FREQUENCY_UNSPECIFIED;
+      v.amplitude = std::clamp(amplitude, 0.0f, 1.0f);
+      xrApplyHapticFeedback(session_, &hi, reinterpret_cast<const XrHapticBaseHeader*>(&v));
+    }
+  }
   bool passthrough_available() const { return pt_layer_ != XR_NULL_HANDLE; }
   // Passthrough on or off; started and paused only when it changes.
   void set_passthrough(bool on) {
@@ -212,7 +238,14 @@ class XrDisplay::Impl {
     XrFrameWaitInfo wait{XR_TYPE_FRAME_WAIT_INFO};
     XrFrameState state{XR_TYPE_FRAME_STATE};
     const std::uint64_t start_ns = SDL_GetTicksNS();
+    const XrTime start_xr = now_xr();
     xr_check(xrWaitFrame(session_, &wait, &state), "xrWaitFrame");
+    // How far ahead of this draw() the frame reaches the eyes (task 4.5): the game draws
+    // the course for that moment. Smoothed; frames the runtime times oddly are left out.
+    if (start_xr > 0) {
+      const double lead = double(state.predictedDisplayTime - start_xr) * 1e-6;
+      if (lead > 0 && lead < 200) lead_ms_ = lead_ms_ > 0 ? lead_ms_ + (lead - lead_ms_) * 0.05 : lead;
+    }
     const std::uint64_t waited_ns = SDL_GetTicksNS();
     // The frame's timing by the runtime's own display times: a gap of more than one
     // period means the headset showed a frame we were too late for.
@@ -336,6 +369,15 @@ class XrDisplay::Impl {
       if (std::strcmp(e.extensionName, XR_EXT_USER_PRESENCE_EXTENSION_NAME) == 0) {
         exts.push_back(XR_EXT_USER_PRESENCE_EXTENSION_NAME);
         presence_ = true;
+#ifdef __ANDROID__
+      } else if (std::strcmp(e.extensionName, XR_KHR_CONVERT_TIMESPEC_TIME_EXTENSION_NAME) == 0) {
+        exts.push_back(XR_KHR_CONVERT_TIMESPEC_TIME_EXTENSION_NAME);
+        time_conversion_ = true;
+#elif defined(_WIN32)
+      } else if (std::strcmp(e.extensionName, XR_KHR_WIN32_CONVERT_PERFORMANCE_COUNTER_TIME_EXTENSION_NAME) == 0) {
+        exts.push_back(XR_KHR_WIN32_CONVERT_PERFORMANCE_COUNTER_TIME_EXTENSION_NAME);
+        time_conversion_ = true;
+#endif
       } else if (std::strcmp(e.extensionName, XR_FB_DISPLAY_REFRESH_RATE_EXTENSION_NAME) == 0) {
         exts.push_back(XR_FB_DISPLAY_REFRESH_RATE_EXTENSION_NAME);
         refresh_rates_ = true;
@@ -488,6 +530,26 @@ class XrDisplay::Impl {
     xr_check(xrCreateReferenceSpace(session_, &space, &space_), "xrCreateReferenceSpace");
     space.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_VIEW;
     xr_check(xrCreateReferenceSpace(session_, &space, &head_), "xrCreateReferenceSpace (view)");
+  }
+
+  // The runtime's clock now, or 0 where it cannot be read (no conversion extension).
+  XrTime now_xr() {
+    if (!time_conversion_) return 0;
+    XrTime t = 0;
+#ifdef __ANDROID__
+    if (!convert_time_) convert_time_ = xr_function<PFN_xrVoidFunction>("xrConvertTimespecTimeToTimeKHR");
+    const auto convert = reinterpret_cast<PFN_xrConvertTimespecTimeToTimeKHR>(convert_time_);
+    timespec ts{};
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    if (XR_FAILED(convert(instance_, &ts, &t))) return 0;
+#elif defined(_WIN32)
+    if (!convert_time_) convert_time_ = xr_function<PFN_xrVoidFunction>("xrConvertWin32PerformanceCounterToTimeKHR");
+    const auto convert = reinterpret_cast<PFN_xrConvertWin32PerformanceCounterToTimeKHR>(convert_time_);
+    LARGE_INTEGER pc;
+    QueryPerformanceCounter(&pc);
+    if (XR_FAILED(convert(instance_, &pc, &t))) return 0;
+#endif
+    return t;
   }
 
   // The room behind the picture (task 4.15), where the runtime offers XR_FB_passthrough:
@@ -793,6 +855,8 @@ class XrDisplay::Impl {
         button("left_stick_click", "Performance overlay", SDL_GAMEPAD_BUTTON_LEFT_STICK, SDL_GAMEPAD_BUTTON_LEFT_STICK),  // 9
         button("right_stick_click", "Recenter", SDL_GAMEPAD_BUTTON_RIGHT_STICK, SDL_GAMEPAD_BUTTON_RIGHT_STICK),          // 10
     };
+    haptic_left_ = action("haptic_left", "Left buzz", XR_ACTION_TYPE_VIBRATION_OUTPUT);
+    haptic_right_ = action("haptic_right", "Right buzz", XR_ACTION_TYPE_VIBRATION_OUTPUT);
     left_stick_ = action("left_stick", "Left stick", XR_ACTION_TYPE_VECTOR2F_INPUT);
     right_stick_ = action("right_stick", "Right stick", XR_ACTION_TYPE_VECTOR2F_INPUT);
 
@@ -812,6 +876,8 @@ class XrDisplay::Impl {
         {buttons_[10].action, path("/user/hand/right/input/thumbstick/click")},
         {left_stick_, path("/user/hand/left/input/thumbstick")},
         {right_stick_, path("/user/hand/right/input/thumbstick")},
+        {haptic_left_, path("/user/hand/left/output/haptic")},
+        {haptic_right_, path("/user/hand/right/output/haptic")},
     };
     XrInteractionProfileSuggestedBinding sb{XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING};
     sb.interactionProfile = path("/interaction_profiles/oculus/touch_controller");
@@ -833,14 +899,14 @@ class XrDisplay::Impl {
     xr_check(xrAttachSessionActionSets(session_, &attach), "xrAttachSessionActionSets");
   }
 
-  static void push_button(SDL_GamepadButton b, bool down) {
+  // `at_ns`: when it happened on SDL's clock (0: now).
+  static void push_button(SDL_GamepadButton b, bool down, std::uint64_t at_ns = 0) {
     SDL_Event e{};
     e.type = down ? SDL_EVENT_GAMEPAD_BUTTON_DOWN : SDL_EVENT_GAMEPAD_BUTTON_UP;
     e.gbutton.which = 0;
     e.gbutton.button = Uint8(b);
     e.gbutton.down = down;
-    // Timestamped now: within a frame of the press (the controllers' own times later).
-    e.gbutton.timestamp = SDL_GetTicksNS();
+    e.gbutton.timestamp = at_ns ? at_ns : SDL_GetTicksNS();
     SDL_PushEvent(&e);
   }
 
@@ -851,6 +917,16 @@ class XrDisplay::Impl {
     sync.countActiveActionSets = 1;
     sync.activeActionSets = &active;
     if (XR_FAILED(xrSyncActions(session_, &sync))) return;
+    // A change's own time (the runtime's lastChangeTime) on SDL's clock, as the game
+    // judges presses by their timestamps (task 4.1): now on SDL's clock minus how long
+    // ago it was on the runtime's. Within a frame or two; anything else counts as now.
+    const std::uint64_t sdl_now = SDL_GetTicksNS();
+    const XrTime xr_now = now_xr();
+    auto when = [&](XrTime changed) -> std::uint64_t {
+      if (!xr_now || !changed) return sdl_now;
+      const XrTime ago = xr_now - changed;
+      return ago >= 0 && ago < 100'000'000 && std::uint64_t(ago) < sdl_now ? sdl_now - std::uint64_t(ago) : sdl_now;
+    };
     for (Button& b : buttons_) {
       XrActionStateGetInfo gi{XR_TYPE_ACTION_STATE_GET_INFO};
       gi.action = b.action;
@@ -859,9 +935,9 @@ class XrDisplay::Impl {
       const bool down = st.isActive && st.currentState;
       if (down && !b.down) {  // pressed: the button it stands for in this mode
         b.sent = mode_ == InputMode::Play ? b.play : b.menus;
-        if (b.sent != SDL_GAMEPAD_BUTTON_INVALID) push_button(b.sent, true);
+        if (b.sent != SDL_GAMEPAD_BUTTON_INVALID) push_button(b.sent, true, when(st.lastChangeTime));
       } else if (!down && b.down) {  // let go: release what its press sent (even if the mode changed since)
-        if (b.sent != SDL_GAMEPAD_BUTTON_INVALID) push_button(b.sent, false);
+        if (b.sent != SDL_GAMEPAD_BUTTON_INVALID) push_button(b.sent, false, when(st.lastChangeTime));
         b.sent = SDL_GAMEPAD_BUTTON_INVALID;
       }
       b.down = down;
@@ -1065,7 +1141,10 @@ class XrDisplay::Impl {
   // player however long the game ran before they put it on.
   bool recentre_ = true;
   std::uint64_t recentre_at_ns_ = 0;
-  bool presence_ = false, refresh_rates_ = false, passthrough_ext_ = false;
+  bool presence_ = false, refresh_rates_ = false, passthrough_ext_ = false, time_conversion_ = false;
+  double lead_ms_ = 0;  // predicted display time minus the start of draw(), smoothed
+  [[maybe_unused]] PFN_xrVoidFunction convert_time_ = nullptr;  // (this instance's clock conversion)
+  XrAction haptic_left_ = XR_NULL_HANDLE, haptic_right_ = XR_NULL_HANDLE;
   XrPassthroughFB passthrough_ = XR_NULL_HANDLE;
   XrPassthroughLayerFB pt_layer_ = XR_NULL_HANDLE;
   bool pt_on_ = false;
@@ -1116,6 +1195,8 @@ void XrDisplay::set_refresh_rate(float hz) { impl_->ask_refresh_rate(hz); }
 void XrDisplay::set_input_mode(InputMode mode) { impl_->set_mode(mode); }
 bool XrDisplay::passthrough_available() const { return impl_->passthrough_available(); }
 void XrDisplay::set_passthrough(bool on) { impl_->set_passthrough(on); }
+double XrDisplay::display_lead_ms() const { return impl_->display_lead_ms(); }
+void XrDisplay::rumble(float seconds, float amplitude) { impl_->rumble(seconds, amplitude); }
 Display::ControllerSticks XrDisplay::controller_sticks() const { return impl_->sticks(); }
 FrameTiming XrDisplay::timing() const { return impl_->timing(); }
 const char* XrDisplay::runtime_name() const { return impl_->runtime_name(); }

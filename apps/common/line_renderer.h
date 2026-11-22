@@ -123,6 +123,11 @@ class Display {
   virtual ControllerSticks controller_sticks() const { return {}; }
   // A headset that can show the room behind the picture (Quest: XR_FB_passthrough).
   virtual bool passthrough_available() const { return false; }
+  // A headset: how far ahead of the start of a draw() its frame reaches the eyes (the
+  // runtime's predicted display time), smoothed; 0 when it cannot be told (task 4.5).
+  virtual double display_lead_ms() const { return 0.0; }
+  // A headset's own controllers: buzz both for `seconds` at `amplitude` (0-1); 0 stops.
+  virtual void rumble(float /*seconds*/, float /*amplitude*/) {}
   virtual void set_passthrough(bool) {}
   // The colour behind the lines, as shown on a monitor (0-1 each; the original's black).
   void set_background(float r, float g, float b) { background_[0] = r, background_[1] = g, background_[2] = b; }

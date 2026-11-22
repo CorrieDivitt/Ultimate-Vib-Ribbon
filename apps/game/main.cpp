@@ -686,6 +686,7 @@ void draw_frame(Session& s, std::vector<vibr::Layer>& layers, double update_ms, 
         s.perf_print_ns = now;
         std::string line = "Perf";
         for (const std::string& r : s.perf_text) line += "  |  " + r;
+        if (s.opt.vr) line += "  |  display lead " + std::to_string(int(std::lround(s.renderer.display_lead_ms()))) + " ms";
         std::printf("%s\n", line.c_str());
       }
     }
@@ -1189,7 +1190,7 @@ bool run_calibration(Session& s, SettingsPanel& panel, bool picture) {
       // right and reaches the target as the picture is drawn for that beat (Picture
       // timing ahead of the clock), so the player can see it coming. The target swells
       // for a moment as each marker reaches it.
-      const double drawn = s.audio.heard_frame(now_ns) + setting * TapCalibration::kRate / 1000.0;
+      const double drawn = s.audio.heard_frame(now_ns) + (setting + s.renderer.display_lead_ms()) * TapCalibration::kRate / 1000.0;
       auto add = [&](float ax, float ay, float bx, float by, std::uint8_t g) {
         SceneLine ln;
         ln.a = {ax * size, ay * size, 4000.0f * size}, ln.b = {bx * size, by * size, 4000.0f * size};
@@ -1443,8 +1444,10 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
         }
         case GameEvent::Type::Miss:
           if (effects_on) s.fx.play(1, 10, fx_volume(127), 2);
-          if (s.save.options.vibration)
+          if (s.save.options.vibration) {
             for (auto& [id, pad] : s.pads) SDL_RumbleGamepad(pad, 0x6000, 0xC000, 200);
+            s.renderer.rumble(0.2f, 0.6f);  // (the headset's own controllers, Touch)
+          }
           miss = true;
           ++song_misses;
           break;
@@ -1611,6 +1614,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
       pause_at = last_position;
       s.audio.play_music({});
       for (auto& [id, pad] : s.pads) SDL_RumbleGamepad(pad, 0, 0, 0);
+      s.renderer.rumble(0.0f, 0.0f);
       setup_panel(*s.panel, s.opt.vr, true);
       s.panel->set_wraps(true);
       s.panel->set_active(true);
@@ -1703,7 +1707,9 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     const std::int32_t heard = frozen ? last_position : std::max(raw, last_position);
     // Where the road is drawn: what is heard, plus Picture timing (ours) to make up for
     // the display's own delay; judging stays on `heard`.
-    const auto picture_ahead = static_cast<std::int32_t>(s.save.options.picture_offset_ms * kSampleRate / 1000.0);
+    // In a headset also the display's own lead (task 4.5): the frame being made now reaches
+    // the eyes this much later (the runtime's predicted display time), so it shows that moment.
+    const auto picture_ahead = static_cast<std::int32_t>((s.save.options.picture_offset_ms + s.renderer.display_lead_ms()) * kSampleRate / 1000.0);
     const std::int32_t view_at = frozen ? std::min(raw, pause_at) : heard + picture_ahead;
     if (frozen || celebrating) presses.clear();
     if (s.opt.vr) game.keep_passed(static_cast<std::int32_t>(std::min(s.save.options.vr_behind_seconds, kWholeSongSeconds) * kSampleRate));

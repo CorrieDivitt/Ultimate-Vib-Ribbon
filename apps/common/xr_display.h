@@ -42,6 +42,8 @@ class XrDisplay : public Display {
   void set_input_mode(InputMode mode) override;
   ControllerSticks controller_sticks() const override;
   bool passthrough_available() const override;
+  double display_lead_ms() const override;
+  void rumble(float seconds, float amplitude) override;
   void set_passthrough(bool on) override;
 
   const char* runtime_name() const;
