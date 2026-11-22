@@ -121,37 +121,95 @@ bool ends_with_cue(std::string name) {
 
 void say(const std::string& text) { SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, "Vib-Ribbon", text.c_str(), nullptr); }
 
+std::string lower(std::string text) {
+  for (char& c : text) c = char(std::tolower(static_cast<unsigned char>(c)));
+  return text;
+}
+
+// The track files a .cue names (its FILE lines) that are not in the folder yet. A file
+// there whose name differs only in letter case is renamed to the .cue's spelling.
+std::vector<std::string> missing_tracks(const std::filesystem::path& cue) {
+  std::vector<std::string> missing;
+  std::ifstream in(cue);
+  const std::filesystem::path dir = cue.parent_path();
+  for (std::string line; std::getline(in, line);) {
+    std::size_t at = line.find_first_not_of(" \t");
+    if (at == std::string::npos || lower(line.substr(at, 5)) != "file ") continue;
+    std::string name;
+    const std::size_t open = line.find('"', at);
+    const std::size_t close = open == std::string::npos ? open : line.find('"', open + 1);
+    if (close != std::string::npos) {
+      name = line.substr(open + 1, close - open - 1);
+    } else {  // (unquoted: the word after FILE)
+      std::size_t b = line.find_first_not_of(" \t", at + 5);
+      std::size_t e = b == std::string::npos ? b : line.find_first_of(" \t\r", b);
+      if (b != std::string::npos) name = line.substr(b, e == std::string::npos ? std::string::npos : e - b);
+    }
+    const std::size_t slash = name.find_last_of("/\\");
+    if (slash != std::string::npos) name = name.substr(slash + 1);
+    if (name.empty()) continue;
+    const std::filesystem::path want = dir / vib::path_from_utf8(name);
+    std::error_code ec;
+    if (std::filesystem::exists(want, ec)) continue;
+    bool found = false;
+    for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
+      if (lower(entry.path().filename().string()) == lower(name)) {
+        std::filesystem::rename(entry.path(), want, ec);
+        found = !ec;
+        break;
+      }
+    }
+    if (!found && std::find(missing.begin(), missing.end(), name) == missing.end()) missing.push_back(name);
+  }
+  return missing;
+}
+
+// Copies the picked files into the folder; the .cue among them (if any) in *cue.
+std::string copy_picked(const std::vector<std::string>& files, const std::filesystem::path& dir, std::string* cue) {
+  for (std::size_t i = 0; i < files.size(); ++i) {
+    std::string name = display_name(files[i]);
+    if (name.empty()) name = "file" + std::to_string(i + 1);
+    std::printf("Importing %s\n", name.c_str());
+    if (!copy_into(files[i], dir / vib::path_from_utf8(name))) return "Could not copy " + name + ".";
+    if (ends_with_cue(name)) *cue = (dir / vib::path_from_utf8(name)).string();
+  }
+  return {};
+}
+
+const char* const kHold = "Tip: in the file picker, press and hold a file to pick several at once.";
+
 }  // namespace
 
 std::string import_disc(const std::string& folder) {
+  const std::filesystem::path dir = vib::path_from_utf8(folder);
   for (;;) {
-    const std::vector<std::string> files = pick_files();
+    std::vector<std::string> files = pick_files();
     if (files.empty()) return {};
-    const std::filesystem::path dir = vib::path_from_utf8(folder);
     std::error_code ec;
     std::filesystem::remove_all(dir, ec);  // (the disc imported before goes)
     std::filesystem::create_directories(dir, ec);
-    std::string cue, problem;
-    int copied = 0;
-    for (std::size_t i = 0; i < files.size(); ++i) {
-      std::string name = display_name(files[i]);
-      if (name.empty()) name = "file" + std::to_string(i + 1);
-      std::printf("Importing %s\n", name.c_str());
-      if (!copy_into(files[i], dir / vib::path_from_utf8(name))) {
-        problem = "Could not copy " + name + ".";
-        break;
-      }
-      ++copied;
-      if (ends_with_cue(name)) cue = (dir / vib::path_from_utf8(name)).string();
+    std::string cue;
+    std::string problem = copy_picked(files, dir, &cue);
+    if (problem.empty() && cue.empty()) problem = std::string("None of the files picked was a .cue file. Pick the .cue and all its .bin files.\n\n") + kHold;
+    // Files the .cue names that were not picked: ask for those (added to the ones copied).
+    while (problem.empty()) {
+      const std::vector<std::string> missing = missing_tracks(vib::path_from_utf8(cue));
+      if (missing.empty()) break;
+      std::string list;
+      for (const std::string& m : missing) list += "\n" + m;
+      say("Now pick the rest of the disc's files:\n" + list + "\n\n" + kHold);
+      files = pick_files();
+      if (files.empty()) return {};
+      std::string ignored;
+      problem = copy_picked(files, dir, &ignored);
     }
-    if (problem.empty() && cue.empty()) problem = "None of the files picked was a .cue file. Pick the .cue and all its .bin files together.";
     if (problem.empty()) {
       try {
-        vib::DiscImage::open(vib::path_from_utf8(cue));  // (all its .bin files there?)
-        std::printf("Imported %d files: %s\n", copied, cue.c_str());
+        vib::DiscImage::open(vib::path_from_utf8(cue));
+        std::printf("Imported disc: %s\n", cue.c_str());
         return cue;
       } catch (const std::exception& e) {
-        problem = std::string("The disc image could not be read: ") + e.what() + "\n\nPick the .cue and all its .bin files together.";
+        problem = std::string("The disc image could not be read: ") + e.what();
       }
     }
     say(problem + "\n\nTry again, or cancel the picker to stop.");
