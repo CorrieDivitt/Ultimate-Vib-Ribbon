@@ -1,5 +1,5 @@
 Vib-Ribbon VR (fan project, free, not affiliated with Sony or NanaOn-Sha)
-https://github.com/CorrieDivitt/Vib-Ribbon-VR
+https://github.com/CorrieDivitt/Ultimate-Vib-Ribbon
 
 This download has no game in it. It plays your own copy of the PAL disc
 (SCES-02873), from a disc image you made of it: a .cue file with its .bin files.

@@ -1,5 +1,5 @@
 Vib-Ribbon VR on a Meta Quest 3 (standalone, no PC needed to play)
-https://github.com/CorrieDivitt/Vib-Ribbon-VR
+https://github.com/CorrieDivitt/Ultimate-Vib-Ribbon
 
 The game is an APK you install on the headset yourself ("sideloading"). It contains no
 part of the game: it plays your own copy of the PAL disc (SCES-02873), from a disc

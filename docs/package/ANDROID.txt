@@ -1,5 +1,5 @@
 Vib-Ribbon on Android phones and tablets
-https://github.com/CorrieDivitt/Vib-Ribbon-VR
+https://github.com/CorrieDivitt/Ultimate-Vib-Ribbon
 
 EXPERIMENTAL: the phone and tablet version is new and has been tried on few devices.
 Feedback is welcome (what phone, what worked, what did not), as an issue on the page

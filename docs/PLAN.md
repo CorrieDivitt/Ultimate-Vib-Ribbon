@@ -2,7 +2,7 @@
 
 Version 2, 2026-11-18 (session 2). Approved by the owner. Status of every task lives in the tracker: https://claude.ai/artifact/42iBUS2Aiu81652cgnRM1k
 
-Repository: https://github.com/CorrieDivitt/Vib-Ribbon-VR (this file is `docs/PLAN.md` there).
+Repository: https://github.com/CorrieDivitt/Ultimate-Vib-Ribbon (this file is `docs/PLAN.md` there).
 
 ## Goal
 
