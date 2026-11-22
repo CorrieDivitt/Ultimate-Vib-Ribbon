@@ -54,7 +54,7 @@ Options original_options() {
   o.vr_behind_seconds = 2.0;  // the original erases passed parts about 4.25 lengths back: some 2 s
   o.audio_offset_ms = 0;
   o.perf_overlay = 0;
-  o.jitter_hold = 0;  // the monitor: the original's 50 Hz
+  o.jitter_hold = 1;  // the monitor: afresh every frame (owner, session 6: shown as 1, not 50 Hz)
   o.camera = o.vr_camera = 0;
   o.ahead_seconds = 8.0, o.behind_seconds = 2.0;
   o.picture_43 = true;

@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "vib/pak.h"
+#include "vib/game_text.h"
 #include "vib/scene.h"
 
 namespace vib {
@@ -22,12 +23,18 @@ class TitleIntro {
   // The European version's menus at the title (the original's LanguageSelect): the
   // five languages, then "play / demo / back". Shown over the title's own scene.
   enum class Menu { None, Language, Mode, Start };
-  enum class Choice { None, German, English, Spanish, French, Italian, Play, Demo, Back, Started };
+  enum class Choice { None, German, English, Spanish, French, Italian, Play, Demo, Back, Exit, Started };
   struct Input {
     bool up = false, down = false, left = false, right = false, confirm = false, cancel = false;
     bool confirm_sound_playing = false;  // the confirm sound (voice 1) is still heard
   };
   void show(Menu m);
+  // Ours: a fourth item on the mode menu, below "back", that closes the game (Choice::Exit),
+  // its word built from the line font (`font`, the game archive's FONT/FONT.TMD, with the
+  // character table in `text`) at the size of the original's words. Without it the menu is
+  // the original's three items.
+  void add_exit_item(const TmdModel& font, const GameText& text, int language);
+  bool has_exit_item() const { return exit_item_; }
   // The language menu's cursor on language `language` (0 German .. 4 Italian).
   void set_language_cursor(int language);
   // Back from play: the mode menu, its lines gathering in.
@@ -107,6 +114,7 @@ class TitleIntro {
   bool busy_ = false, closing_ = false, drawn_ = false, reversed_ = false, chosen_ = false;
   int transition_frame_ = 0;
   int lang_x_ = 1, lang_y_ = 0, mode_index_ = 0;
+  bool exit_item_ = false;
   int time_ = 0;
   bool skippable_ = true, leaving_ = false, skipped_ = false;
   int leave_frames_ = 0;

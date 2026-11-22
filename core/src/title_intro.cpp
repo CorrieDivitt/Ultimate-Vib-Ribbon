@@ -1,5 +1,6 @@
 #include "vib/title_intro.h"
 #include <algorithm>
+#include <cmath>
 #include <iterator>
 #include <tuple>
 
@@ -253,6 +254,70 @@ void TitleIntro::show(Menu m) {
   chosen_ = false;
 }
 
+void TitleIntro::add_exit_item(const TmdModel& font, const GameText& text, int language) {
+  if (exit_item_) return;
+  // Our word, in the language of the menu (the font's ASCII letters; none needs an accent).
+  static const char* const kExit[5] = {"Beenden", "Exit", "Salir", "Quitter", "Esci"};
+  const char* word = kExit[language >= 0 && language < 5 ? language : 1];
+  // The original's words are about 220 high; the font's letters are 142 high at 1.
+  constexpr float kScale = 1.5f, kPitch = 90.0f * kScale;
+  TmdObject label;
+  float x = 0;
+  for (const char* c = word; *c; ++c, x += kPitch) {
+    const int object = text.object_for(static_cast<unsigned char>(*c), false);
+    if (object < 0 || object >= int(font.objects.size())) continue;
+    const TmdObject& glyph = font.objects[std::size_t(object)];
+    const auto base = std::uint16_t(label.vertices.size());
+    for (const Vec3s& v : glyph.vertices)
+      label.vertices.push_back({std::int16_t(std::lround(v.x * kScale + x)), std::int16_t(std::lround(v.y * kScale)), std::int16_t(0)});
+    for (TmdLine line : glyph.lines) {
+      line.a = std::uint16_t(line.a + base), line.b = std::uint16_t(line.b + base);
+      label.lines.push_back(line);
+    }
+  }
+  TmdModel& model = menu_models_[1];
+  if (label.lines.empty() || model.objects.size() != 3) return;  // (not the menu we know: leave it as it is)
+  // Centred on its own origin, as the other words are placed by their keys.
+  int x0 = 1 << 30, x1 = -(1 << 30), y0 = 1 << 30, y1 = -(1 << 30);
+  for (const Vec3s& v : label.vertices) x0 = std::min<int>(x0, v.x), x1 = std::max<int>(x1, v.x), y0 = std::min<int>(y0, v.y), y1 = std::max<int>(y1, v.y);
+  for (Vec3s& v : label.vertices) v.x = std::int16_t(v.x - (x0 + x1) / 2), v.y = std::int16_t(v.y - (y0 + y1) / 2);
+  const auto index = std::uint8_t(model.objects.size());
+  model.objects.push_back(std::move(label));
+  // Where it rests: below "back" (y 1440 to 1660) by the gap the original leaves between
+  // "demo" and "back" (126), its middle half its height lower again.
+  const std::int16_t rest = std::int16_t(1660 + 126 + (y1 - y0) / 2);
+  auto key_for = [&](bool selected) {
+    ModelKey k;
+    k.object = index;
+    k.has_position = true;
+    k.position = {0, rest, 0};
+    if (selected) k.has_scale = true, k.scale = {6553, 5734, 5734};  // (as "back" when it is chosen)
+    return k;
+  };
+  // The select clip: the word at rest in the original's three poses, then a fourth pose
+  // of ours with every original word at rest and "exit" chosen.
+  ModelAnimation& select = select_[1].anim;
+  if (select.frames.size() < 3) return;
+  std::vector<ModelKey> chosen = select.frames[0];
+  for (ModelKey& k : chosen) k.has_scale = false;
+  for (auto& frame : select.frames) frame.push_back(key_for(false));
+  chosen.push_back(key_for(true));
+  select.frames.push_back(std::move(chosen));
+  select_[1].clip = Clip(int(select.frames.size()), select.rate, false);
+  // The zoom between menus: the words shrink towards "demo" (y 1188); ours with them.
+  for (auto& frame : scale_[1].anim.frames) {
+    const auto centre = std::find_if(frame.begin(), frame.end(), [](const ModelKey& k) { return k.object == 1; });
+    if (centre == frame.end()) continue;
+    ModelKey k = *centre;
+    k.object = index;
+    const double f = centre->has_scale ? centre->scale.y / 4096.0 : 1.0;
+    k.has_position = true;
+    k.position = {0, std::int16_t(std::lround(centre->position.y + (rest - centre->position.y) * f)), 0};
+    frame.push_back(k);
+  }
+  exit_item_ = true;
+}
+
 void TitleIntro::close_menus() {
   // The mode menu, its lines settling from scattered.
   busy_ = true;
@@ -334,7 +399,7 @@ void TitleIntro::update_menus(const Input& in, std::vector<SceneLine>& out) {
     if (active) {
       const int from = mode_index_;
       if (in.cancel) mode_index_ = 2;  // to "back"
-      if (in.down) mode_index_ = std::min(mode_index_ + 1, 2);
+      if (in.down) mode_index_ = std::min(mode_index_ + 1, exit_item_ ? 3 : 2);  // (ours: "exit" below "back")
       if (in.up) mode_index_ = std::max(mode_index_ - 1, 0);
       sounds(mode_index_ != from && (in.up || in.down));
       if (in.confirm) choice_ = Choice(int(Choice::Play) + mode_index_);

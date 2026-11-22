@@ -2727,6 +2727,13 @@ int run(int argc, char** argv) {
       // button, which leads to the main menu.
       const Pak title_pak(iso.read("TITLE/FILES.PAK"));
       TitleIntro intro(title_pak, language);
+      // Ours (owner, session 6): "exit" below "back" on the title's mode menu, a clean way
+      // out of the game on the monitor and in the headset.
+      bool exiting = false;
+      if (words) {
+        const TmdModel font = parse_tmd(pak.view(localized(pak, "FONT/FONT.TMD", language)));
+        intro.add_exit_item(font, *words, language);
+      }
       Effects title_fx(iso, audio, "TITLE/AUDIO/TITLE");
       constexpr int kTitleVoice = 2;  // the title's voices 0, 1 and 5 play on 2, 3 and 7
       bool at_title = true, menus_shown = false;
@@ -3214,7 +3221,17 @@ int run(int argc, char** argv) {
                 intro.show(M::Start);
                 intro.leave();
                 break;
+              case C::Exit:  // the menu flies apart as for play, then the game closes
+                exiting = true;
+                intro.show(M::Start);
+                intro.leave();
+                break;
               case C::Started:
+                if (exiting) {
+                  std::printf("Exit chosen on the title's menu\n");
+                  running = false;
+                  break;
+                }
                 at_title = false;
                 for (int v : {0, 1, 5}) title_fx.stop(kTitleVoice + v);
                 title.go_to(S::Main);  // its lines scatter in, as the original's first screen

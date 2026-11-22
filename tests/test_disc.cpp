@@ -615,6 +615,34 @@ TEST(disc_sces02873_title_language_and_mode_menus) {
   t.tick(cancel);  // the cursor to "back"
   t.tick(confirm);
   CHECK(t.choice() == C::Back);
+  // Without our item, "back" is the last; with it (session 6), "exit" is below "back",
+  // its word drawn with the menu, and the menu's poses still hold every word.
+  CHECK(!t.has_exit_item());
+  {
+    const GameText words = GameText::from_exe(iso.read("MAIN_G.EXE"));
+    for (int lang = 0; lang < 5; ++lang) {
+      const Pak game(iso.read("GAME/" + language_prefix(lang) + "FILES.PAK"));
+      TitleIntro e(title_pak, lang);
+      e.add_exit_item(parse_tmd(game.view(localized(game, "FONT/FONT.TMD", lang))), words, lang);
+      CHECK(e.has_exit_item());
+      e.start(true);
+      for (int i = 0; i < 5; ++i) e.tick(none);
+      e.show(M::Mode);
+      for (int i = 0; i < 100; ++i) e.tick(none);
+      std::size_t at_rest = 0;
+      for (const Hud::Layer& l : e.layers()) at_rest += l.lines.size();
+      e.tick(cancel);  // to "back"
+      e.tick(none);
+      e.tick(down);    // on to "exit"
+      for (int i = 0; i < 3; ++i) e.tick(none);
+      std::size_t chosen = 0;
+      for (const Hud::Layer& l : e.layers()) chosen += l.lines.size();
+      CHECK(chosen == at_rest && chosen > 0);  // (every word still drawn, ours among them)
+      e.tick(down);  // (the last item: it stays)
+      e.tick(confirm);
+      CHECK(e.choice() == C::Exit);
+    }
+  }
   // Play: the menu flies apart while the confirm sound lasts, then it has started.
   t.show(M::Start);
   TitleIntro::Input playing;
@@ -1250,7 +1278,7 @@ TEST(disc_sces02873_monitor_settings_step_and_show) {
     while (p.current() != item) p.tick(down, 0.02, o, false);
   };
   // Wobble hold on the monitor: the original's 50 Hz, then every 1 to 3 frames; the headset's stays 1 to 3.
-  CHECK(p.value(I::WobbleHold, o, false) == "50 Hz" && p.label(I::WobbleHold, false) == "Wobble hold (50 Hz)");
+  CHECK(p.value(I::WobbleHold, o, false) == "50 Hz" && p.label(I::WobbleHold, false) == "Wobble hold (1)");
   go_to(I::WobbleHold);
   CHECK(p.tick(right, 0.02, o, false) == A::Changed && o.jitter_hold == 1 && o.vr_jitter_hold == 3);
   p.tick(right, 0.5, o, false), p.tick(right, 0.5, o, false);
