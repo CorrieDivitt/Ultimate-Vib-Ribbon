@@ -265,7 +265,7 @@ SaveData SaveData::from_text(const std::string& text) {
     else if (key == "picture_43") d.options.picture_43 = parse_bool(value);
     else if (key == "low_latency") d.options.low_latency = parse_bool(value);
     else if (key == "launcher_vr") d.options.launcher_vr = parse_bool(value);
-    else if (key == "difficulty" && number >= 0 && number <= 2) d.options.difficulty = int(number);
+    else if (key == "difficulty" && number >= 0 && number <= 3) d.options.difficulty = int(number);
     else if (key == "touch_style" && (number == 0 || number == 1)) d.options.touch_style = int(number);
     else if (key == "launcher_close") d.options.launcher_close = parse_bool(value);
     else if (key == "menu_zoom" && number > 0) d.options.menu_zoom = std::clamp(number, 1.0 / 36.0, 4.0);

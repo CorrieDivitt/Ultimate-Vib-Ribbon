@@ -16,6 +16,6 @@ Highlights:
 
 - An in-game options menu on every screen (Start on a gamepad, P or Tab on the keyboard), with the camera moved by the analog sticks everywhere.
 - Camera beside Vibri (the default on Windows and in VR) or the original's; Original look restores the original's settings.
-- Difficulty Easy, Normal and Hard for the disc's songs and your own music (high scores kept at Normal).
+- Difficulty Easy, Normal, Hard and Extreme (an obstacle on nearly every beat) for the disc's songs and your own music (high scores kept at Normal).
 - Scroll speed changed mid-song with L2/R2 (Page Up/Page Down on the keyboard).
 - Exit on the title menu.

@@ -336,6 +336,12 @@ CourseGenerator::Cue CourseGenerator::next_cue(std::int32_t time) {
     cue.select_period = cue.select_period / 2 * 3;
   } else if (difficulty_ == kHard) {  // (shorter windows, more)
     cue.select_period = cue.select_period / 10 * 7;
+  } else if (difficulty_ == kExtreme) {
+    // Parts 3/4 as long, so a third faster (every part alike, so none overtakes another),
+    // which lets the music's beats a little closer than the original's part length
+    // through; a window every half part, so each beat's strongest sound is found.
+    cue.period = cue.period / 4 * 3;
+    cue.select_period = cue.period / 2;
   }
   cue.period = std::max(1, cue.period);
   cue.select_period = std::max(1, cue.select_period);
@@ -346,6 +352,7 @@ CourseGenerator::Cue CourseGenerator::next_cue(std::int32_t time) {
 
 std::int32_t CourseGenerator::spacing() const {
   if (difficulty_ == kNormal || fixed_cue_period_ > 0) return 2 * pending_length_;  // (the original's)
+  if (difficulty_ == kExtreme) return pending_length_;  // (back to back)
   return difficulty_ == kEasy ? 3 * pending_length_ : pending_length_ + pending_length_ / 2;
 }
 

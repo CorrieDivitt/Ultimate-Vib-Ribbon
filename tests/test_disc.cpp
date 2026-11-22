@@ -164,11 +164,18 @@ TEST(disc_sces02873_difficulty_changes_only_how_many_obstacles) {
     };
     const auto original = parts(1, false), normal = parts(CourseGenerator::kNormal, true);
     const auto easy = parts(CourseGenerator::kEasy, true), hard = parts(CourseGenerator::kHard, true);
+    const auto extreme = parts(CourseGenerator::kExtreme, true);
     bool same = original.size() == normal.size();
     for (std::size_t i = 0; same && i < normal.size(); ++i)
       same = original[i].time == normal[i].time && original[i].value == normal[i].value && original[i].length == normal[i].length;
     CHECK(same);
-    std::printf("    song %d obstacles: easy %zu, normal %zu, hard %zu\n", song, easy.size(), normal.size(), hard.size());
+    std::printf("    song %d obstacles: easy %zu, normal %zu, hard %zu, extreme %zu\n", song, easy.size(), normal.size(), hard.size(), extreme.size());
+    CHECK(extreme.size() > hard.size());
+    // Extreme: back to back at the closest, never overlapping (a part covers its length).
+    for (std::size_t i = 1; i < extreme.size(); ++i) {
+      const std::int64_t covers = (std::int64_t(extreme[i - 1].scale) * extreme[i - 1].length) >> 16;
+      CHECK(extreme[i].time - extreme[i - 1].time > covers);
+    }
     CHECK(easy.size() < normal.size() && hard.size() > normal.size());
     CHECK(std::none_of(easy.begin(), easy.end(), [](const CourseEvent& e) { return e.value >= 4; }));
     // (Obstacles keep the original's lengths: their speeds do not change.)

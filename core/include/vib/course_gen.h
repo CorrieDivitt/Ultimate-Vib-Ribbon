@@ -123,10 +123,13 @@ class CourseGenerator {
   // Ours (task 4.17): how many obstacles the analysis lets through. 1 is the original's
   // exactly. 0, easier: selection windows half as long again, a part only 3 lengths after
   // the one before (the original: 2), and pairs come as one of their two obstacles.
-  // 2, harder: windows 7/10 as long and parts 1.5 lengths apart. Obstacles keep their
+  // 2, harder: windows 7/10 as long and parts 1.5 lengths apart. 3, extreme (owner: an
+  // obstacle on nearly every beat): parts 3/4 as long (so a third faster), windows half a
+  // part long, and parts one length apart, back to back, the closest they can be without
+  // overlapping (a part's length is the road it covers). Easy to hard keep the obstacles'
   // speeds; speed courses keep the original's rule. Set before the first block.
-  enum Difficulty { kEasy = 0, kNormal = 1, kHard = 2 };
-  void set_difficulty(int difficulty) { difficulty_ = difficulty < kEasy ? kEasy : difficulty > kHard ? kHard : difficulty; }
+  enum Difficulty { kEasy = 0, kNormal = 1, kHard = 2, kExtreme = 3 };
+  void set_difficulty(int difficulty) { difficulty_ = difficulty < kEasy ? kEasy : difficulty > kExtreme ? kExtreme : difficulty; }
   int difficulty() const { return difficulty_; }
 
   // Feeds the next block, whose first sample is at stream position `time`.

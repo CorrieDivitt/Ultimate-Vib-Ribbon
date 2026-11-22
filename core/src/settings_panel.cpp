@@ -95,9 +95,9 @@ const char* const kKeys[kLanguages] = {
     "F11 plein écran   F3 performances   Ctrl+flèches ou souris: caméra",
     "F11 schermo intero   F3 prestazioni   Ctrl+frecce o mouse: telecamera",
 };
-const char* const kDifficulties[kLanguages][3] = {
-    {"Leicht", "Normal", "Schwer"}, {"Easy", "Normal", "Hard"}, {"Fácil", "Normal", "Difícil"},
-    {"Facile", "Normale", "Difficile"}, {"Facile", "Normale", "Difficile"},
+const char* const kDifficulties[kLanguages][4] = {
+    {"Leicht", "Normal", "Schwer", "Extrem"}, {"Easy", "Normal", "Hard", "Extreme"}, {"Fácil", "Normal", "Difícil", "Extremo"},
+    {"Facile", "Normale", "Difficile", "Extrême"}, {"Facile", "Normale", "Difficile", "Estremo"},
 };
 const char* const kTouchStyles[kLanguages][2] = {
     {"Hindernisse", "PlayStation"}, {"Obstacle shapes", "PlayStation"}, {"Obstáculos", "PlayStation"},
@@ -286,7 +286,7 @@ std::string SettingsPanel::value(Item item, const Options& o, bool vr) const {
       break;
     case Item::Vsync: return on_off(o.vsync);
     case Item::LowLatency: return on_off(o.low_latency);
-    case Item::Difficulty: return to_font_text(kDifficulties[l][std::clamp(o.difficulty, 0, 2)]);
+    case Item::Difficulty: return to_font_text(kDifficulties[l][std::clamp(o.difficulty, 0, 3)]);
     case Item::TouchButtons: return to_font_text(kTouchStyles[l][o.touch_style == 1 ? 1 : 0]);
     case Item::FrameLimit:
       if (o.frame_limit <= 0) return to_font_text(kOff[l]);
@@ -412,7 +412,7 @@ bool SettingsPanel::change(Item item, int d, Options& o, bool vr) {
     case Item::TouchButtons: o.touch_style = o.touch_style == 1 ? 0 : 1; return true;
     case Item::Difficulty: {
       const int before = o.difficulty;
-      o.difficulty = std::clamp(o.difficulty + d, 0, 2);
+      o.difficulty = std::clamp(o.difficulty + d, 0, 3);
       return o.difficulty != before;
     }
     case Item::FrameLimit: {
