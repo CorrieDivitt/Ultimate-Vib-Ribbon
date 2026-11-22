@@ -57,6 +57,29 @@ Options original_options() {
   return o;
 }
 
+void copy_look(const Options& from, Options& to) {
+  to.smooth_animation = from.smooth_animation;
+  to.line_width = from.line_width, to.vr_line_width = from.vr_line_width;
+  to.vr_jitter_hold = from.vr_jitter_hold;
+  to.jitter_scale = from.jitter_scale, to.vr_jitter_scale = from.vr_jitter_scale;
+  to.vr_ahead_seconds = from.vr_ahead_seconds, to.vr_behind_seconds = from.vr_behind_seconds;
+  to.glow = from.glow;
+  to.colours = from.colours;
+  to.scroll_speed = from.scroll_speed;
+  to.score_numbers = from.score_numbers, to.timing_feedback = from.timing_feedback, to.fc_celebration = from.fc_celebration;
+  to.vr_wrap = from.vr_wrap;
+}
+
+void apply_original_look(Options& o) {
+  Options original = original_options();
+  original.glow = 0;
+  original.colours.fill(0);
+  original.scroll_speed = 1.0;
+  original.score_numbers = original.timing_feedback = original.fc_celebration = false;
+  original.vr_wrap = false;
+  copy_look(original, o);
+}
+
 std::string SaveData::to_text() const {
   std::ostringstream out;
   out << "# Vib-Ribbon VR save file. One setting per line; delete a line to get its default back.\n";
@@ -83,6 +106,9 @@ std::string SaveData::to_text() const {
   out << '\n';
   std::snprintf(buf, sizeof buf, "%.2f", options.vr_wrap_radius);
   out << "vr_wrap_radius " << buf << '\n';
+  out << "vr_classic " << (options.vr_classic ? 1 : 0) << '\n';
+  std::snprintf(buf, sizeof buf, "%.2f", options.vr_classic_size);
+  out << "vr_classic_size " << buf << '\n';
   if (!options.music_folder.empty()) out << "music_folder " << options.music_folder << '\n';  // (the rest of the line)
   std::snprintf(buf, sizeof buf, "%.3f", options.line_width);
   out << "line_width " << buf << '\n';
@@ -163,6 +189,8 @@ SaveData SaveData::from_text(const std::string& text) {
     else if (key == "fc_celebration") d.options.fc_celebration = parse_bool(value);
     else if (key == "vr_wrap") d.options.vr_wrap = parse_bool(value);
     else if (key == "vr_wrap_radius" && number > 0) d.options.vr_wrap_radius = std::clamp(number, 1.0, 10.0);
+    else if (key == "vr_classic") d.options.vr_classic = number != 0;
+    else if (key == "vr_classic_size" && number > 0) d.options.vr_classic_size = std::clamp(number, 1.5, 8.0);
     else if (key == "scroll_speed" && number > 0) d.options.scroll_speed = clamp_scroll_speed(number);
     else if (key == "line_width" && number > 0) d.options.line_width = number;
     else if (key == "vr_line_width" && number > 0) d.options.vr_line_width = number;

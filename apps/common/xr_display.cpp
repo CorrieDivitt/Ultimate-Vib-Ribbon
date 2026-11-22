@@ -276,6 +276,7 @@ class XrDisplay::Impl {
         recentre_ = true;
       }
       if (recentre_) place_scene(state.predictedDisplayTime);
+      eye_fov_y_ = views[0].fov.angleUp - views[0].fov.angleDown;
       if ((view_state.viewStateFlags & XR_VIEW_STATE_POSITION_VALID_BIT) &&
           (view_state.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT)) {
         render(layers, line_width, views, projected);
@@ -1149,6 +1150,9 @@ class XrDisplay::Impl {
   bool presence_ = false, refresh_rates_ = false, passthrough_ext_ = false, time_conversion_ = false;
   double lead_ms_ = 0;  // predicted display time minus the start of draw(), smoothed
   int lead_frames_ = 0;
+ public:
+  float eye_fov_y_ = 0;  // (an eye's vertical field of view, last frame)
+ private:
   [[maybe_unused]] PFN_xrVoidFunction convert_time_ = nullptr;  // (this instance's clock conversion)
   XrAction haptic_left_ = XR_NULL_HANDLE, haptic_right_ = XR_NULL_HANDLE;
   XrPassthroughFB passthrough_ = XR_NULL_HANDLE;
@@ -1202,6 +1206,7 @@ void XrDisplay::set_input_mode(InputMode mode) { impl_->set_mode(mode); }
 bool XrDisplay::passthrough_available() const { return impl_->passthrough_available(); }
 void XrDisplay::set_passthrough(bool on) { impl_->set_passthrough(on); }
 double XrDisplay::display_lead_ms() const { return impl_->display_lead_ms(); }
+float XrDisplay::eye_fov_y() const { return impl_->eye_fov_y_; }
 void XrDisplay::rumble(float seconds, float amplitude) { impl_->rumble(seconds, amplitude); }
 Display::ControllerSticks XrDisplay::controller_sticks() const { return impl_->sticks(); }
 FrameTiming XrDisplay::timing() const { return impl_->timing(); }

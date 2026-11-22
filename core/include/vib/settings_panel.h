@@ -11,6 +11,7 @@
 
 #include <cstdint>
 #include <string>
+#include <optional>
 #include <vector>
 
 #include "vib/game_text.h"
@@ -69,6 +70,10 @@ class SettingsPanel {
     PictureCalibration, // an action: silent flashes to set Picture timing by
     Glow,             // glow: off, faint, soft, medium, strong
     RefreshRate,      // vr_refresh_hz: Auto (the highest up to 120 Hz) or one the headset offers
+    ClassicScreen,    // vr_classic: the game as on a monitor, on a screen in the headset
+    ClassicSize,      // vr_classic_size: that screen's width, 1.5 to 8 m
+    OriginalLook,     // an action: every look setting to the original's (kept to restore)
+    RestoreLook,      // an action: the look settings from before Original look
   };
   enum class Action { None, Moved, Changed, Close, Recentre, QuitSong, LeaveTop, Calibrate, CalibratePicture };
 
@@ -201,6 +206,7 @@ class SettingsPanel {
   bool wraps_ = true;
   std::vector<int> refresh_rates_;
   bool passthrough_ = false;
+  std::optional<Options> look_backup_;  // (this run's, from Original look)
   int repeat_dir_ = 0;
   double repeat_timer_ = 0;
   int scroll_dir_ = 0;  // up or down held: -1 or 1 (the list scrolls while held)

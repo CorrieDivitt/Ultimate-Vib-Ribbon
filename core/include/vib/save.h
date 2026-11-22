@@ -66,6 +66,10 @@ struct Options {
   // round the other, both fading out behind the player.
   bool vr_wrap = false;
   double vr_wrap_radius = 3.0;
+  // Ours, headset only (task 4.2): the game exactly as on a monitor (the original's
+  // cameras and HUD), shown on a flat 4:3 screen this many metres wide, 3 m in front.
+  bool vr_classic = false;
+  double vr_classic_size = 3.0;
   // Ours: custom colours, a palette choice per slot (vib/colours.h); all 0 is the
   // original's white lines on black.
   std::array<std::uint8_t, kColourSlotCount> colours{};
@@ -86,6 +90,13 @@ struct Options {
 // player can find the original's look again; they are not our defaults. Settings
 // with no counterpart in the original (zoom, view angle, the pause's resume) keep ours.
 Options original_options();
+
+// The look settings (lines, wobble, smoothing, horizon, glow, colours, scroll speed and
+// our display extras) set to the original's in one go (Visual > Original look, for
+// comparing with the original), and copied from one set of options to another (its
+// Restore). Timing, sound, language, controls and the like are left alone.
+void apply_original_look(Options& o);
+void copy_look(const Options& from, Options& to);
 
 struct SaveData {
   // Three per course, best first. Speed courses keep seconds: fewer is better.

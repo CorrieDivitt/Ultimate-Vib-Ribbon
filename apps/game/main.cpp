@@ -389,7 +389,8 @@ struct Args {
   bool fixed = false;
   bool smooth = false;
   std::string music_file;     // one of the player's own MP3 or FLAC files, played as a one-track audio CD
-  bool vr = false;            // in a headset (OpenXR)
+  bool vr = false;            // drawn for a headset: our staging round Vibri (off with the classic screen)
+  bool headset = false;       // in a headset at all (OpenXR); `vr` is this unless the classic screen is on
   float vr_scale = 0.001f;    // metres per unit of the original's world in the headset
   double last_seconds = 0;  // > 0: start each song this long before its end (testing)
   std::uint32_t seed = 0;
@@ -402,7 +403,7 @@ struct Args {
 enum class Result { Clear, GameOver, Abort, Quit };  // Abort: back to the menus; Quit: the window closed
 
 struct Session {
-  const Args& opt;
+  Args& opt;  // (opt.vr follows the Classic screen setting: see apply_settings)
   SaveData& save;
   bool fixed;
   DiscImage& disc;
@@ -430,7 +431,8 @@ struct Session {
   // a worker thread while that frame is drawn again at the headset's rate (with_frames).
   std::vector<std::vector<vibr::LineInstance>> held_lines;
   std::vector<vibr::Layer> held_layers;
-  bool holding = false;  // the headset controllers' right stick pushed sideways (scroll speed), until it comes back
+  bool holding = false;
+  std::vector<vibr::LineInstance> classic_lines;  // the classic screen's picture (headset)  // the headset controllers' right stick pushed sideways (scroll speed), until it comes back
   bool demo = false;  // the title's demo: the game plays itself (missing now and then), any button ends it
   // The player's own music, played as a one-track audio CD: its course follows the
   // original's audio-CD rules (the medley script, placed by the disc's key).
@@ -605,11 +607,14 @@ void change_line_width(Session& s, bool thicker) {
 // Puts the saved options into effect after the settings panel changed one.
 void apply_settings(Session& s) {
   const Options& o = s.save.options;
+  // The classic screen (task 4.2): the game drawn exactly as on a monitor, then shown on a
+  // screen in the headset (draw_frame), so everything decided by `vr` follows the monitor.
+  if (s.opt.headset) s.opt.vr = !o.vr_classic;
   s.line_width = s.opt.vr ? o.vr_line_width : o.line_width;
   s.audio.adjust_offset(o.audio_offset_ms - s.audio.offset_ms());
   Clip::set_smooth(s.opt.smooth || o.smooth_animation || s.opt.vr);  // always smooth in a headset
   s.audio.set_volumes(s.opt.music.value_or(o.music_volume), s.opt.sfx.value_or(o.effects_volume));
-  if (s.opt.vr) s.renderer.set_refresh_rate(float(o.vr_refresh_hz));  // (asks only when it changed)
+  if (s.opt.headset) s.renderer.set_refresh_rate(float(o.vr_refresh_hz));  // (asks only when it changed)
 }
 
 // The settings in play's pause, and below the Options screen (which has the
@@ -620,9 +625,10 @@ void apply_settings(Session& s) {
 void setup_panel(SettingsPanel& p, bool vr, bool pause) {
   using I = SettingsPanel::Item;
   if (vr)
-    p.set_group(I::Visual, {I::WobbleSize, I::WobbleHold, I::LineWidth, I::Glow, I::Zoom, I::ViewAngle, I::SeeAhead, I::SeeBehind, I::RefreshRate, I::Performance});
+    p.set_group(I::Visual, {I::OriginalLook, I::RestoreLook, I::WobbleSize, I::WobbleHold, I::LineWidth, I::Glow, I::Zoom, I::ViewAngle,
+                            I::SeeAhead, I::SeeBehind, I::ClassicScreen, I::ClassicSize, I::RefreshRate, I::Performance});
   else
-    p.set_group(I::Visual, {I::WobbleSize, I::Smooth, I::LineWidth, I::Glow, I::Performance});
+    p.set_group(I::Visual, {I::OriginalLook, I::RestoreLook, I::WobbleSize, I::Smooth, I::LineWidth, I::Glow, I::Performance});
   if (vr)
     p.set_group(I::Modifiers, {I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::WrapCourse, I::WrapSize, I::ScoreNumbers, I::FixedCourses});
   else
@@ -662,12 +668,66 @@ void to_instances(const Session& s, const std::vector<SceneLine>& in, std::uint3
   }
 }
 
+// The classic screen (headset, task 4.2): each layer's lines through the camera and the
+// 4:3 picture a monitor would use, cut to the picture's edges, laid on a flat screen
+// `vr_classic_size` m wide, 3 m ahead at eye height, with a dim frame round it. Replaces
+// `layers` with that one room-fixed layer; returns how much thinner a line must be drawn
+// so that it is as wide on the screen as on a monitor's 288 lines of that height.
+float classic_screen(Session& s, std::vector<vibr::Layer>& layers) {
+  constexpr float kDistance = 3.0f, kAspect = 4.0f / 3.0f;
+  const float w = float(s.save.options.vr_classic_size), h = w / kAspect;
+  std::vector<vibr::LineInstance>& out = s.classic_lines;
+  out.clear();
+  struct P4 {
+    float x, y, z, w;
+  };
+  auto apply = [](const vibr::Mat4& m, const float* p) {
+    P4 r{};
+    float* o = &r.x;
+    for (int row = 0; row < 4; ++row) o[row] = m.m[row] * p[0] + m.m[4 + row] * p[1] + m.m[8 + row] * p[2] + m.m[12 + row];
+    return r;
+  };
+  for (const vibr::Layer& layer : layers) {
+    if (!layer.lines || layer.glow > 0) continue;
+    const vibr::Mat4 m = vibr::mul(vibr::perspective(layer.fov_y, kAspect, 10.0f, 100000.0f), layer.view);
+    for (const vibr::LineInstance& l : *layer.lines) {
+      P4 a = apply(m, l.a), b = apply(m, l.b);
+      // Cut to the picture (Vulkan's clip space: -w <= x, y <= w, 0 <= z <= w).
+      float t0 = 0, t1 = 1;
+      bool keep = true;
+      auto plane = [&](float fa, float fb) {
+        if (fa < 0 && fb < 0) keep = false;
+        else if (fa < 0) t0 = std::max(t0, fa / (fa - fb));
+        else if (fb < 0) t1 = std::min(t1, fa / (fa - fb));
+      };
+      plane(a.w + a.x, b.w + b.x), plane(a.w - a.x, b.w - b.x), plane(a.w + a.y, b.w + b.y), plane(a.w - a.y, b.w - b.y);
+      plane(a.z, b.z), plane(a.w - a.z, b.w - b.z);
+      if (!keep || t0 >= t1) continue;
+      auto at = [&](float t) {
+        const P4 p{a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t, a.w + (b.w - a.w) * t};
+        return P4{p.x / p.w * w * 0.5f, -p.y / p.w * h * 0.5f, -kDistance, 1};  // (clip y is down; the room's is up)
+      };
+      const P4 pa = at(t0), pb = at(t1);
+      out.push_back({{pa.x, pa.y, pa.z}, {pb.x, pb.y, pb.z}, {l.colour[0], l.colour[1], l.colour[2], l.colour[3]}});
+    }
+  }
+  // The screen's edge, dim, a little outside the picture.
+  const float fw = w * 0.5f + 0.02f, fh = h * 0.5f + 0.02f, g = 0.25f;
+  const float corners[5][2] = {{-fw, -fh}, {fw, -fh}, {fw, fh}, {-fw, fh}, {-fw, -fh}};
+  for (int i = 0; i < 4; ++i)
+    out.push_back({{corners[i][0], corners[i][1], -kDistance}, {corners[i + 1][0], corners[i + 1][1], -kDistance}, {g, g, g, 1.0f}});
+  layers.assign(1, vibr::Layer{&out, vibr::Mat4{}, 1.0f, 1.0f});  // (anchored: metres)
+  const float fov = s.renderer.eye_fov_y();
+  const float seen = 2.0f * std::atan(h * 0.5f / kDistance);  // the screen's height as an angle
+  return fov > 0 ? std::clamp(seen / fov, 0.05f, 1.0f) : 0.4f;
+}
+
 // One frame through the display, measured for the performance overlay: when it is
 // on, its layer goes over the others (in a headset fixed in the room up and to the
 // right of the recentred view, on the monitor at the top left). `update_ms`, `build_ms`: the game's own work for
 // this frame before drawing (rules, sound and input; making the lines).
 void draw_frame(Session& s, std::vector<vibr::Layer>& layers, double update_ms, double build_ms) {
-  if (s.opt.vr && !s.holding) {  // (kept for with_frames: a copy of this frame's own layers)
+  if (s.opt.headset && !s.holding) {  // (kept for with_frames: a copy of this frame's own layers)
     s.held_lines.resize(layers.size());
     s.held_layers = layers;
     for (std::size_t i = 0; i < layers.size(); ++i)
@@ -686,13 +746,13 @@ void draw_frame(Session& s, std::vector<vibr::Layer>& layers, double update_ms, 
         s.perf_print_ns = now;
         std::string line = "Perf";
         for (const std::string& r : s.perf_text) line += "  |  " + r;
-        if (s.opt.vr) line += "  |  display lead " + std::to_string(int(std::lround(s.renderer.display_lead_ms()))) + " ms";
+        if (s.opt.headset) line += "  |  display lead " + std::to_string(int(std::lround(s.renderer.display_lead_ms()))) + " ms";
         std::printf("%s\n", line.c_str());
       }
     }
     const FrameStats::Summary sum = s.stats.summary(now);
     int w = 4, h = 3;
-    if (!s.opt.vr) SDL_GetWindowSizeInPixels(s.window, &w, &h);
+    if (!s.opt.headset) SDL_GetWindowSizeInPixels(s.window, &w, &h);  // (the classic screen is 4:3)
     const Hud::Layer pl = s.perf->draw(s.perf_text, level >= 2 ? s.stats.intervals(now) : std::vector<double>{}, sum.target_ms, s.opt.vr,
                                        float(w) / float(std::max(1, h)));
     s.perf_lines.clear();
@@ -704,6 +764,10 @@ void draw_frame(Session& s, std::vector<vibr::Layer>& layers, double update_ms, 
     layers.push_back({&s.perf_lines, vibr::look_at({v.eye.x, v.eye.y, v.eye.z}, {v.target.x, v.target.y, v.target.z}, {0, -1, 0}), v.fov_y,
                       s.opt.vr ? PerfOverlay::kAnchorMetresPerUnit : 0.0f});
   }
+  // The classic screen (task 4.2): every layer as the monitor shows it, through a 4:3
+  // picture, put on a flat screen in the room (fixed where the view was last recentred).
+  float width_scale = 1.0f;
+  if (s.opt.headset && !s.opt.vr) width_scale = classic_screen(s, layers);
   int lines = 0;
   for (const vibr::Layer& l : layers) lines += l.lines ? int(l.lines->size()) : 0;
   const double build_more = double(SDL_GetTicksNS() - now) * 1e-6;  // (the overlay's own lines count as building)
@@ -733,7 +797,7 @@ void draw_frame(Session& s, std::vector<vibr::Layer>& layers, double update_ms, 
   const Rgb bg = background_colour(s.save.options.colours);  // (custom colours: the background, on every screen)
   s.renderer.set_background(bg.r / 255.0f, bg.g / 255.0f, bg.b / 255.0f);
   s.renderer.set_passthrough(s.save.options.colours[std::size_t(kColourBackground)] == kBackgroundPassthrough);
-  s.renderer.draw(layers, float(s.line_width * std::max(1, s.renderer.height()) / 288.0));
+  s.renderer.draw(layers, float(s.line_width * std::max(1, s.renderer.height()) / 288.0) * width_scale);
   const vibr::FrameTiming t = s.renderer.timing();
   FrameSample f;
   f.ns = SDL_GetTicksNS();
@@ -1246,7 +1310,7 @@ bool run_calibration(Session& s, SettingsPanel& panel, bool picture) {
 // again at the headset's rate. On the monitor it simply runs. Events wait in SDL's queue.
 template <typename F>
 auto with_frames(Session& s, F work) -> decltype(work()) {
-  if (!s.opt.vr || s.held_layers.empty()) return work();
+  if (!s.opt.headset || s.held_layers.empty()) return work();
   auto job = std::async(std::launch::async, std::move(work));
   s.holding = true;
   while (job.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
@@ -1608,7 +1672,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     const std::uint64_t now_ns = SDL_GetTicksNS();
     const double dt = double(now_ns - last_ns) * 1e-9;
     zoom_or_circle_with_stick(s, dt, s.save.options.vr_zoom);
-    if (s.opt.vr && !s.demo) {  // Touch: the right stick flicked right or left, the scroll speed (as a gamepad's R2 and L2)
+    if (s.opt.headset && !s.demo) {  // Touch: the right stick flicked right or left, the scroll speed (as a gamepad's R2 and L2)
       const vibr::Display::ControllerSticks c = s.renderer.controller_sticks();
       if (!s.stick_flicked && std::abs(c.right_x) > 0.7f && std::abs(c.right_x) > 2.0f * std::abs(c.right_y)) {
         s.stick_flicked = true;
@@ -1631,7 +1695,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
       s.audio.play_music({});
       for (auto& [id, pad] : s.pads) SDL_RumbleGamepad(pad, 0, 0, 0);
       s.renderer.rumble(0.0f, 0.0f);
-      setup_panel(*s.panel, s.opt.vr, true);
+      setup_panel(*s.panel, s.opt.headset, true);
       s.panel->set_wraps(true);
       s.panel->set_active(true);
       s.panel->set_place(0.6f, 14, s.opt.vr ? 0.25f : 1.0f);  // in a headset 1 m away, in front of Vibri
@@ -2067,6 +2131,7 @@ int run(int argc, char** argv) {
   // draw (SDL would otherwise stop the loop inside its event polling).
   SDL_SetHint(SDL_HINT_ANDROID_BLOCK_ON_PAUSE, "0");
 #endif
+  opt.headset = opt.vr;
   if (opt.cue.empty()) {
     std::fputs("usage: vibplay <disc.cue> [bronze|silver|gold | --song 1-6] [--fixed] [--smooth] [--seed N]\n"
                "               [--music file.mp3|file.flac] [--vr] [--vr-scale metres] [--last seconds] [--offset ms] [--sfx 0-1] [--music 0-1] [--width x]\n",
@@ -2131,6 +2196,7 @@ int run(int argc, char** argv) {
       display = std::make_unique<vibr::Renderer>(window);
     }
     vibr::Display& renderer = *display;
+    if (opt.headset) opt.vr = !save.options.vr_classic;  // (the classic screen: drawn as on a monitor)
     vibg::Audio audio(opt.offset_ms.value_or(save.options.audio_offset_ms));
     audio.set_volumes(opt.music.value_or(save.options.music_volume), opt.sfx.value_or(save.options.effects_volume));
     Effects fx(iso, audio);
@@ -2529,7 +2595,7 @@ int run(int argc, char** argv) {
           toggle_settings = false;
           in_settings = !in_settings;
           if (in_settings) {
-            setup_panel(panel, opt.vr, false);
+            setup_panel(panel, opt.headset, false);
             panel.set_wraps(true);
             panel.set_active(true);
             preview.start(s);

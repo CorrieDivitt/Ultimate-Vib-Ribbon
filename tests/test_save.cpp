@@ -64,6 +64,14 @@ TEST(save_text_round_trips_and_tolerates_old_files) {
   CHECK(back.options.fc_celebration && !SaveData().options.fc_celebration);
   CHECK(back.options.vr_wrap && back.options.vr_wrap_radius == 4.5 && !SaveData().options.vr_wrap && SaveData().options.vr_wrap_radius == 3.0);
   CHECK(SaveData::from_text("vr_wrap_radius 50\n").options.vr_wrap_radius == 10.0);
+  {  // the classic screen (headset): off by default, 3 m wide, 1.5 to 8 m
+    SaveData c;
+    c.options.vr_classic = true;
+    c.options.vr_classic_size = 4.5;
+    const SaveData cb = SaveData::from_text(c.to_text());
+    CHECK(cb.options.vr_classic && cb.options.vr_classic_size == 4.5 && !SaveData().options.vr_classic && SaveData().options.vr_classic_size == 3.0);
+    CHECK(SaveData::from_text("vr_classic_size 20\n").options.vr_classic_size == 8.0);
+  }
   CHECK(back.options.glow == 3 && SaveData().options.glow == 0 && SaveData::from_text("glow 9\n").options.glow == 0);
   CHECK(back.options.picture_offset_ms == -45 && SaveData().options.picture_offset_ms == 0 &&
         SaveData::from_text("picture_offset_ms 900\n").options.picture_offset_ms == 300.0);
@@ -78,4 +86,17 @@ TEST(save_text_round_trips_and_tolerates_old_files) {
   const SaveData partial = SaveData::from_text("vibration 0\r\nsomething_new 5\r\nhigh_scores.gold 1 2\r\n");
   CHECK(!partial.options.vibration && partial.options.line_width == 0.3);
   CHECK((partial.high_scores[int(Course::Gold)] == std::array<int, 3>{5500, 3500, 1500}));
+}
+
+TEST(original_look_sets_the_look_and_leaves_the_rest) {
+  Options o;
+  o.glow = 3, o.colours[2] = 4, o.scroll_speed = 2.5, o.vr_wrap = true, o.timing_feedback = true, o.vr_line_width = 0.2;
+  o.audio_offset_ms = 35, o.picture_offset_ms = -60, o.language = 3, o.vr_zoom = 2.0;
+  const Options before = o;
+  apply_original_look(o);
+  CHECK(o.glow == 0 && o.colours[2] == 0 && o.scroll_speed == 1.0 && !o.vr_wrap && !o.timing_feedback && !o.smooth_animation);
+  CHECK(o.line_width == 1.0 && o.vr_line_width == 1.0 && o.vr_jitter_hold == 1 && o.vr_ahead_seconds == 8.0 && o.vr_behind_seconds == 2.0);
+  CHECK(o.audio_offset_ms == 35 && o.picture_offset_ms == -60 && o.language == 3 && o.vr_zoom == 2.0);  // (not the look)
+  copy_look(before, o);
+  CHECK(o.glow == 3 && o.colours[2] == 4 && o.scroll_speed == 2.5 && o.vr_wrap && o.timing_feedback && o.vr_line_width == 0.2);
 }

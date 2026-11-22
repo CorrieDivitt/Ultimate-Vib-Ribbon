@@ -126,6 +126,8 @@ class Display {
   // A headset: how far ahead of the start of a draw() its frame reaches the eyes (the
   // runtime's predicted display time), smoothed; 0 when it cannot be told (task 4.5).
   virtual double display_lead_ms() const { return 0.0; }
+  // A headset: an eye's vertical field of view (radians), from the last frame; 0 if unknown.
+  virtual float eye_fov_y() const { return 0.0f; }
   // A headset's own controllers: buzz both for `seconds` at `amplitude` (0-1); 0 stops.
   virtual void rumble(float /*seconds*/, float /*amplitude*/) {}
   virtual void set_passthrough(bool) {}

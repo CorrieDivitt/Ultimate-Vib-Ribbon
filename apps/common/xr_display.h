@@ -43,6 +43,7 @@ class XrDisplay : public Display {
   ControllerSticks controller_sticks() const override;
   bool passthrough_available() const override;
   double display_lead_ms() const override;
+  float eye_fov_y() const override;
   void rumble(float seconds, float amplitude) override;
   void set_passthrough(bool on) override;
 

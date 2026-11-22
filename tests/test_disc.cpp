@@ -956,6 +956,27 @@ TEST(disc_sces02873_settings_panel) {
         CHECK(p.value(I::RefreshRate, rr, true) == "90 Hz");
         p.set_refresh_rates({});
       }
+      // Classic screen (headset): off, then on; its size in half metres, 1.5 to 8 m.
+      {
+        Options cs;
+        CHECK(p.label(I::ClassicScreen) == "Classic screen" && p.value(I::ClassicScreen, cs, true) == "Off");
+        CHECK(p.label(I::ClassicSize) == "Screen size" && p.value(I::ClassicSize, cs, true) == "3.0 m");
+        p.set_items({I::ClassicScreen, I::ClassicSize});
+        SettingsPanel::Input yes, down1, more;
+        yes.confirm = true, down1.down = true, more.right = true;
+        CHECK(p.tick(yes, 0.0, cs, true) == A::Changed && cs.vr_classic && p.value(I::ClassicScreen, cs, true) == "On");
+        p.tick(down1, 0.0, cs, true);
+        CHECK(p.tick(more, 0.0, cs, true) == A::Changed && cs.vr_classic_size == 3.5);
+        // Original look, then Restore my look (A only); Restore does nothing before it.
+        p.set_items({I::OriginalLook, I::RestoreLook});
+        cs.glow = 2, cs.colours[0] = 3;
+        CHECK(p.value(I::RestoreLook, cs, true) == "-");
+        CHECK(p.tick(more, 0.0, cs, true) == A::None && cs.glow == 2);  // (left or right: nothing)
+        CHECK(p.tick(yes, 0.0, cs, true) == A::Changed && cs.glow == 0 && cs.colours[0] == 0 && p.value(I::RestoreLook, cs, true).empty());
+        p.tick(down1, 0.0, cs, true);
+        CHECK(p.tick(yes, 0.0, cs, true) == A::Changed && cs.glow == 2 && cs.colours[0] == 3);
+        CHECK(p.tick(yes, 0.0, cs, true) == A::None);  // (nothing more to restore)
+      }
       // Glow: off (the original) to strong, five levels, stopping at the ends.
       CHECK(p.label(I::Glow) == "Glow (Off)" && p.value(I::Glow, ca, true) == "Off");
       p.set_items({I::Glow});
@@ -1176,7 +1197,7 @@ TEST(disc_sces02873_settings_labels_with_defaults_fit_beside_their_values) {
                               I::ResumeStyle, I::Performance, I::ScoreNumbers, I::FixedCourses, I::EffectsVolume, I::ScrollSpeed, I::TimingFeedback, I::FcCelebration, I::WrapCourse, I::WrapSize, I::Visual, I::Modifiers, I::CustomColours, I::Back,
                               I::ColourRoad, I::ColourBlock, I::ColourPit, I::ColourLoop, I::ColourWave, I::ColourBlockPit, I::ColourBlockLoop,
                               I::ColourBlockWave, I::ColourPitLoop, I::ColourPitWave, I::ColourLoopWave, I::ColourAngel, I::ColourRabbit,
-                              I::ColourFrog, I::ColourWorm, I::ColourBackground, I::ColourMenu, I::ResetColours, I::Calibration, I::SoundCalibration, I::PictureTiming, I::PictureCalibration, I::Glow, I::RefreshRate, I::Continue};
+                              I::ColourFrog, I::ColourWorm, I::ColourBackground, I::ColourMenu, I::ResetColours, I::Calibration, I::SoundCalibration, I::PictureTiming, I::PictureCalibration, I::Glow, I::RefreshRate, I::ClassicScreen, I::ClassicSize, I::OriginalLook, I::RestoreLook, I::Continue};
   Options longest;
   longest.scroll_speed = 9.75;
   longest.vr_ahead_seconds = longest.vr_behind_seconds = kWholeSongSeconds;
