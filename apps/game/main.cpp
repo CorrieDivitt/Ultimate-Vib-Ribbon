@@ -584,16 +584,16 @@ Vec3f scaled_jitter(Vec3f p, Vec3f jitter, double scale) {
 // D-pad left or right in play: how far the lines wobble, a tenth of the original's
 // at a time, from 0 (not at all) to 2; saved for the display in use, with the click.
 void change_jitter_scale(Session& s, bool more) {
-  double& scale = s.opt.vr ? s.save.options.vr_jitter_scale : s.save.options.jitter_scale;
+  double& scale = s.opt.headset ? s.save.options.vr_jitter_scale : s.save.options.jitter_scale;
   scale = std::clamp(std::round(scale * 10.0 + (more ? 1.0 : -1.0)) / 10.0, 0.0, 2.0);
   s.fx.number(1, 90, 5);
-  std::printf("%swobble %.1f (saved)\n", s.opt.vr ? "headset " : "", scale);
+  std::printf("%swobble %.1f (saved)\n", s.opt.headset ? "headset " : "", scale);
 }
 
 // Thicker or thinner lines, saved for the display in use. In a headset each step is
 // 0.005 (owner), with the confirm click so it can be heard without a console.
 void change_line_width(Session& s, bool thicker) {
-  if (s.opt.vr) {
+  if (s.opt.headset) {
     s.line_width = std::clamp(std::round((s.line_width + (thicker ? kHeadsetLineStep : -kHeadsetLineStep)) * 1000.0) / 1000.0, kHeadsetLineStep, 1.0);
     s.save.options.vr_line_width = s.line_width;
     s.fx.number(1, 90, 5);
@@ -601,7 +601,7 @@ void change_line_width(Session& s, bool thicker) {
     s.line_width = std::clamp(s.line_width + (thicker ? 0.125 : -0.125), 0.125, 4.0);
     s.save.options.line_width = s.line_width;
   }
-  std::printf("%sline width %.3f (saved)\n", s.opt.vr ? "headset " : "", s.line_width);
+  std::printf("%sline width %.3f (saved)\n", s.opt.headset ? "headset " : "", s.line_width);
 }
 
 // Puts the saved options into effect after the settings panel changed one.
@@ -610,7 +610,8 @@ void apply_settings(Session& s) {
   // The classic screen (task 4.2): the game drawn exactly as on a monitor, then shown on a
   // screen in the headset (draw_frame), so everything decided by `vr` follows the monitor.
   if (s.opt.headset) s.opt.vr = !o.vr_classic;
-  s.line_width = s.opt.vr ? o.vr_line_width : o.line_width;
+  // (The headset's line width and wobble on the classic screen too: owner, session 5.)
+  s.line_width = s.opt.headset ? o.vr_line_width : o.line_width;
   s.audio.adjust_offset(o.audio_offset_ms - s.audio.offset_ms());
   Clip::set_smooth(s.opt.smooth || o.smooth_animation || s.opt.headset);  // always smooth in a headset (the classic screen too: owner)
   s.audio.set_volumes(s.opt.music.value_or(o.music_volume), s.opt.sfx.value_or(o.effects_volume));
@@ -655,7 +656,7 @@ void to_instances(const Session& s, const std::vector<SceneLine>& in, std::uint3
   const Options& o = s.save.options;
   for (const SceneLine& l : in) {
     Vec3f a, b;
-    if (s.opt.vr) {
+    if (s.opt.headset) {
       const auto frame = display_frame / std::uint32_t(o.vr_jitter_hold);
       a = headset_jitter(l.a, l.jitter_a, l.vertex_a, l.shake_a * float(o.vr_jitter_scale), frame);
       b = headset_jitter(l.b, l.jitter_b, l.vertex_b, l.shake_b * float(o.vr_jitter_scale), frame);
@@ -671,8 +672,8 @@ void to_instances(const Session& s, const std::vector<SceneLine>& in, std::uint3
 // The classic screen (headset, task 4.2): each layer's lines through the camera and the
 // 4:3 picture a monitor would use, cut to the picture's edges, laid on a flat screen
 // `vr_classic_size` m wide, 3 m ahead at eye height, with a dim frame round it. Replaces
-// `layers` with that one room-fixed layer; returns how much thinner a line must be drawn
-// so that it is as wide on the screen as on a monitor's 288 lines of that height.
+// `layers` with that one room-fixed layer; returns the line width's factor (1: the
+// headset's own Line width, as everywhere else in the headset).
 float classic_screen(Session& s, std::vector<vibr::Layer>& layers) {
   constexpr float kDistance = 3.0f, kAspect = 4.0f / 3.0f;
   const float w = float(s.save.options.vr_classic_size), h = w / kAspect;
@@ -717,9 +718,9 @@ float classic_screen(Session& s, std::vector<vibr::Layer>& layers) {
   for (int i = 0; i < 4; ++i)
     out.push_back({{corners[i][0], corners[i][1], -kDistance}, {corners[i + 1][0], corners[i + 1][1], -kDistance}, {g, g, g, 1.0f}});
   layers.assign(1, vibr::Layer{&out, vibr::Mat4{}, 1.0f, 1.0f});  // (anchored: metres)
-  const float fov = s.renderer.eye_fov_y();
-  const float seen = 2.0f * std::atan(h * 0.5f / kDistance);  // the screen's height as an angle
-  return fov > 0 ? std::clamp(seen / fov, 0.05f, 1.0f) : 0.4f;
+  // Lines as thick as anywhere else in the headset: the headset's own Line width (owner,
+  // session 5: 0.05 there, not the monitor's width scaled to the screen).
+  return 1.0f;
 }
 
 // One frame through the display, measured for the performance overlay: when it is
@@ -1706,7 +1707,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
     pause = false;
     if (paused) {
       held_directions(s, pin);
-      const SettingsPanel::Action act = s.panel->tick(pin, dt, s.save.options, s.opt.vr);
+      const SettingsPanel::Action act = s.panel->tick(pin, dt, s.save.options, s.opt.headset);
       pin = {};
       panel_sound(s, act);
       switch (act) {
@@ -1897,7 +1898,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
       dst.clear();
       for (const SceneLine& l : in) {
         Vec3f a = l.a, b = l.b;
-        if (s.opt.vr) {  // jittered afresh every headset frame
+        if (s.opt.headset) {  // jittered afresh every headset frame (the classic screen too)
           const float k = float(s.save.options.vr_jitter_scale);
           a = headset_jitter(l.a, l.jitter_a, l.vertex_a, l.shake_a * k, display_frame / std::uint32_t(s.save.options.vr_jitter_hold));
           b = headset_jitter(l.b, l.jitter_b, l.vertex_b, l.shake_b * k, display_frame / std::uint32_t(s.save.options.vr_jitter_hold));
@@ -2028,7 +2029,7 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
       }
     }
     if (paused || going == Going::Counting) {  // the settings, or the count-in's number, over everything
-      panel_layer = paused ? s.panel->draw(s.save.options, s.opt.vr, f.jitter_seed)
+      panel_layer = paused ? s.panel->draw(s.save.options, s.opt.headset, f.jitter_seed)
                            : s.panel->draw_big(std::to_string(3 - std::min(2, int(going_t / kCountStep))), f.jitter_seed);
       convert(panel_layer.lines, panel_lines);
       layers.push_back({&panel_lines, matrix(panel_layer.view), panel_layer.view.fov_y});
@@ -2687,7 +2688,7 @@ int run(int argc, char** argv) {
             pi.up = in.up, pi.down = in.down, pi.left = in.left, pi.right = in.right;
             pi.confirm = in.confirm, pi.cancel = in.cancel;
             held_directions(s, pi);
-            const SettingsPanel::Action act = panel.tick(pi, 1.0 / TitleScreens::kFrameRate, save.options, opt.vr);
+            const SettingsPanel::Action act = panel.tick(pi, 1.0 / TitleScreens::kFrameRate, save.options, opt.headset);
             panel_sound(s, act);
             if (act == SettingsPanel::Action::Changed) apply_settings(s);
             if (act == SettingsPanel::Action::Recentre) renderer.recentre();
@@ -3127,7 +3128,7 @@ int run(int argc, char** argv) {
           if (opt.vr && save.options.vr_angle >= 0) panel.set_columns(150.0f, 3050.0f);
           else if (opt.vr) panel.set_columns(-3050.0f, -150.0f);
           else panel.set_columns(-3000.0f, -100.0f);
-          const Hud::Layer pl = panel.draw(save.options, opt.vr, next_random(jitter_seed));
+          const Hud::Layer pl = panel.draw(save.options, opt.headset, next_random(jitter_seed));
           to_instances(s, preview_lines, menu_display_frame, settings_lines[0]);
           to_instances(s, pl.lines, menu_display_frame, settings_lines[1]);
           auto matrix = [](const SceneView& v) {
@@ -3177,7 +3178,7 @@ int run(int argc, char** argv) {
               a = mix(l.a, l.jitter_a, p.a, p.jitter_a);
               b = mix(l.b, l.jitter_b, p.b, p.jitter_b);
             }
-            if (opt.vr) {  // jittered afresh every headset frame (the blend kept this frame's jitter in a and b)
+            if (opt.headset) {  // jittered afresh every headset frame (the blend kept this frame's jitter in a and b)
               const float wobble = float(save.options.vr_jitter_scale);
               a = headset_jitter(a, l.jitter_a, l.vertex_a, l.shake_a * wobble, menu_display_frame / std::uint32_t(save.options.vr_jitter_hold));
               b = headset_jitter(b, l.jitter_b, l.vertex_b, l.shake_b * wobble, menu_display_frame / std::uint32_t(save.options.vr_jitter_hold));
