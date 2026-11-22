@@ -170,6 +170,8 @@ std::string SaveData::to_text() const {
   out << "menu_zoom " << buf << '\n';
   std::snprintf(buf, sizeof buf, "%.1f", options.menu_angle);
   out << "menu_angle " << buf << '\n';
+  out << "launcher_vr " << (options.launcher_vr ? 1 : 0) << '\n';
+  out << "launcher_close " << (options.launcher_close ? 1 : 0) << '\n';
   std::snprintf(buf, sizeof buf, "%.2f", double(options.music_volume));
   out << "music_volume " << buf << '\n';
   std::snprintf(buf, sizeof buf, "%.2f", double(options.effects_volume));
@@ -260,6 +262,8 @@ SaveData SaveData::from_text(const std::string& text) {
     else if (key == "frame_limit" && number >= 0 && number <= 1000) d.options.frame_limit = int(number);
     else if (key == "picture_43") d.options.picture_43 = parse_bool(value);
     else if (key == "low_latency") d.options.low_latency = parse_bool(value);
+    else if (key == "launcher_vr") d.options.launcher_vr = parse_bool(value);
+    else if (key == "launcher_close") d.options.launcher_close = parse_bool(value);
     else if (key == "menu_zoom" && number > 0) d.options.menu_zoom = std::clamp(number, 1.0 / 36.0, 4.0);
     else if (key == "menu_angle") d.options.menu_angle = std::remainder(number, 360.0);
     else if (key == "music_volume" && number >= 0) d.options.music_volume = float(number);

@@ -113,6 +113,10 @@ struct Options {
   // menus can be zoomed and looked round.
   double menu_zoom = 1.0;
   double menu_angle = 0.0;
+  // The Windows launcher's own choices (task 4.16 I): play in the headset, and close the
+  // launcher when the game starts.
+  bool launcher_vr = false;
+  bool launcher_close = true;
   float music_volume = 1.0f, effects_volume = 1.0f;
 };
 
