@@ -663,6 +663,8 @@ Layout:
 
 Checked here: main.cpp and xr_display.cpp compile without warnings with `-D__ANDROID__` against SDL 3.2.26, OpenXR 1.1.65, Vulkan headers and stub Android headers (syntax only); the desktop paths are unchanged (CI Windows and Ubuntu pass). Not run anywhere yet: no Android device or emulator here.
 
+**First run on the headset (owner):** SDL and our main() started, then stopped with "no disc image on the headset": the disc had been pushed before the APK was ever installed, so the app's folder under Android/data was made by adb (shell) and the app could not read it (Android/data is not behind the media FUSE layer for its own package's folder, so Unix ownership counts). Fix: `adb shell rm -rf` the package's folder, start the game once (it makes its folder through getExternalFilesDir), then push. The tracker's first-time command now starts the game once before pushing; the error now says what the disc folder holds or why it could not be read.
+
 Things to watch in the first test (each would show in logcat): the loader not finding Meta's runtime (broker permissions); the language-change restart (`run()` again: SDL_Quit and SDL_Init, a new XrInstance in the same process; worked on PC); taking the headset off and on (session states with the loop not blocked); the Xbox controller over Bluetooth (SDL's Java controller manager); audio latency (5.3).
 
 ## 2o. Idea dropped: Vibri speaking English (session 3, 2026-11-20)

@@ -140,7 +140,17 @@ std::string find_disc_on_headset() {
     for (char& c : ext) c = char(std::tolower(static_cast<unsigned char>(c)));
     if (ext == ".cue") cues.push_back(it->path());
   }
-  if (cues.empty()) throw std::runtime_error("no disc image on the headset: push your .cue and .bin files into " + (root / "disc").string());
+  if (cues.empty()) {
+    // Say what could be seen: a folder adb made before the game was installed can
+    // belong to adb, and then the game may not read it.
+    std::string seen;
+    std::error_code ec2;
+    for (std::filesystem::directory_iterator it(root / "disc", ec2), end; !ec2 && it != end; it.increment(ec2))
+      seen += " " + it->path().filename().string();
+    throw std::runtime_error("no disc image on the headset: push your .cue and .bin files into " + (root / "disc").string() +
+                             (ec ? " (reading the app folder: " + ec.message() + ")" : std::string()) +
+                             (ec2 ? " (reading disc: " + ec2.message() + ")" : " (disc holds:" + (seen.empty() ? std::string(" nothing") : seen) + ")"));
+  }
   std::sort(cues.begin(), cues.end());
   std::printf("Disc: %s\n", cues.front().string().c_str());
   return cues.front().string();
