@@ -490,11 +490,12 @@ struct Launcher {
     };
     heading("Playing");
     if (table("play", "Keyboard", "Gamepad")) {
-      control_row("Block", "Left arrow or A", "Left shoulder or trigger");
+      control_row("Block", "Left arrow or A", "Left shoulder (LB)");
       control_row("Pit", "Up or Down arrow", "D-pad up or down");
-      control_row("Loop", "Right arrow or D", "Right shoulder or trigger");
+      control_row("Loop", "Right arrow or D", "Right shoulder (RB)");
       control_row("Wave", "Space, J or K", "A or Y");
       control_row("Options", "P or Tab", "Start");
+      control_row("Scroll speed", "Page Up / Page Down", "Triggers (L2 / R2)");
       control_row("Menus", "Arrows, Enter, Esc; the mouse", "D-pad, A, B");
       control_row("Fullscreen", "F11 or Alt+Enter", "");
       control_row("Performance", "F3", "Left stick click");

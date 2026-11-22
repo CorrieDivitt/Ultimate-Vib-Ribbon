@@ -23,11 +23,12 @@ IN THE GAME
   Exit is on the title's menu (B jumps to it).
 
 CONTROLS (keyboard / gamepad)
-  Block        Left arrow, A         left shoulder or trigger
+  Block        Left arrow, A         left shoulder (LB)
   Pit          Up or Down arrow      d-pad up or down
-  Loop         Right arrow, D        right shoulder or trigger
+  Loop         Right arrow, D        right shoulder (RB)
   Wave         Space, J, K           A or Y
   Options      P or Tab              Start
+  Scroll speed Page Up / Page Down   triggers (L2 / R2), also during a song
   Menus        arrows, Enter, Esc    d-pad, A, B; the mouse clicks and scrolls
   Fullscreen   F11 or Alt+Enter
   Performance  F3                    left stick click

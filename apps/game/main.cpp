@@ -19,9 +19,10 @@
 // goes back to the menus.
 //           [--offset ms] [--sfx 0-1] [--music 0-1] [--width x]
 //
-//   Block  (L1/L2)             Left arrow, A          gamepad: left shoulder or trigger
+//   Block  (L1/L2)             Left arrow, A          gamepad: left shoulder
 //   Pit    (Up/Down)           Up or Down arrow, W, S gamepad: d-pad up or down
-//   Loop   (R1/R2)             Right arrow, D         gamepad: right shoulder or trigger
+//   Loop   (R1/R2)             Right arrow, D         gamepad: right shoulder
+//   Scroll speed               Page Up / Page Down    gamepad: L2 / R2 (triggers), mid-song too
 //   Wave   (Triangle/Cross)    Space, J, K            gamepad: top or bottom face button
 //   [ and ]: audio offset -/+ 5 ms     - and =: line width     Esc: quit
 //   L3 (left stick click) or F3: the performance overlay, off / one line / detailed
@@ -1709,7 +1710,8 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
 
   CourseGenerator gen(s.script);
   gen.set_timing(timing);
-  gen.set_difficulty(s.save.options.difficulty);  // (task 4.17; read at the song's start)
+  // (Task 4.17, read at the song's start; the idle demo shows the original's courses.)
+  gen.set_difficulty(s.demo ? CourseGenerator::kNormal : s.save.options.difficulty);
   // Starts a generator on this song: the game's own round, or the player's track on its "disc".
   auto start = [&](CourseGenerator& g) {
     if (s.music) {
@@ -2001,13 +2003,9 @@ Result play_song(Session& s, int song, int track_index, int& points, std::uint32
           if (const std::uint8_t b = pad_bits(e.gbutton.button)) presses.push_back({b, e.gbutton.timestamp});
           break;
         case SDL_EVENT_GAMEPAD_AXIS_MOTION:
-          // In a headset L2 and R2 change the scroll speed mid-song (owner); LB and RB block
-          // and loop. On the monitor the triggers block and loop, as the original's L2 and R2.
-          if (s.opt.vr) {
-            if (const int d = trigger_edge(s, e.gaxis); d && !s.demo) scroll_changed(d);
-          } else if (const std::uint8_t b = trigger_pulled(s, e.gaxis); b && !paused) {
-            presses.push_back({b, e.gaxis.timestamp});
-          }
+          // L2 and R2 change the scroll speed mid-song (owner: in a headset, then on the
+          // monitor too, session 6); LB and RB block and loop.
+          if (const int d = trigger_edge(s, e.gaxis); d && !s.demo) scroll_changed(d);
           break;
         default: break;
       }
